@@ -1,0 +1,74 @@
+# Configuration
+
+`capsaicin` needs explicit project and runtime configuration.
+
+Likely configuration areas:
+
+- agent selection by role
+- adapter command paths
+- default repo or workspace paths
+- retry limits
+- escalation rules
+- review policy knobs
+- render and export preferences
+- GitHub integration settings
+
+## Minimum Viable Default `config.toml`
+
+```toml
+[project]
+name = "my-project"
+repo_path = "."
+
+[adapters.implementer]
+backend = "claude-code"
+command = "claude"
+model = ""
+allowed_tools = ""
+
+[adapters.reviewer]
+backend = "claude-code"
+command = "claude"
+model = ""
+allowed_tools = "Read,Glob,Grep,Bash"
+
+[limits]
+max_cycles = 3
+max_impl_retries = 2
+max_review_retries = 2
+timeout_seconds = 300
+
+[reviewer]
+max_turns = 10
+mode = "read-only"
+
+[ticket_selection]
+order = "created_at"
+
+[paths]
+renders_dir = "renders"
+exports_dir = "exports"
+```
+
+## Command/Config Dependencies
+
+- `init`: no pre-existing config required
+- `ticket add`: no adapter config required
+- `ticket dep`: no adapter config required
+- `ticket run`: requires implementer adapter config plus timeout and retry
+  limits
+- `ticket review`: requires reviewer adapter config plus timeout, retry, and
+  reviewer max-turn settings
+- `ticket approve`: no adapter config required
+- `ticket revise`: no adapter config required
+- `ticket defer`: no adapter config required
+- `status`: no adapter config required
+- `resume`: requires whichever adapter config is needed for the interrupted
+  step
+- `loop`: requires both implementer and reviewer adapter config plus cycle
+  limits
+
+## Non-Goal For MVP
+
+Do not add `auto_approve_clean_pass` to the default config. The human gate is a
+core design principle for MVP, not an optional default behavior.

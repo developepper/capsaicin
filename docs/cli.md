@@ -1,0 +1,270 @@
+# CLI
+
+## MVP Scope
+
+The first useful version should be narrow and pragmatic.
+
+MVP goals:
+
+- initialize a local `capsaicin` project
+- capture project-level config
+- select one ticket for implementation
+- run the implementation and review loop end to end
+- persist findings and decisions locally
+- stop automatically for human input when escalation rules are triggered
+- render current ticket status and loop state for inspection
+
+The MVP does not need:
+
+- complex dashboards
+- hosted synchronization
+- broad plugin infrastructure
+- deep GitHub automation on day one
+- full planning-loop automation on day one
+
+Suggested MVP sequence:
+
+1. `capsaicin init` plus SQLite schema and config
+2. `capsaicin ticket run` to invoke an implementer adapter and persist the run
+3. `capsaicin ticket review` to invoke a reviewer adapter in a fresh session
+4. bounded revise and re-review loop support
+5. `capsaicin status` to render current workflow state
+6. planning-loop support and GitHub export after the core loop works
+
+## Command Contract
+
+### `capsaicin init`
+
+Usage:
+
+```text
+capsaicin init [--project NAME] [--repo PATH]
+```
+
+Behavior:
+
+- create the local `.capsaicin/projects/<project-slug>/` structure
+- create `capsaicin.db` and run migrations
+- enable SQLite foreign-key enforcement on every connection
+- write default `config.toml`
+- insert the initial `projects` row
+- create `renders/` and `exports/` directories
+
+### `capsaicin ticket add`
+
+Usage:
+
+```text
+capsaicin ticket add --title TITLE --description DESC [--criteria "criterion"]
+capsaicin ticket add --from FILE
+```
+
+Behavior:
+
+- create a manual MVP ticket because planning-loop automation is deferred
+- insert the ticket in `ready`
+- insert acceptance criteria in `pending`
+- render a human-readable ticket brief
+
+MVP file import format:
+
+```toml
+title = "Implement user authentication"
+description = """
+Add JWT-based authentication middleware.
+"""
+
+[[criteria]]
+description = "Login endpoint returns a valid JWT"
+
+[[criteria]]
+description = "Middleware rejects expired tokens"
+```
+
+### `capsaicin ticket dep`
+
+Usage:
+
+```text
+capsaicin ticket dep TICKET_ID --on DEPENDENCY_ID
+```
+
+Behavior:
+
+- validate both tickets exist
+- reject cycles before writing the dependency edge
+- insert the dependency if valid
+
+### `capsaicin ticket run`
+
+Usage:
+
+```text
+capsaicin ticket run [TICKET_ID] [--adapter ADAPTER]
+```
+
+Behavior:
+
+- if no `TICKET_ID` is provided, pick the next `ready` ticket whose
+  dependencies are all `done`, ordered by `created_at`
+- move the ticket to `implementing`
+- update `orchestrator_state` with the active ticket and run
+- if starting from `ready`, set `current_cycle = 1` and reset implementation
+  and review attempt counters
+- if starting from `revise`, increment `current_cycle` and reset
+  `current_impl_attempt = 1`
+- assemble an implementer `RunRequest`
+- invoke the implementer adapter
+- persist the run record and the resulting diff
+- if the run succeeds with a non-empty diff, move to `in-review`
+- if the run succeeds with an empty diff, move to `human-gate` with
+  `gate_reason = 'empty_implementation'`
+- if the run fails or times out, increment implementation retry state and
+  either retry or move to `blocked`
+
+### `capsaicin ticket review`
+
+Usage:
+
+```text
+capsaicin ticket review [TICKET_ID] [--adapter ADAPTER]
+```
+
+Behavior:
+
+- find the ticket in `in-review`
+- capture and persist the tracked-file review baseline before invoking the
+  reviewer
+- update `orchestrator_state` with the active review run
+- assemble a reviewer `RunRequest` with `diff_context`
+- invoke the reviewer adapter in `read-only` mode
+- capture the post-review diff and compare it to baseline
+- if the reviewer modified tracked files, mark the run
+  `contract_violation`, discard findings, and retry or block
+- validate the parsed reviewer result
+- if parsing or validation fails, mark the run `parse_error` and retry or block
+- on valid `fail`, persist findings, update acceptance-criteria statuses for
+  checked criteria, and move to `revise`
+- on valid `pass`, move to `human-gate` with `gate_reason = 'review_passed'`
+- on valid `escalate`, move to `human-gate` with
+  `gate_reason = 'reviewer_escalated'`
+- if the cycle limit is hit, prefer `human-gate` with
+  `gate_reason = 'cycle_limit'`
+
+Acceptance-criteria update rule for MVP:
+
+- if a checked criterion has a blocking finding tied to it, mark it `unmet`
+- if a checked criterion has no blocking finding tied to it, mark it `met`
+- if a criterion was not checked in this review, leave its status unchanged
+
+### `capsaicin ticket approve`
+
+Usage:
+
+```text
+capsaicin ticket approve [TICKET_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- find the ticket in `human-gate`
+- record a human approval decision
+- if `gate_reason` is `cycle_limit` or `reviewer_escalated`, require a
+  rationale because approval is overriding an unresolved quality gate
+- move the ticket to `pr-ready`
+- clear or idle the `orchestrator_state`
+- render a PR preparation summary
+
+### `capsaicin ticket revise`
+
+Usage:
+
+```text
+capsaicin ticket revise [TICKET_ID] [--add-finding DESCRIPTION] [--reset-cycles]
+```
+
+Behavior:
+
+- find the ticket in `human-gate`
+- optionally add human-supplied findings
+- record the decision
+- move the ticket to `revise`
+- optionally reset cycle and retry counters
+
+### `capsaicin ticket defer`
+
+Usage:
+
+```text
+capsaicin ticket defer [TICKET_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- record a human defer decision
+- accept tickets only from `human-gate`
+- move the ticket to `blocked`
+- set a human-readable `blocked_reason`
+
+### `capsaicin status`
+
+Usage:
+
+```text
+capsaicin status [--ticket TICKET_ID] [--verbose]
+```
+
+Behavior without `--ticket`:
+
+- show project totals by ticket status
+- show the active ticket from `orchestrator_state`
+- show tickets waiting in `human-gate` with `gate_reason`
+- show blocked tickets with `blocked_reason`
+- show the next runnable `ready` ticket
+
+Behavior with `--ticket`:
+
+- show title, status, `status_changed_at`, and cycle information
+- show acceptance criteria and their statuses
+- show open findings grouped by severity
+- show the last run summary
+- with `--verbose`, include run history and transition history
+
+### `capsaicin resume`
+
+Usage:
+
+```text
+capsaicin resume
+```
+
+Behavior:
+
+- read `orchestrator_state`
+- if `idle`, behave like `ticket run`
+- if `running`, inspect the active run and determine whether to reprocess,
+  retry, or block
+- if the active run already finished, execute the same post-run pipeline that
+  `ticket run` or `ticket review` would have executed based on the run role
+- if `awaiting_human`, render the human-gate context and stop
+- if `suspended`, use `resume_context` to continue from the interrupted step
+
+### `capsaicin loop`
+
+Usage:
+
+```text
+capsaicin loop [TICKET_ID] [--max-cycles N]
+```
+
+Behavior:
+
+- run the implement-review-revise loop automatically
+- persist the same `orchestrator_state` updates as the individual commands it
+  subsumes
+- stop at `human-gate`
+- stop at `blocked`
+- never auto-approve
+
+This should be the primary hands-off command in MVP, with `ticket run` and
+`ticket review` serving as manual step controls.
