@@ -371,13 +371,11 @@ MVP goals:
 
 - initialize a local `capsaicin` project
 - capture project-level config
-- create and store structured planning state
-- run a planning review loop
-- mark planning as human-ready
 - select one ticket for implementation
-- run implementation and review loops
+- run the implementation and review loop end to end
 - persist findings and decisions locally
 - stop automatically for human input when escalation rules are triggered
+- render current ticket status and loop state for inspection
 
 The MVP does not need to solve everything at once.
 
@@ -387,11 +385,21 @@ It does not need:
 - hosted synchronization
 - broad plugin infrastructure
 - deep GitHub automation on day one
+- full planning-loop automation on day one
 
 The MVP may also reasonably start with the implementation loop first and add
 the planning loop second. The implementation-review-fix cycle is the highest
 value part of the system and the most immediate relief for the current manual
 workflow pain.
+
+Suggested MVP sequence:
+
+1. `capsaicin init` plus SQLite schema and config
+2. `capsaicin ticket run` to invoke an implementer adapter and persist the run
+3. `capsaicin ticket review` to invoke a reviewer adapter in a fresh session
+4. bounded revise and re-review loop support
+5. `capsaicin status` to render current workflow state
+6. planning-loop support and GitHub export after the core loop works
 
 ## Likely CLI Shape
 
@@ -428,6 +436,15 @@ Likely options:
 - a hybrid model where the orchestrator writes structured inputs to disk and
   captures a final machine-readable or text result from stdout
 
+Current direction:
+
+- `Codex` is likely a natural subprocess fit, but `capsaicin` should not trust
+  stdout as the source of truth for what changed
+- `Claude Code` may offer a cleaner structured-output path for non-interactive
+  execution and is a strong initial target for reviewer runs
+- the orchestrator should capture workspace change evidence itself, especially
+  post-run diffs, instead of relying on the agent to describe edits faithfully
+
 The design requirements are:
 
 - deterministic invocation from the orchestrator
@@ -437,6 +454,35 @@ The design requirements are:
 - support for fresh reviewer sessions
 
 The exact adapter contract is not decided yet and should be validated early.
+
+## Adapter Contract
+
+Adapters should stay thin. Their job is to translate between `capsaicin`'s run
+contract and a specific CLI tool.
+
+The orchestrator should provide at least:
+
+- working directory path
+- role assignment such as `implementer`, `reviewer`, or `planner`
+- assembled task prompt
+- context file paths or explicit context payloads
+- constraints such as review scope or read-only expectations
+
+The adapter should return at least:
+
+- exit status such as success, failure, or timeout
+- structured result when the CLI supports it
+- raw stdout and stderr as fallback evidence
+- duration and run metadata
+
+The orchestrator, not the adapter, should additionally capture:
+
+- post-run git diff or equivalent workspace change evidence
+- state transitions
+- persistence into the local database
+- next-step decisions
+
+Adapters should not decide workflow progression or own cross-ticket state.
 
 ## Fresh Session Requirement
 
@@ -450,6 +496,11 @@ At minimum, a fresh review session should mean:
 - context supplied only from the orchestrator-selected inputs
 - explicit role assignment as reviewer
 - persisted review output linked to a unique run record
+
+Reviewer prompts should also explicitly warn against treating commit messages,
+inline rationale, or self-justifying artifacts as evidence that the
+implementation is correct. The review should be grounded in the ticket,
+acceptance criteria, and actual diff.
 
 If a given CLI tool cannot provide meaningful session isolation, that weakness
 needs to be documented in the adapter and possibly compensated for by stricter
@@ -555,3 +606,8 @@ The next artifacts to define are:
 4. human-readable render and export formats
 5. the CLI command model
 6. the MVP implementation plan
+
+Immediate planning priority:
+
+- validate the adapter contract against real local `Codex` and `Claude Code`
+  invocations before investing heavily in the full schema
