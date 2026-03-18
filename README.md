@@ -335,6 +335,7 @@ Suggested MVP tables:
 - `tickets`
 - `acceptance_criteria`
 - `ticket_dependencies`
+- `orchestrator_state`
 - `agent_runs`
 - `run_diffs`
 - `review_baselines`
@@ -359,13 +360,21 @@ CREATE TABLE tickets (
     title       TEXT NOT NULL,
     description TEXT NOT NULL,
     current_cycle INTEGER NOT NULL DEFAULT 0,
+    current_impl_attempt INTEGER NOT NULL DEFAULT 1,
+    current_review_attempt INTEGER NOT NULL DEFAULT 1,
     blocked_reason TEXT,
+    gate_reason TEXT CHECK (gate_reason IN (
+                    'review_passed','reviewer_escalated','cycle_limit',
+                    'implementation_failure','human_requested',
+                    'empty_implementation'
+                )),
     status      TEXT NOT NULL DEFAULT 'ready'
                 CHECK (status IN (
                     'ready','implementing','in-review',
                     'revise','human-gate','pr-ready',
                     'blocked','done'
                 )),
+    status_changed_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -386,12 +395,25 @@ CREATE TABLE ticket_dependencies (
     CHECK (ticket_id != depends_on_id)
 );
 
+CREATE TABLE orchestrator_state (
+    project_id       TEXT NOT NULL REFERENCES projects(id),
+    active_ticket_id TEXT REFERENCES tickets(id),
+    active_run_id    TEXT REFERENCES agent_runs(id),
+    status           TEXT NOT NULL DEFAULT 'idle'
+                     CHECK (status IN ('idle','running','awaiting_human','suspended')),
+    suspended_at     TEXT,
+    resume_context   TEXT,
+    updated_at       TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (project_id)
+);
+
 CREATE TABLE agent_runs (
     id                TEXT PRIMARY KEY,
     ticket_id         TEXT NOT NULL REFERENCES tickets(id),
     role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner')),
     mode              TEXT NOT NULL CHECK (mode IN ('read-write','read-only')),
     cycle_number      INTEGER NOT NULL,
+    attempt_number    INTEGER NOT NULL DEFAULT 1,
     exit_status       TEXT NOT NULL CHECK (exit_status IN (
                           'success','failure','timeout',
                           'contract_violation','parse_error'
@@ -503,6 +525,9 @@ CREATE INDEX idx_acceptance_criteria_ticket
 
 CREATE INDEX idx_ticket_deps_depends_on
     ON ticket_dependencies(depends_on_id);
+
+CREATE INDEX idx_orchestrator_state_active_ticket
+    ON orchestrator_state(active_ticket_id);
 ```
 
 SQLite note:
@@ -559,6 +584,8 @@ Recommended transition rules:
   trigger: system selects a ticket whose dependencies are satisfied
 - `implementing -> in-review`
   trigger: implementer run succeeds and a non-empty `run_diffs` record exists
+- `implementing -> human-gate`
+  trigger: implementer run succeeds but produces an empty tracked-file diff
 - `implementing -> blocked`
   trigger: implementer run fails repeatedly, times out repeatedly, or escalates
 - `in-review -> revise`
@@ -590,11 +617,26 @@ Important guard conditions:
 - `ready -> implementing` requires all dependencies to be `done`
 - `implementing -> in-review` requires a successful run and actual change
   evidence
+- `implementing -> human-gate` for empty implementation should set
+  `gate_reason = 'empty_implementation'`
 - `in-review -> human-gate` on `pass` requires a valid reviewer result with no
   blocking findings
-- `revise -> implementing` should increment the cycle counter
+- `in-review -> human-gate` on clean pass should set
+  `gate_reason = 'review_passed'`
+- `in-review -> human-gate` on reviewer escalation should set
+  `gate_reason = 'reviewer_escalated'`
+- `in-review -> human-gate` on cycle limit should set
+  `gate_reason = 'cycle_limit'`
+- `implementing -> blocked` from repeated execution failure should set
+  `blocked_reason = 'implementation_failure'`
+- `in-review -> blocked` from repeated review contract violations should set
+  `blocked_reason = 'reviewer_contract_violation'`
+- `revise -> implementing` should increment the cycle counter but not the retry
+  counters
 - `human-gate -> revise` may reset the cycle counter if the human meaningfully
   re-scopes the work
+- `blocked -> ready` should reset cycles only when the human explicitly requests
+  it
 
 Illegal transitions should be rejected loudly:
 
@@ -606,6 +648,16 @@ Illegal transitions should be rejected loudly:
 The orchestrator should enforce this with a simple
 `transition_is_legal(from_status, to_status, actor)` function before every
 ticket status update.
+
+The retry and cycle model should remain distinct:
+
+- `current_cycle` tracks implement-review loops
+- `current_impl_attempt` tracks retries for the current implementation step
+- `current_review_attempt` tracks retries for the current review step
+- `agent_runs.attempt_number` records the specific attempt number for each run
+
+Cycle limits should send work to `human-gate`. Retry limits should send work to
+`blocked`.
 
 ## MVP
 
@@ -664,6 +716,213 @@ capsaicin status
 ```
 
 These are not final commands, but they reflect the intended workflow.
+
+## MVP CLI Command Contract
+
+The MVP should support these commands and behaviors.
+
+### `capsaicin init`
+
+Usage:
+
+```text
+capsaicin init [--project NAME] [--repo PATH]
+```
+
+Behavior:
+
+- create the local `.capsaicin/projects/<project-slug>/` structure
+- create `capsaicin.db` and run migrations
+- enable SQLite foreign-key enforcement on every connection
+- write default `config.toml`
+- insert the initial `projects` row
+- create `renders/` and `exports/` directories
+
+### `capsaicin ticket add`
+
+Usage:
+
+```text
+capsaicin ticket add --title TITLE --description DESC [--criteria "criterion"]
+capsaicin ticket add --from FILE
+```
+
+Behavior:
+
+- create a manual MVP ticket because planning-loop automation is deferred
+- insert the ticket in `ready`
+- insert acceptance criteria in `pending`
+- render a human-readable ticket brief
+
+### `capsaicin ticket dep`
+
+Usage:
+
+```text
+capsaicin ticket dep TICKET_ID --on DEPENDENCY_ID
+```
+
+Behavior:
+
+- validate both tickets exist
+- reject cycles before writing the dependency edge
+- insert the dependency if valid
+
+### `capsaicin ticket run`
+
+Usage:
+
+```text
+capsaicin ticket run [TICKET_ID] [--adapter ADAPTER]
+```
+
+Behavior:
+
+- if no `TICKET_ID` is provided, pick the next `ready` ticket whose
+  dependencies are all `done`
+- move the ticket to `implementing`
+- update `orchestrator_state` with the active ticket and run
+- assemble an implementer `RunRequest`
+- invoke the implementer adapter
+- persist the run record and the resulting diff
+- if the run succeeds with a non-empty diff, move to `in-review`
+- if the run succeeds with an empty diff, move to `human-gate` with
+  `gate_reason = 'empty_implementation'`
+- if the run fails or times out, increment implementation retry state and
+  either retry or move to `blocked`
+
+### `capsaicin ticket review`
+
+Usage:
+
+```text
+capsaicin ticket review [TICKET_ID] [--adapter ADAPTER]
+```
+
+Behavior:
+
+- find the ticket in `in-review`
+- capture and persist the tracked-file review baseline before invoking the
+  reviewer
+- update `orchestrator_state` with the active review run
+- assemble a reviewer `RunRequest` with `diff_context`
+- invoke the reviewer adapter in `read-only` mode
+- capture the post-review diff and compare it to baseline
+- if the reviewer modified tracked files, mark the run
+  `contract_violation`, discard findings, and retry or block
+- validate the parsed reviewer result
+- if parsing or validation fails, mark the run `parse_error` and retry or block
+- on valid `fail`, persist findings and move to `revise`
+- on valid `pass`, move to `human-gate` with `gate_reason = 'review_passed'`
+- on valid `escalate`, move to `human-gate` with
+  `gate_reason = 'reviewer_escalated'`
+- if the cycle limit is hit, prefer `human-gate` with
+  `gate_reason = 'cycle_limit'`
+
+### `capsaicin ticket approve`
+
+Usage:
+
+```text
+capsaicin ticket approve [TICKET_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- find the ticket in `human-gate`
+- record a human approval decision
+- move the ticket to `pr-ready`
+- clear or idle the `orchestrator_state`
+- render a PR preparation summary
+
+### `capsaicin ticket revise`
+
+Usage:
+
+```text
+capsaicin ticket revise [TICKET_ID] [--add-finding DESCRIPTION] [--reset-cycles]
+```
+
+Behavior:
+
+- find the ticket in `human-gate`
+- optionally add human-supplied findings
+- record the decision
+- move the ticket to `revise`
+- optionally reset cycle and retry counters
+
+### `capsaicin ticket defer`
+
+Usage:
+
+```text
+capsaicin ticket defer [TICKET_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- record a human defer decision
+- move the ticket to `blocked`
+- set a human-readable `blocked_reason`
+
+### `capsaicin status`
+
+Usage:
+
+```text
+capsaicin status [--ticket TICKET_ID] [--verbose]
+```
+
+Behavior without `--ticket`:
+
+- show project totals by ticket status
+- show the active ticket from `orchestrator_state`
+- show tickets waiting in `human-gate` with `gate_reason`
+- show blocked tickets with `blocked_reason`
+- show the next runnable `ready` ticket
+
+Behavior with `--ticket`:
+
+- show title, status, `status_changed_at`, and cycle information
+- show acceptance criteria and their statuses
+- show open findings grouped by severity
+- show the last run summary
+- with `--verbose`, include run history and transition history
+
+### `capsaicin resume`
+
+Usage:
+
+```text
+capsaicin resume
+```
+
+Behavior:
+
+- read `orchestrator_state`
+- if `idle`, behave like `ticket run`
+- if `running`, inspect the active run and determine whether to reprocess,
+  retry, or block
+- if `awaiting_human`, render the human-gate context and stop
+- if `suspended`, use `resume_context` to continue from the interrupted step
+
+### `capsaicin loop`
+
+Usage:
+
+```text
+capsaicin loop [TICKET_ID] [--max-cycles N]
+```
+
+Behavior:
+
+- run the implement-review-revise loop automatically
+- stop at `human-gate`
+- stop at `blocked`
+- never auto-approve
+
+This should be the primary hands-off command in MVP, with `ticket run` and
+`ticket review` serving as manual step controls.
 
 ## Agent Invocation Model
 
