@@ -337,6 +337,7 @@ Suggested MVP tables:
 - `ticket_dependencies`
 - `agent_runs`
 - `run_diffs`
+- `review_baselines`
 - `findings`
 - `state_transitions`
 - `decisions`
@@ -357,6 +358,8 @@ CREATE TABLE tickets (
     project_id  TEXT NOT NULL REFERENCES projects(id),
     title       TEXT NOT NULL,
     description TEXT NOT NULL,
+    current_cycle INTEGER NOT NULL DEFAULT 0,
+    blocked_reason TEXT,
     status      TEXT NOT NULL DEFAULT 'ready'
                 CHECK (status IN (
                     'ready','implementing','in-review',
@@ -388,11 +391,14 @@ CREATE TABLE agent_runs (
     ticket_id         TEXT NOT NULL REFERENCES tickets(id),
     role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner')),
     mode              TEXT NOT NULL CHECK (mode IN ('read-write','read-only')),
+    cycle_number      INTEGER NOT NULL,
     exit_status       TEXT NOT NULL CHECK (exit_status IN (
                           'success','failure','timeout',
                           'contract_violation','parse_error'
                       )),
+    verdict           TEXT CHECK (verdict IN ('pass','fail','escalate')),
     prompt            TEXT NOT NULL,
+    run_request       TEXT NOT NULL,
     diff_context      TEXT,
     raw_stdout        TEXT,
     raw_stderr        TEXT,
@@ -409,6 +415,14 @@ CREATE TABLE run_diffs (
     files_changed  TEXT NOT NULL
 );
 
+CREATE TABLE review_baselines (
+    run_id            TEXT PRIMARY KEY REFERENCES agent_runs(id),
+    baseline_diff     TEXT NOT NULL,
+    baseline_status   TEXT NOT NULL,
+    post_diff         TEXT,
+    violation         INTEGER NOT NULL DEFAULT 0
+);
+
 CREATE TABLE findings (
     id           TEXT PRIMARY KEY,
     run_id       TEXT NOT NULL REFERENCES agent_runs(id),
@@ -419,6 +433,7 @@ CREATE TABLE findings (
     description  TEXT NOT NULL,
     disposition  TEXT NOT NULL DEFAULT 'open'
                  CHECK (disposition IN ('open','fixed','wont_fix','disputed')),
+    resolved_in_run TEXT REFERENCES agent_runs(id),
     created_at   TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
 );
@@ -450,12 +465,50 @@ MVP schema notes:
   rendered reports
 - keep `structured_result` and `adapter_metadata` as JSON blobs for MVP rather
   than over-normalizing early
+- store the fully serialized run request in `agent_runs.run_request` so bad
+  runs can be debugged against the exact prompt and inputs that were sent
+- denormalize reviewer verdict onto `agent_runs.verdict` for cheap loop control
+  queries
 - keep large diffs in `run_diffs` instead of embedding them directly in
   `agent_runs`
+- persist reviewer baseline comparisons in `review_baselines` so contract
+  violations remain auditable even if a run crashes mid-review
 - treat reviewer runs as `agent_runs` with `role = 'reviewer'` rather than
   creating a separate `reviews` table
 - omit `impl-review-ready` from persisted ticket state; it is a transition
   condition rather than a useful long-lived status
+- keep acceptance-criteria status only on `acceptance_criteria`; derive ticket
+  summaries from queries rather than denormalizing counts onto `tickets`
+
+Recommended MVP indexes:
+
+```sql
+CREATE INDEX idx_tickets_project_status
+    ON tickets(project_id, status);
+
+CREATE INDEX idx_agent_runs_ticket_role
+    ON agent_runs(ticket_id, role, started_at);
+
+CREATE INDEX idx_findings_ticket_disposition
+    ON findings(ticket_id, disposition);
+
+CREATE INDEX idx_findings_run
+    ON findings(run_id);
+
+CREATE INDEX idx_state_transitions_ticket
+    ON state_transitions(ticket_id, created_at);
+
+CREATE INDEX idx_acceptance_criteria_ticket
+    ON acceptance_criteria(ticket_id);
+
+CREATE INDEX idx_ticket_deps_depends_on
+    ON ticket_dependencies(depends_on_id);
+```
+
+SQLite note:
+
+- every connection should enable `PRAGMA foreign_keys = ON`, otherwise the
+  schema's foreign-key references are not enforced
 
 ## Dependency Handling
 
@@ -494,6 +547,65 @@ The orchestrator should persist enough state to support safe resume:
 `blocked` is not enough by itself. The implementation should distinguish
 between recoverable run failure, review-blocked work, and true human-decision
 blockers.
+
+## State Transition Rules
+
+The MVP implementation loop should have explicit legal transitions enforced in
+application logic.
+
+Recommended transition rules:
+
+- `ready -> implementing`
+  trigger: system selects a ticket whose dependencies are satisfied
+- `implementing -> in-review`
+  trigger: implementer run succeeds and a non-empty `run_diffs` record exists
+- `implementing -> blocked`
+  trigger: implementer run fails repeatedly, times out repeatedly, or escalates
+- `in-review -> revise`
+  trigger: reviewer returns `verdict: fail` with at least one blocking finding
+- `in-review -> human-gate`
+  trigger: reviewer returns `verdict: pass`, reviewer returns
+  `verdict: escalate`, or the cycle limit is reached
+- `in-review -> blocked`
+  trigger: reviewer run hits repeated `contract_violation` or `parse_error`
+- `revise -> implementing`
+  trigger: system starts another implementation pass while under the cycle limit
+- `revise -> human-gate`
+  trigger: cycle limit reached without a clean pass
+- `human-gate -> pr-ready`
+  trigger: human decision is `approve`
+- `human-gate -> revise`
+  trigger: human decision is `revise`
+- `human-gate -> blocked`
+  trigger: human decision is `defer` or `escalate`
+- `pr-ready -> done`
+  trigger: PR is created and accepted for completion, or later merged
+- `blocked -> ready`
+  trigger: human explicitly unblocks and requeues the ticket
+- `blocked -> done`
+  trigger: human rejects or abandons the ticket
+
+Important guard conditions:
+
+- `ready -> implementing` requires all dependencies to be `done`
+- `implementing -> in-review` requires a successful run and actual change
+  evidence
+- `in-review -> human-gate` on `pass` requires a valid reviewer result with no
+  blocking findings
+- `revise -> implementing` should increment the cycle counter
+- `human-gate -> revise` may reset the cycle counter if the human meaningfully
+  re-scopes the work
+
+Illegal transitions should be rejected loudly:
+
+- no ticket reaches `pr-ready` without passing through `human-gate`
+- no ticket reaches `done` except from `pr-ready` or `blocked`
+- no implementation run skips review
+- `revise -> pr-ready` is illegal
+
+The orchestrator should enforce this with a simple
+`transition_is_legal(from_status, to_status, actor)` function before every
+ticket status update.
 
 ## MVP
 
