@@ -1,0 +1,428 @@
+# capsaicin
+
+`capsaicin` is a local-first autonomous ticket loop for AI-assisted software
+development.
+
+It is designed for developers who want more than "run an agent on a task." The
+goal is to support a continuous workflow where planning, implementation, review,
+revision, and human feedback happen in a controlled loop until a ticket is
+actually ready to move forward.
+
+The name fits the Developepper theme and includes `ai` in the middle:
+`capsaicin`.
+
+## What Problem It Solves
+
+Many current AI coding workflows automate parts of planning or implementation,
+but they usually stop short of the most important quality control step:
+independent review with feedback fed back into the loop before moving on.
+
+That creates a predictable failure mode:
+
+- implementation is generated
+- review is manual, inconsistent, or skipped
+- missed acceptance criteria survive longer than they should
+- the human has to manage the entire state machine by hand
+- progress across tickets becomes tedious and fragile
+
+`capsaicin` is meant to solve the orchestration problem, not just the coding
+problem.
+
+## Product Vision
+
+`capsaicin` should be a reusable open-source project that can work across
+different repositories and different developers with similar goals.
+
+It should:
+
+- work locally on a developer machine
+- support `Codex`, `Claude Code`, or both
+- avoid requiring OpenAI or Anthropic API integration
+- use structured local state for planning and execution
+- support one-ticket-at-a-time implementation with independent review
+- stop for human feedback only when needed
+- keep persistent local state so work can resume cleanly
+- keep workflow state human-inspectable and exportable
+- produce output that is ready for GitHub issues and pull requests
+
+It should not:
+
+- replace human judgment
+- force a hosted service
+- require GitHub to manage early planning
+- let the same execution session self-certify completion
+- advance to the next ticket without a real quality gate
+
+## Core Workflow
+
+`capsaicin` manages two major loops:
+
+1. planning loop
+2. implementation loop
+
+Each loop has explicit review and human-gate steps.
+
+### Planning Loop
+
+The planning loop starts from a problem statement and ends with an approved
+local plan that is ready to seed into GitHub issues.
+
+Flow:
+
+1. Human describes the problem or desired outcome.
+2. Planner agent drafts an epic and a set of digestible tickets in structured
+   local state.
+3. Reviewer agent reviews the planning records.
+4. If findings exist, the planner revises the plan.
+5. Repeat until review returns no blocking findings.
+6. Human approves the plan.
+7. GitHub epic and ticket issues are created from the approved local plan.
+
+### Implementation Loop
+
+The implementation loop starts from one approved ticket and ends only when that
+ticket is PR-ready.
+
+Flow:
+
+1. Select one ticket whose dependencies are satisfied.
+2. Implementer agent works the ticket.
+3. Reviewer agent reviews the resulting changes.
+4. If findings exist, the implementer fixes them.
+5. Repeat until review returns no blocking findings.
+6. Human performs the final gate.
+7. Create or update the pull request.
+8. Move to the next ticket only after the current one is actually ready.
+
+## Why This Workflow
+
+This workflow is based on a simple observation: separate review catches real
+problems.
+
+An independent reviewer often catches:
+
+- missed acceptance criteria
+- incomplete deliverables
+- hidden regressions
+- weak tests
+- architecture drift
+- scope expansion that should have been split into a follow-up ticket
+
+The workflow already works well manually. The missing piece is automation around
+state, handoff, persistence, and escalation.
+
+## Actor Model
+
+`capsaicin` should support these roles:
+
+- `Human`: sets goals, resolves ambiguity, approves planning, approves merge
+  readiness
+- `Planner`: drafts and revises epic/ticket planning records
+- `Implementer`: makes code and documentation changes for a ticket
+- `Reviewer`: critiques planning artifacts or code changes and blocks
+  advancement when needed
+
+Recommended dual-agent mode:
+
+- `Codex` for planning or implementation
+- `Claude Code` for review
+
+Alternative:
+
+- swap planning roles if one tool produces stronger project decomposition
+
+Single-agent mode should still be supported, but review must happen in a
+separate fresh session. The same session should not certify its own completion.
+
+## State Machine
+
+The core design is a bounded state machine, not a loose chain of prompts.
+
+### Planning States
+
+- `planning/new`
+- `planning/drafting`
+- `planning/in-review`
+- `planning/revise`
+- `planning/human-gate`
+- `planning/approved`
+- `planning/blocked`
+
+### Ticket States
+
+- `ticket/ready`
+- `ticket/implementing`
+- `ticket/impl-review-ready`
+- `ticket/in-review`
+- `ticket/revise`
+- `ticket/human-gate`
+- `ticket/pr-ready`
+- `ticket/blocked`
+- `ticket/done`
+
+Each state should have:
+
+- required inputs
+- a responsible actor
+- a completion condition
+- an escalation condition
+
+## Human Gates
+
+`capsaicin` should not ask the user for routine continuation. It should ask
+only when a real decision or blocker exists.
+
+Examples:
+
+- multiple valid scope cuts exist
+- a product or architecture tradeoff is required
+- acceptance criteria appear incomplete or misleading
+- implementation reveals hidden dependencies
+- a reviewer recommends splitting scope into a follow-up ticket
+- environment issues block meaningful verification
+
+This is supervised autonomy, not blind autonomy.
+
+## Review Policy
+
+Review is a blocking quality gate.
+
+The reviewer should check for:
+
+- correctness
+- regressions
+- unmet acceptance criteria
+- missing tests
+- architecture violations
+- hidden scope creep
+- insufficient ticket definitions
+
+The system should not allow "looks good" reviews to replace actual findings or
+explicit no-finding outcomes.
+
+## Local-First Design
+
+This project is intentionally local-first.
+
+GitHub matters for:
+
+- issue creation after planning is approved
+- pull requests after a ticket is ready
+- final human review before merge
+
+But the workflow itself should be able to start and run locally without
+depending on remote APIs.
+
+## State Model
+
+`capsaicin` should use a local database as its primary system of record for
+workflow execution.
+
+Why:
+
+- the workflow is fundamentally stateful
+- the current pain is manual orchestration and state tracking
+- findings, loops, escalations, and resumability fit structured data better
+  than loose documents
+- a database can feed agents the right context at the right time
+
+The likely default is `SQLite`.
+
+The database should manage:
+
+- project state
+- epic and ticket records
+- dependency relationships
+- agent run history
+- review history
+- findings and dispositions
+- decisions and human escalations
+- queue state
+- state transitions over time
+
+## Human-Readable Views
+
+Even if the database is the primary state layer, the system should remain
+inspectable.
+
+Important records should be renderable into readable text on demand:
+
+- project summaries
+- epic summaries
+- ticket briefs
+- review reports
+- finding lists
+- decision logs
+- issue body drafts
+- PR preparation summaries
+
+This keeps the system transparent without forcing the user to manage workflow
+state manually in markdown.
+
+## Storage Strategy
+
+The right design is probably:
+
+- `database` for operational state
+- `rendered text views` for human inspection
+- `exported issue and PR content` for GitHub
+
+Markdown can still exist as an export or editable interface when useful, but it
+should not be the only or primary workflow engine.
+
+## Possible Local Layout
+
+A reusable project still needs a portable local layout. A likely structure
+looks like this:
+
+```text
+.capsaicin/
+  projects/<project-slug>/
+    capsaicin.db
+    config.toml
+    activity.log
+    renders/
+      project-summary.md
+      epics/
+      tickets/
+      reviews/
+    exports/
+      github/
+        issues/
+        prs/
+```
+
+This keeps the real state in the database while still making important outputs
+easy to inspect.
+
+## Core Data Model
+
+The initial planning model should assume entities along these lines:
+
+- `projects`
+- `epics`
+- `tickets`
+- `ticket_dependencies`
+- `agent_runs`
+- `reviews`
+- `findings`
+- `finding_resolutions`
+- `decisions`
+- `state_transitions`
+- `exports`
+
+This is not a final schema, but it is the right level of structure for the
+workflow `capsaicin` is trying to run.
+
+## MVP
+
+The first useful version should be narrow and pragmatic.
+
+MVP goals:
+
+- initialize a local `capsaicin` project
+- capture project-level config
+- create and store structured planning state
+- run a planning review loop
+- mark planning as human-ready
+- select one ticket for implementation
+- run implementation and review loops
+- persist findings and decisions locally
+- stop automatically for human input when escalation rules are triggered
+
+The MVP does not need to solve everything at once.
+
+It does not need:
+
+- complex dashboards
+- hosted synchronization
+- broad plugin infrastructure
+- deep GitHub automation on day one
+
+## Likely CLI Shape
+
+The eventual CLI might look something like:
+
+```text
+capsaicin init
+capsaicin plan start
+capsaicin plan review
+capsaicin plan approve
+capsaicin issues create
+capsaicin ticket next
+capsaicin ticket run
+capsaicin ticket review
+capsaicin ticket approve
+capsaicin resume
+capsaicin status
+```
+
+These are not final commands, but they reflect the intended workflow.
+
+## Integration Philosophy
+
+`capsaicin` should integrate with tools the developer already uses rather than
+forcing a proprietary agent runtime.
+
+Primary targets:
+
+- `Codex`
+- `Claude Code`
+
+Support should focus on:
+
+- role assignment per phase
+- prompt/context assembly
+- invocation of local CLI tools
+- capture of outputs and findings into structured state plus human-readable
+  renders
+
+## Design Principles
+
+- local-first over hosted-first
+- explicit state over implicit chat history
+- one ticket at a time
+- independent review before advancement
+- human gate on ambiguity and final acceptance
+- structured local state with human-readable views
+- repo-agnostic workflow
+- bounded loops, not endless agent churn
+
+## Boundaries And Stop Conditions
+
+To avoid endless looping, `capsaicin` should use bounded retry rules.
+
+Suggested defaults:
+
+- up to 3 planning review/fix cycles before mandatory human review
+- up to 3 implementation review/fix cycles before mandatory human review
+- any blocked state requires a human decision before progression
+
+The system should optimize for good outcomes, not infinite polishing.
+
+## Inspiration
+
+Projects like `chief` and `gstack` are useful reference points for orchestration
+ideas and role separation, but `capsaicin` is aimed at a more explicit
+review-feedback loop and a structured local planning process that happens
+before GitHub issue creation.
+
+## Current Direction
+
+The project definition at this stage is:
+
+`capsaicin` is an open-source local orchestrator for AI-assisted project
+planning and ticket execution that uses review-feedback loops, structured local
+state, and human gates to move work from problem statement to PR-ready
+completion.
+
+## Next Planning Steps
+
+The next artifacts to define are:
+
+1. the README-level product scope and constraints
+2. the persistent local data model and schema
+3. human-readable render and export formats
+4. the CLI command model
+5. the agent adapter model for `Codex` and `Claude Code`
+6. the MVP implementation plan
