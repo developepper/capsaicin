@@ -45,13 +45,14 @@ Recommended transitions:
 - `revise -> implementing`
   trigger: system starts another implementation pass while under the cycle limit
 - `revise -> human-gate`
-  trigger: cycle limit reached without a clean pass
+  trigger: `ticket run` detects the cycle limit before starting another
+  implementation pass
 - `human-gate -> pr-ready`
   trigger: human decision is `approve`
 - `human-gate -> revise`
   trigger: human decision is `revise`
 - `human-gate -> blocked`
-  trigger: human decision is `defer` or `escalate`
+  trigger: human decision is `defer`
 - `pr-ready -> done`
   trigger: PR is created and accepted for completion, or later merged
 - `blocked -> ready`
@@ -80,6 +81,8 @@ Recommended transitions:
   `blocked_reason = 'reviewer_contract_violation'`
 - `revise -> implementing` should increment the cycle counter but not the retry
   counters
+- `revise -> human-gate` should set `gate_reason = 'cycle_limit'` without
+  invoking the implementer
 - `human-gate -> revise` may reset the cycle counter if the human meaningfully
   re-scopes the work
 - `blocked -> ready` should reset cycles only when the human explicitly

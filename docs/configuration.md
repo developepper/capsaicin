@@ -23,14 +23,11 @@ repo_path = "."
 [adapters.implementer]
 backend = "claude-code"
 command = "claude"
-model = ""
-allowed_tools = ""
 
 [adapters.reviewer]
 backend = "claude-code"
 command = "claude"
-model = ""
-allowed_tools = "Read,Glob,Grep,Bash"
+allowed_tools = ["Read", "Glob", "Grep", "Bash"]
 
 [limits]
 max_cycles = 3
@@ -49,6 +46,19 @@ order = "created_at"
 renders_dir = "renders"
 exports_dir = "exports"
 ```
+
+Semantics:
+
+- omitting `model` means "use the CLI default model"
+- omitting `allowed_tools` means "use the adapter default behavior"
+- prompt assembly is handled by the adapter in MVP; template customization is
+  deferred
+
+## MVP Project Resolution
+
+- if `.capsaicin/projects/` contains exactly one project, use it automatically
+- if multiple projects exist, require an explicit project selection and error
+  otherwise
 
 ## Command/Config Dependencies
 

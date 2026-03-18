@@ -79,7 +79,7 @@ CREATE TABLE agent_runs (
     cycle_number      INTEGER NOT NULL,
     attempt_number    INTEGER NOT NULL DEFAULT 1,
     exit_status       TEXT NOT NULL CHECK (exit_status IN (
-                          'success','failure','timeout',
+                          'running','success','failure','timeout',
                           'contract_violation','parse_error'
                       )),
     verdict           TEXT CHECK (verdict IN ('pass','fail','escalate')),
@@ -150,7 +150,7 @@ CREATE TABLE decisions (
     id          TEXT PRIMARY KEY,
     ticket_id   TEXT NOT NULL REFERENCES tickets(id),
     decision    TEXT NOT NULL CHECK (decision IN (
-                    'approve','reject','revise','defer','escalate'
+                    'approve','reject','revise','defer'
                 )),
     rationale   TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -168,6 +168,8 @@ CREATE TABLE decisions (
 - store the fully serialized run request in `agent_runs.run_request`
 - denormalize reviewer verdict onto `agent_runs.verdict` for cheap loop-control
   queries
+- use `agent_runs.exit_status = 'running'` as the orchestrator-owned marker for
+  in-flight runs before final status is known
 - keep large diffs in `run_diffs` instead of embedding them directly in
   `agent_runs`
 - persist reviewer baseline comparisons in `review_baselines`

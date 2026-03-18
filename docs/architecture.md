@@ -13,6 +13,9 @@ GitHub matters for:
 But the workflow itself should be able to start and run locally without
 depending on remote APIs.
 
+For MVP, `init` should resolve the repo path to an absolute path before storing
+it so later commands can run from subdirectories without ambiguity.
+
 ## State Model
 
 `capsaicin` should use a local database as its primary system of record for

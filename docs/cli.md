@@ -47,6 +47,7 @@ Behavior:
 - create `capsaicin.db` and run migrations
 - enable SQLite foreign-key enforcement on every connection
 - write default `config.toml`
+- resolve `--repo` to an absolute path before storing it
 - insert the initial `projects` row
 - create `renders/` and `exports/` directories
 
@@ -100,13 +101,16 @@ Behavior:
 Usage:
 
 ```text
-capsaicin ticket run [TICKET_ID] [--adapter ADAPTER]
+capsaicin ticket run [TICKET_ID]
 ```
 
 Behavior:
 
 - if no `TICKET_ID` is provided, pick the next `ready` ticket whose
   dependencies are all `done`, ordered by `created_at`
+- if the ticket is in `revise` and `current_cycle >= max_cycles`, do not invoke
+  the implementer; move directly to `human-gate` with
+  `gate_reason = 'cycle_limit'`
 - move the ticket to `implementing`
 - update `orchestrator_state` with the active ticket and run
 - if starting from `ready`, set `current_cycle = 1` and reset implementation
@@ -114,11 +118,22 @@ Behavior:
 - if starting from `revise`, increment `current_cycle` and reset
   `current_impl_attempt = 1`
 - assemble an implementer `RunRequest`
+- prompt assembly inputs should include:
+  - ticket title and description
+  - acceptance criteria with current statuses
+  - prior open findings when revising
+  - cycle number and max cycles
+  - explicit implementer role instruction
+  - explicit scope constraint
 - invoke the implementer adapter
+- insert the run with `exit_status = 'running'` before invocation, then update
+  it to the terminal status after invocation
 - persist the run record and the resulting diff
 - if the run succeeds with a non-empty diff, move to `in-review`
 - if the run succeeds with an empty diff, move to `human-gate` with
   `gate_reason = 'empty_implementation'`
+- when transitioning to `human-gate`, set `orchestrator_state.status =
+  'awaiting_human'`
 - if the run fails or times out, increment implementation retry state and
   either retry or move to `blocked`
 
@@ -127,7 +142,7 @@ Behavior:
 Usage:
 
 ```text
-capsaicin ticket review [TICKET_ID] [--adapter ADAPTER]
+capsaicin ticket review [TICKET_ID]
 ```
 
 Behavior:
@@ -137,7 +152,16 @@ Behavior:
   reviewer
 - update `orchestrator_state` with the active review run
 - assemble a reviewer `RunRequest` with `diff_context`
+- reviewer prompt assembly inputs should include:
+  - explicit independent reviewer role instruction
+  - the captured diff being reviewed
+  - ticket title, description, and acceptance criteria
+  - prior findings with dispositions
+  - explicit JSON output-format instruction
+  - anti-bias instruction not to trust commit messages or inline rationale
 - invoke the reviewer adapter in `read-only` mode
+- insert the run with `exit_status = 'running'` before invocation, then update
+  it to the terminal status after invocation
 - capture the post-review diff and compare it to baseline
 - if the reviewer modified tracked files, mark the run
   `contract_violation`, discard findings, and retry or block
@@ -150,12 +174,21 @@ Behavior:
   `gate_reason = 'reviewer_escalated'`
 - if the cycle limit is hit, prefer `human-gate` with
   `gate_reason = 'cycle_limit'`
+- when transitioning to `human-gate`, set `orchestrator_state.status =
+  'awaiting_human'`
 
 Acceptance-criteria update rule for MVP:
 
 - if a checked criterion has a blocking finding tied to it, mark it `unmet`
 - if a checked criterion has no blocking finding tied to it, mark it `met`
 - if a criterion was not checked in this review, leave its status unchanged
+
+Review source-of-truth note:
+
+- the reviewer reviews the diff captured at the end of the implementation run,
+  not the current working tree state
+- manual edits made after `ticket run` are not included in that review and may
+  create drift
 
 ### `capsaicin ticket approve`
 
@@ -172,7 +205,7 @@ Behavior:
 - if `gate_reason` is `cycle_limit` or `reviewer_escalated`, require a
   rationale because approval is overriding an unresolved quality gate
 - move the ticket to `pr-ready`
-- clear or idle the `orchestrator_state`
+- set `orchestrator_state.status = 'idle'`
 - render a PR preparation summary
 
 ### `capsaicin ticket revise`
@@ -190,21 +223,25 @@ Behavior:
 - record the decision
 - move the ticket to `revise`
 - optionally reset cycle and retry counters
+- set `orchestrator_state.status = 'idle'`
 
 ### `capsaicin ticket defer`
 
 Usage:
 
 ```text
-capsaicin ticket defer [TICKET_ID] [--rationale TEXT]
+capsaicin ticket defer [TICKET_ID] [--rationale TEXT] [--abandon]
 ```
 
 Behavior:
 
 - record a human defer decision
 - accept tickets only from `human-gate`
-- move the ticket to `blocked`
-- set a human-readable `blocked_reason`
+- if `--abandon` is provided, record decision `reject` and move the ticket to
+  `done`
+- otherwise move the ticket to `blocked` and set a human-readable
+  `blocked_reason`
+- set `orchestrator_state.status = 'idle'`
 
 ### `capsaicin status`
 
@@ -246,6 +283,8 @@ Behavior:
   retry, or block
 - if the active run already finished, execute the same post-run pipeline that
   `ticket run` or `ticket review` would have executed based on the run role
+- if the active run is still marked `running` with no `finished_at`, treat it
+  as interrupted and convert it into a retry-or-block decision
 - if `awaiting_human`, render the human-gate context and stop
 - if `suspended`, use `resume_context` to continue from the interrupted step
 
@@ -262,9 +301,16 @@ Behavior:
 - run the implement-review-revise loop automatically
 - persist the same `orchestrator_state` updates as the individual commands it
   subsumes
+- execute the `ticket run` and `ticket review` pipelines in-process rather than
+  shelling out to CLI subprocesses
 - stop at `human-gate`
 - stop at `blocked`
 - never auto-approve
 
 This should be the primary hands-off command in MVP, with `ticket run` and
 `ticket review` serving as manual step controls.
+
+Loop and resume have different entry paths:
+
+- `loop` advances work by ticket state
+- `resume` recovers work by `orchestrator_state`
