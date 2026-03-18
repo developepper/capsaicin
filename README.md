@@ -308,22 +308,154 @@ canonical.
 
 ## Core Data Model
 
-The initial planning model should assume entities along these lines:
+The implementation-loop-first MVP should assume entities along these lines:
 
 - `projects`
-- `epics`
 - `tickets`
+- `acceptance_criteria`
 - `ticket_dependencies`
 - `agent_runs`
-- `reviews`
+- `run_diffs`
 - `findings`
-- `finding_resolutions`
 - `decisions`
 - `state_transitions`
-- `exports`
 
-This is not a final schema, but it is the right level of structure for the
-workflow `capsaicin` is trying to run.
+Planning entities such as `epics` and outward-facing entities such as
+`exports` can be added after the core loop is validated.
+
+## MVP SQLite Schema
+
+The first schema should be scoped to the implementation loop only. Planning
+tables such as epics and exports can come later once the core run/review/revise
+loop is validated.
+
+Suggested MVP tables:
+
+- `projects`
+- `tickets`
+- `acceptance_criteria`
+- `ticket_dependencies`
+- `agent_runs`
+- `run_diffs`
+- `findings`
+- `state_transitions`
+- `decisions`
+
+Suggested shape:
+
+```sql
+CREATE TABLE projects (
+    id          TEXT PRIMARY KEY,
+    name        TEXT NOT NULL,
+    repo_path   TEXT NOT NULL,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    config      TEXT
+);
+
+CREATE TABLE tickets (
+    id          TEXT PRIMARY KEY,
+    project_id  TEXT NOT NULL REFERENCES projects(id),
+    title       TEXT NOT NULL,
+    description TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'ready'
+                CHECK (status IN (
+                    'ready','implementing','in-review',
+                    'revise','human-gate','pr-ready',
+                    'blocked','done'
+                )),
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE acceptance_criteria (
+    id          TEXT PRIMARY KEY,
+    ticket_id   TEXT NOT NULL REFERENCES tickets(id),
+    description TEXT NOT NULL,
+    status      TEXT NOT NULL DEFAULT 'pending'
+                CHECK (status IN ('pending','met','unmet','disputed')),
+    updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE ticket_dependencies (
+    ticket_id      TEXT NOT NULL REFERENCES tickets(id),
+    depends_on_id  TEXT NOT NULL REFERENCES tickets(id),
+    PRIMARY KEY (ticket_id, depends_on_id),
+    CHECK (ticket_id != depends_on_id)
+);
+
+CREATE TABLE agent_runs (
+    id                TEXT PRIMARY KEY,
+    ticket_id         TEXT NOT NULL REFERENCES tickets(id),
+    role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner')),
+    mode              TEXT NOT NULL CHECK (mode IN ('read-write','read-only')),
+    exit_status       TEXT NOT NULL CHECK (exit_status IN (
+                          'success','failure','timeout',
+                          'contract_violation','parse_error'
+                      )),
+    prompt            TEXT NOT NULL,
+    diff_context      TEXT,
+    raw_stdout        TEXT,
+    raw_stderr        TEXT,
+    structured_result TEXT,
+    duration_seconds  REAL,
+    adapter_metadata  TEXT,
+    started_at        TEXT NOT NULL,
+    finished_at       TEXT
+);
+
+CREATE TABLE run_diffs (
+    run_id         TEXT PRIMARY KEY REFERENCES agent_runs(id),
+    diff_text      TEXT NOT NULL,
+    files_changed  TEXT NOT NULL
+);
+
+CREATE TABLE findings (
+    id           TEXT PRIMARY KEY,
+    run_id       TEXT NOT NULL REFERENCES agent_runs(id),
+    ticket_id    TEXT NOT NULL REFERENCES tickets(id),
+    severity     TEXT NOT NULL CHECK (severity IN ('blocking','warning','info')),
+    category     TEXT NOT NULL,
+    location     TEXT,
+    description  TEXT NOT NULL,
+    disposition  TEXT NOT NULL DEFAULT 'open'
+                 CHECK (disposition IN ('open','fixed','wont_fix','disputed')),
+    created_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at   TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE state_transitions (
+    id            INTEGER PRIMARY KEY AUTOINCREMENT,
+    ticket_id     TEXT NOT NULL REFERENCES tickets(id),
+    from_status   TEXT NOT NULL,
+    to_status     TEXT NOT NULL,
+    triggered_by  TEXT NOT NULL,
+    reason        TEXT,
+    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE decisions (
+    id          TEXT PRIMARY KEY,
+    ticket_id   TEXT NOT NULL REFERENCES tickets(id),
+    decision    TEXT NOT NULL CHECK (decision IN (
+                    'approve','reject','revise','defer','escalate'
+                )),
+    rationale   TEXT,
+    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+);
+```
+
+MVP schema notes:
+
+- use ULIDs or UUIDs for text primary keys that appear in envelopes, logs, and
+  rendered reports
+- keep `structured_result` and `adapter_metadata` as JSON blobs for MVP rather
+  than over-normalizing early
+- keep large diffs in `run_diffs` instead of embedding them directly in
+  `agent_runs`
+- treat reviewer runs as `agent_runs` with `role = 'reviewer'` rather than
+  creating a separate `reviews` table
+- omit `impl-review-ready` from persisted ticket state; it is a transition
+  condition rather than a useful long-lived status
 
 ## Dependency Handling
 
@@ -452,6 +584,15 @@ Practical implication:
 - avoid relying on natural-language parsing for review verdicts when a
   structured-output path exists
 
+Practical caveats for `Claude Code` reviewer runs:
+
+- `--output-format json` wraps the interaction, so the adapter still needs to
+  extract and validate the reviewer's inner JSON result from assistant text
+- `--max-turns` should be set intentionally to bound review exploration and
+  cost
+- review cost is real and should eventually be governed by config defaults such
+  as max turns or other budget controls
+
 The design requirements are:
 
 - deterministic invocation from the orchestrator
@@ -472,6 +613,7 @@ The orchestrator should provide at least:
 - working directory path
 - role assignment such as `implementer`, `reviewer`, or `planner`
 - assembled task prompt
+- diff context when the role is reviewing an existing change set
 - context file paths or explicit context payloads
 - timeout budget
 - constraints such as review scope or read-only expectations
@@ -492,8 +634,64 @@ For reviewer runs, the adapter contract should additionally require a
 machine-consumable verdict payload at minimum:
 
 - `verdict`: `pass`, `fail`, or `escalate`
-- `findings`: list of structured findings with severity, description, and
-  optional location
+- `confidence`: `high`, `medium`, or `low`
+- `findings`: list of structured findings with severity, category,
+  description, and optional location
+- `scope_reviewed`: structured evidence of what the reviewer actually checked
+
+A practical review result shape is:
+
+```json
+{
+  "verdict": "pass | fail | escalate",
+  "confidence": "high | medium | low",
+  "findings": [
+    {
+      "id": "string",
+      "severity": "blocking | warning | info",
+      "category": "string",
+      "location": "string | null",
+      "description": "string",
+      "disposition": "open | fixed | wont_fix | disputed"
+    }
+  ],
+  "scope_reviewed": {
+    "files_examined": ["string"],
+    "tests_run": true,
+    "criteria_checked": ["string"]
+  }
+}
+```
+
+Interpretation rules:
+
+- `verdict: pass` may still include `warning` or `info` findings
+- `verdict: fail` must include at least one `blocking` finding
+- `verdict: escalate` means the reviewer could not complete a reliable review
+  without human input
+- `confidence: low` should generally force a human gate even if the verdict is
+  `pass`
+
+Finding IDs should be assigned by the orchestrator when findings are persisted.
+Reviewer-emitted IDs, if any, should not be treated as canonical.
+
+When prior findings are fed back into later runs, their dispositions should be
+explicit so the loop can distinguish newly open work from items the implementer
+claims to have fixed or intentionally disputed.
+
+Validation rules for reviewer `structured_result` should be explicit:
+
+- `verdict: fail` requires at least one `blocking` finding
+- `verdict: pass` cannot include any `blocking` findings
+- `confidence: high` is invalid if `files_examined` is empty
+- `confidence: high` is invalid if acceptance criteria were provided but
+  `criteria_checked` is empty
+- top-level review result fields must always be present, even when empty or
+  false
+
+If validation fails, the adapter should return `exit_status: parse_error` and
+preserve the raw output for debugging rather than trying to repair the result
+silently.
 
 The orchestrator, not the adapter, should additionally capture:
 
@@ -503,6 +701,63 @@ The orchestrator, not the adapter, should additionally capture:
 - next-step decisions
 
 Adapters should not decide workflow progression or own cross-ticket state.
+
+## Run Envelope
+
+`capsaicin` should define a formal request and result envelope between the
+orchestrator and adapters.
+
+Run request envelope:
+
+```json
+{
+  "run_id": "string",
+  "role": "implementer | reviewer | planner",
+  "mode": "read-write | read-only",
+  "working_directory": "string",
+  "prompt": "string",
+  "diff_context": "string | null",
+  "context_files": ["string"],
+  "acceptance_criteria": [
+    {
+      "id": "string",
+      "description": "string",
+      "status": "pending | met | unmet | disputed"
+    }
+  ],
+  "prior_findings": [],
+  "timeout_seconds": 0,
+  "max_turns": 0,
+  "adapter_config": {}
+}
+```
+
+Run result envelope:
+
+```json
+{
+  "run_id": "string",
+  "exit_status": "success | failure | timeout | contract_violation | parse_error",
+  "duration_seconds": 0,
+  "raw_stdout": "string",
+  "raw_stderr": "string",
+  "structured_result": {},
+  "adapter_metadata": {}
+}
+```
+
+Notes:
+
+- `structured_result` is usually `null` for implementer runs and populated for
+  reviewer runs
+- `diff_context` is usually `null` for implementer runs and populated for
+  reviewer runs from orchestrator-captured diff state
+- `prior_findings` lets revise and re-review loops operate without hidden
+  session history
+- `acceptance_criteria` should remain first-class data rather than being buried
+  only inside the prompt
+- `adapter_metadata` is for tool-specific details such as model, turn count, or
+  cost that do not drive workflow state directly
 
 ## Fresh Session Requirement
 
@@ -520,6 +775,16 @@ At minimum, a fresh review session should mean:
 If a reviewer run is marked `read-only`, the orchestrator should verify that no
 unexpected file changes occurred. A non-empty post-review diff should be
 treated as an adapter or enforcement failure.
+
+The validation should be baseline-based:
+
+1. capture tracked-file diff state before the reviewer starts
+2. capture tracked-file diff state after the reviewer exits
+3. compare the two snapshots
+4. if the diff changed, mark the run invalid as a contract violation
+
+For MVP, this check only needs to cover tracked-file diffs. Untracked build
+artifacts can be handled later if they become a practical problem.
 
 Reviewer prompts should also explicitly warn against treating commit messages,
 inline rationale, or self-justifying artifacts as evidence that the
