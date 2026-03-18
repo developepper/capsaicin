@@ -53,6 +53,12 @@ It should not:
 - let the same execution session self-certify completion
 - advance to the next ticket without a real quality gate
 
+Open architectural questions still to be resolved:
+
+- exact agent invocation and communication model
+- implementation language and packaging model
+- how strict session isolation is enforced across tools
+
 ## Core Workflow
 
 `capsaicin` manages two major loops:
@@ -295,6 +301,11 @@ looks like this:
 This keeps the real state in the database while still making important outputs
 easy to inspect.
 
+`renders/` should be treated as generated human-readable views, not as the
+canonical system of record. `exports/` should be reserved for outward-facing
+artifacts such as GitHub issue bodies and PR summaries. The database remains
+canonical.
+
 ## Core Data Model
 
 The initial planning model should assume entities along these lines:
@@ -313,6 +324,44 @@ The initial planning model should assume entities along these lines:
 
 This is not a final schema, but it is the right level of structure for the
 workflow `capsaicin` is trying to run.
+
+## Dependency Handling
+
+Dependencies matter because the system should not advance a ticket whose
+prerequisites are not satisfied.
+
+The model should support:
+
+- explicit ticket-to-ticket dependencies
+- readiness checks before ticket selection
+- blocked-state transitions when dependencies are unmet
+- detection of invalid dependency graphs such as cycles
+
+Circular dependencies should be treated as planning errors and escalated rather
+than worked around implicitly.
+
+## Failure Recovery
+
+The system also needs a recovery model for interrupted or failed runs.
+
+Examples:
+
+- agent process crashes
+- command times out
+- verification fails
+- a run produces partial output and stops
+
+The orchestrator should persist enough state to support safe resume:
+
+- run start and end status
+- partial outputs when available
+- last successful state transition
+- whether the ticket is safe to retry automatically
+- whether human intervention is required
+
+`blocked` is not enough by itself. The implementation should distinguish
+between recoverable run failure, review-blocked work, and true human-decision
+blockers.
 
 ## MVP
 
@@ -339,6 +388,11 @@ It does not need:
 - broad plugin infrastructure
 - deep GitHub automation on day one
 
+The MVP may also reasonably start with the implementation loop first and add
+the planning loop second. The implementation-review-fix cycle is the highest
+value part of the system and the most immediate relief for the current manual
+workflow pain.
+
 ## Likely CLI Shape
 
 The eventual CLI might look something like:
@@ -358,6 +412,81 @@ capsaicin status
 ```
 
 These are not final commands, but they reflect the intended workflow.
+
+## Agent Invocation Model
+
+This is currently the riskiest design area and should be treated as an early
+technical spike, not an afterthought.
+
+`capsaicin` is intended to drive local agent CLIs such as `Codex` and
+`Claude Code` without requiring API integrations.
+
+Likely options:
+
+- subprocess execution with stdin/stdout capture
+- subprocess execution with prompt and result handoff through files
+- a hybrid model where the orchestrator writes structured inputs to disk and
+  captures a final machine-readable or text result from stdout
+
+The design requirements are:
+
+- deterministic invocation from the orchestrator
+- capture of agent output for persistence and review
+- explicit context assembly per run
+- no hidden dependence on long-lived chat state
+- support for fresh reviewer sessions
+
+The exact adapter contract is not decided yet and should be validated early.
+
+## Fresh Session Requirement
+
+Independent review is load-bearing. `capsaicin` should define "fresh session"
+concretely rather than treating it as a vague prompt instruction.
+
+At minimum, a fresh review session should mean:
+
+- a new process invocation
+- no inherited interactive conversation history
+- context supplied only from the orchestrator-selected inputs
+- explicit role assignment as reviewer
+- persisted review output linked to a unique run record
+
+If a given CLI tool cannot provide meaningful session isolation, that weakness
+needs to be documented in the adapter and possibly compensated for by stricter
+input packaging or process boundaries.
+
+## Runtime And Packaging
+
+The implementation language is not chosen yet, but it should be treated as an
+early project decision because it affects packaging, contributor experience,
+and local reliability.
+
+The two obvious candidates are:
+
+- `Python`: faster iteration, easier subprocess orchestration, broad user
+  familiarity
+- `Rust`: stronger single-binary distribution, stronger type safety, better fit
+  for long-lived CLI tooling
+
+This decision should be made intentionally rather than deferred indefinitely.
+
+## Configuration
+
+`capsaicin` will need explicit project and runtime configuration.
+
+Likely configuration areas:
+
+- agent selection by role
+- adapter command paths
+- default repo or workspace paths
+- retry limits
+- escalation rules
+- review policy knobs
+- render and export preferences
+- GitHub integration settings
+
+The `config.toml` shown in the local layout is intended to hold this class of
+configuration, but the schema is still to be defined.
 
 ## Integration Philosophy
 
@@ -421,8 +550,8 @@ completion.
 The next artifacts to define are:
 
 1. the README-level product scope and constraints
-2. the persistent local data model and schema
-3. human-readable render and export formats
-4. the CLI command model
-5. the agent adapter model for `Codex` and `Claude Code`
+2. the agent adapter and invocation contract
+3. the persistent local data model and schema
+4. human-readable render and export formats
+5. the CLI command model
 6. the MVP implementation plan
