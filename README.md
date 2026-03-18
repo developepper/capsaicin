@@ -440,10 +440,17 @@ Current direction:
 
 - `Codex` is likely a natural subprocess fit, but `capsaicin` should not trust
   stdout as the source of truth for what changed
-- `Claude Code` may offer a cleaner structured-output path for non-interactive
-  execution and is a strong initial target for reviewer runs
+- `Claude Code` offers a cleaner structured-output path for non-interactive
+  execution and is the strongest initial target for reviewer runs
 - the orchestrator should capture workspace change evidence itself, especially
   post-run diffs, instead of relying on the agent to describe edits faithfully
+
+Practical implication:
+
+- prefer `Claude Code` as the first reviewer backend
+- treat `Codex` as an implementer-first backend in MVP
+- avoid relying on natural-language parsing for review verdicts when a
+  structured-output path exists
 
 The design requirements are:
 
@@ -466,7 +473,13 @@ The orchestrator should provide at least:
 - role assignment such as `implementer`, `reviewer`, or `planner`
 - assembled task prompt
 - context file paths or explicit context payloads
+- timeout budget
 - constraints such as review scope or read-only expectations
+
+One useful normalization is an explicit execution mode:
+
+- `read-write` for implementers
+- `read-only` for reviewers
 
 The adapter should return at least:
 
@@ -474,6 +487,13 @@ The adapter should return at least:
 - structured result when the CLI supports it
 - raw stdout and stderr as fallback evidence
 - duration and run metadata
+
+For reviewer runs, the adapter contract should additionally require a
+machine-consumable verdict payload at minimum:
+
+- `verdict`: `pass`, `fail`, or `escalate`
+- `findings`: list of structured findings with severity, description, and
+  optional location
 
 The orchestrator, not the adapter, should additionally capture:
 
@@ -497,6 +517,10 @@ At minimum, a fresh review session should mean:
 - explicit role assignment as reviewer
 - persisted review output linked to a unique run record
 
+If a reviewer run is marked `read-only`, the orchestrator should verify that no
+unexpected file changes occurred. A non-empty post-review diff should be
+treated as an adapter or enforcement failure.
+
 Reviewer prompts should also explicitly warn against treating commit messages,
 inline rationale, or self-justifying artifacts as evidence that the
 implementation is correct. The review should be grounded in the ticket,
@@ -519,7 +543,14 @@ The two obvious candidates are:
 - `Rust`: stronger single-binary distribution, stronger type safety, better fit
   for long-lived CLI tooling
 
-This decision should be made intentionally rather than deferred indefinitely.
+Current recommendation:
+
+- use `Python` for the adapter-validation spike and MVP
+- keep the contracts and data model strict enough that a later Rust rewrite is
+  possible without redesign
+
+This decision should still be made intentionally rather than deferred
+indefinitely, but the current evidence points to Python first.
 
 ## Configuration
 
@@ -556,6 +587,18 @@ Support should focus on:
 - invocation of local CLI tools
 - capture of outputs and findings into structured state plus human-readable
   renders
+
+Initial backend priority:
+
+1. `Claude Code` reviewer adapter
+2. `Claude Code` implementer adapter
+3. `Codex` implementer adapter
+
+`Claude Code` is the strongest first reviewer target because structured output,
+session isolation, and read-only execution are easier to enforce there.
+
+`Codex` is still a good implementation target, but its current output model is
+much weaker for machine-consumable review findings.
 
 ## Design Principles
 
