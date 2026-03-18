@@ -159,6 +159,8 @@ CREATE TABLE decisions (
 
 ## Persistence Notes
 
+- `agent_runs.structured_result` stores the review result payload defined in
+  [adapters.md](./adapters.md)
 - use ULIDs or UUIDs for text primary keys that appear in envelopes, logs, and
   rendered reports
 - keep `structured_result` and `adapter_metadata` as JSON blobs for MVP rather
@@ -206,29 +208,3 @@ CREATE INDEX idx_orchestrator_state_active_ticket
 - every connection should enable `PRAGMA foreign_keys = ON`
 - even though SQLite is permissive about FK declaration order, migrations should
   still create tables in dependency order
-
-## Dependency Handling
-
-The model should support:
-
-- explicit ticket-to-ticket dependencies
-- readiness checks before ticket selection
-- blocked-state transitions when dependencies are unmet
-- detection of invalid dependency graphs such as cycles
-
-Circular dependencies should be treated as planning errors and escalated rather
-than worked around implicitly.
-
-## Failure Recovery
-
-The orchestrator should persist enough state to support safe resume:
-
-- run start and end status
-- partial outputs when available
-- last successful state transition
-- whether the ticket is safe to retry automatically
-- whether human intervention is required
-
-`blocked` is not enough by itself. The implementation should distinguish
-between recoverable run failure, review-blocked work, and true human-decision
-blockers.

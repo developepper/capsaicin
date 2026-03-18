@@ -35,9 +35,9 @@ Recommended reading order:
 
 1. [docs/overview.md](./docs/overview.md)
 2. [docs/architecture.md](./docs/architecture.md)
-3. [docs/adapters.md](./docs/adapters.md)
+3. [docs/state-machine.md](./docs/state-machine.md)
 4. [docs/data-model.md](./docs/data-model.md)
-5. [docs/state-machine.md](./docs/state-machine.md)
+5. [docs/adapters.md](./docs/adapters.md)
 6. [docs/configuration.md](./docs/configuration.md)
 7. [docs/cli.md](./docs/cli.md)
 

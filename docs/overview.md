@@ -156,8 +156,7 @@ explicit no-finding outcomes.
 ## MVP Direction
 
 The MVP should start with the implementation loop first and add the planning
-loop second. The implementation-review-fix cycle is the highest-value part of
-the system and the most immediate relief for the current manual workflow pain.
+loop second.
 
 ## Design Principles
 

@@ -107,3 +107,31 @@ The retry and cycle model should remain distinct:
 
 Cycle limits should send work to `human-gate`. Retry limits should send work to
 `blocked`.
+
+## Dependency Handling
+
+The system should support:
+
+- explicit ticket-to-ticket dependencies
+- readiness checks before ticket selection
+- blocked-state transitions when dependencies are unmet
+- detection of invalid dependency graphs such as cycles
+
+Circular dependencies should be treated as planning errors and escalated rather
+than worked around implicitly.
+
+Dependency satisfaction is a guard condition on `ready -> implementing`.
+
+## Failure Recovery
+
+The orchestrator should persist enough state to support safe resume:
+
+- run start and end status
+- partial outputs when available
+- last successful state transition
+- whether the ticket is safe to retry automatically
+- whether human intervention is required
+
+`blocked` is not enough by itself. The implementation should distinguish
+between recoverable run failure, review-blocked work, and true human-decision
+blockers.
