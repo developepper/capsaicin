@@ -40,7 +40,7 @@ clear boundary.
 |-------|-------|---------|--------|
 | 1 | Foundation | T01-T04 | Complete |
 | 2 | Project & Ticket Management | T05-T07 | Complete |
-| 3 | State Machine & Orchestrator | T08-T09 | Not started |
+| 3 | State Machine & Orchestrator | T08-T09 | In progress |
 | 4 | Adapter Layer | T10-T13 | Not started |
 | 5 | Implementation Pipeline | T14-T15 | Not started |
 | 6 | Review Pipeline | T16-T20 | Not started |
