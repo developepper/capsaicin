@@ -46,6 +46,7 @@ def conn():
 
 # --- Helper to insert prerequisite rows ---
 
+
 def _insert_project(conn, project_id="p1"):
     conn.execute(
         "INSERT INTO projects (id, name, repo_path) VALUES (?, ?, ?)",
@@ -78,6 +79,7 @@ def _insert_criterion(conn, criterion_id="ac1", ticket_id="t1"):
 
 
 # --- Table and index existence ---
+
 
 class TestSchemaCreation:
     def test_all_tables_exist(self, conn):
@@ -113,6 +115,7 @@ class TestSchemaCreation:
 
 # --- CHECK constraints ---
 
+
 class TestCheckConstraints:
     def test_ticket_status_rejects_invalid(self, conn):
         _insert_project(conn)
@@ -122,8 +125,14 @@ class TestCheckConstraints:
     def test_ticket_status_accepts_all_valid(self, conn):
         _insert_project(conn)
         valid = [
-            "ready", "implementing", "in-review", "revise",
-            "human-gate", "pr-ready", "blocked", "done",
+            "ready",
+            "implementing",
+            "in-review",
+            "revise",
+            "human-gate",
+            "pr-ready",
+            "blocked",
+            "done",
         ]
         for i, status in enumerate(valid):
             _insert_ticket(conn, ticket_id=f"t{i}", status=status)
@@ -139,9 +148,13 @@ class TestCheckConstraints:
     def test_ticket_gate_reason_accepts_valid(self, conn):
         _insert_project(conn)
         valid = [
-            "review_passed", "reviewer_escalated", "cycle_limit",
-            "implementation_failure", "human_requested",
-            "empty_implementation", "low_confidence_pass",
+            "review_passed",
+            "reviewer_escalated",
+            "cycle_limit",
+            "implementation_failure",
+            "human_requested",
+            "empty_implementation",
+            "low_confidence_pass",
         ]
         for i, reason in enumerate(valid):
             conn.execute(
@@ -246,6 +259,7 @@ class TestCheckConstraints:
 
 
 # --- FK constraints ---
+
 
 class TestForeignKeys:
     def test_ticket_requires_valid_project(self, conn):
