@@ -42,10 +42,12 @@ class ClaudeCodeAdapter(BaseAdapter):
 
         # Reviewer mode: add --json-schema and --allowed-tools
         if request.role == "reviewer":
-            cmd.extend([
-                "--json-schema",
-                json.dumps(REVIEW_RESULT_SCHEMA, separators=(",", ":")),
-            ])
+            cmd.extend(
+                [
+                    "--json-schema",
+                    json.dumps(REVIEW_RESULT_SCHEMA, separators=(",", ":")),
+                ]
+            )
             allowed_tools = request.adapter_config.get("allowed_tools", [])
             if allowed_tools:
                 cmd.append("--allowed-tools")
@@ -86,8 +88,12 @@ class ClaudeCodeAdapter(BaseAdapter):
         return result if isinstance(result, str) else ""
 
     def _handle_reviewer_result(
-        self, request: RunRequest, envelope: dict, duration: float,
-        raw_stdout: str, raw_stderr: str,
+        self,
+        request: RunRequest,
+        envelope: dict,
+        duration: float,
+        raw_stdout: str,
+        raw_stderr: str,
     ) -> RunResult:
         """Extract and validate structured reviewer output."""
         metadata = self._extract_metadata(envelope)
@@ -207,7 +213,11 @@ class ClaudeCodeAdapter(BaseAdapter):
         # Reviewer mode: extract and validate structured output
         if request.role == "reviewer":
             return self._handle_reviewer_result(
-                request, envelope, duration, raw_stdout, raw_stderr,
+                request,
+                envelope,
+                duration,
+                raw_stdout,
+                raw_stderr,
             )
 
         # Implementer mode: success

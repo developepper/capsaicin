@@ -361,9 +361,7 @@ class TestReviewerFixtures:
         assert result.exit_status == "success"
         assert result.structured_result is not None
         assert result.structured_result.verdict == "fail"
-        assert any(
-            f.severity == "blocking" for f in result.structured_result.findings
-        )
+        assert any(f.severity == "blocking" for f in result.structured_result.findings)
 
     def test_raw_envelope_preserved_on_reviewer_success(self):
         envelope = (FIXTURES / "claude_reviewer_pass.json").read_text()
@@ -391,15 +389,15 @@ class TestReviewerValidation:
             "scope_reviewed": {
                 "files_examined": ["a.py"],
                 "tests_run": True,
-                "criteria_checked": [
-                    {"criterion_id": "ac-1", "description": "X"}
-                ],
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
             },
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "structured_output": raw_output,
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -423,15 +421,15 @@ class TestReviewerValidation:
             "scope_reviewed": {
                 "files_examined": ["a.py"],
                 "tests_run": True,
-                "criteria_checked": [
-                    {"criterion_id": "ac-1", "description": "X"}
-                ],
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
             },
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "structured_output": raw_output,
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -445,15 +443,15 @@ class TestReviewerValidation:
             "scope_reviewed": {
                 "files_examined": [],
                 "tests_run": False,
-                "criteria_checked": [
-                    {"criterion_id": "ac-1", "description": "X"}
-                ],
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
             },
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "structured_output": raw_output,
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -475,15 +473,15 @@ class TestReviewerValidation:
             "scope_reviewed": {
                 "files_examined": ["a.py"],
                 "tests_run": True,
-                "criteria_checked": [
-                    {"criterion_id": "ac-1", "description": "X"}
-                ],
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
             },
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "structured_output": raw_output,
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -498,15 +496,15 @@ class TestReviewerValidation:
             "scope_reviewed": {
                 "files_examined": ["a.py"],
                 "tests_run": True,
-                "criteria_checked": [
-                    {"criterion_id": "ac-1", "description": "X"}
-                ],
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
             },
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "result": json.dumps(review_data),
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "result": json.dumps(review_data),
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -515,10 +513,12 @@ class TestReviewerValidation:
         assert result.structured_result.verdict == "pass"
 
     def test_no_structured_output_and_unparseable_result_is_parse_error(self):
-        envelope = json.dumps({
-            "is_error": False,
-            "result": "just plain text, no JSON",
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "result": "just plain text, no JSON",
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -532,10 +532,12 @@ class TestReviewerValidation:
             "confidence": "high",
             # missing "findings" and "scope_reviewed"
         }
-        envelope = json.dumps({
-            "is_error": False,
-            "structured_output": raw_output,
-        })
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
