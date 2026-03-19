@@ -38,7 +38,7 @@ clear boundary.
 
 | Phase | Focus | Tickets | Status |
 |-------|-------|---------|--------|
-| 1 | Foundation | T01-T04 | T01 complete |
+| 1 | Foundation | T01-T04 | T01, T02 complete |
 | 2 | Project & Ticket Management | T05-T07 | Not started |
 | 3 | State Machine & Orchestrator | T08-T09 | Not started |
 | 4 | Adapter Layer | T10-T13 | Not started |
