@@ -16,8 +16,8 @@ Key sequencing decisions:
 
 - T08 and T09 can proceed in parallel (both depend on T03, not on each other).
 - T10 is independent of T08/T09 and can start as soon as T01 is done.
-- T12 and T13 can proceed in parallel (both extend the adapter, but are
-  independent modes).
+- T12 can proceed independently of T13. T13 depends on T17 (review result
+  validation) so T17 must land before or alongside T13.
 - T17, T18, T19 are independent review-support modules that can all be built in
   parallel after T10/T03.
 - T21, T22, T23, T24 are independent human-gate commands that can all be built
@@ -49,14 +49,16 @@ clear boundary.
 | M2: Project & Tickets | T05, T06, T07 | 1 PR each; T05 is the integration point |
 | M3: State Machine & Orchestrator | T08, T09 | 1 PR each (parallel development possible) |
 | M4: Adapter Types & Prompts | T10, T11 | Single PR (tightly coupled) |
-| M5: Claude Code Adapter | T12, T13 | Single PR (same class, two modes) |
-| M6: Diff & Baseline | T14, T16 | Single PR (T16 extends T14) |
-| M7: Review Support | T17, T18, T19 | Single PR (independent but all feed T20) |
-| M8: Implementation Pipeline | T15 | Own PR (first full pipeline) |
-| M9: Review Pipeline | T20 | Own PR (second full pipeline, heaviest integration) |
-| M10: Human Gate Commands | T21, T22, T23, T24 | Single PR (all small, same pattern) |
-| M11: Status & Recovery | T25, T26 | 1 PR each |
-| M12: Loop | T27 | Own PR (integration capstone) |
+| M5: Implementer Adapter | T12 | Own PR (implementer mode only) |
+| M6: Review Validation | T17 | Own PR (must land before T13) |
+| M7: Reviewer Adapter | T13 | Own PR (imports T17 validator; can follow M6 immediately) |
+| M8: Diff & Baseline | T14, T16 | Single PR (T16 extends T14) |
+| M9: Review Support | T18, T19 | Single PR (independent, both feed T20) |
+| M10: Implementation Pipeline | T15 | Own PR (first full pipeline) |
+| M11: Review Pipeline | T20 | Own PR (second full pipeline, heaviest integration) |
+| M12: Human Gate Commands | T21, T22, T23, T24 | Single PR (all small, same pattern) |
+| M13: Status & Recovery | T25, T26 | 1 PR each |
+| M14: Loop | T27 | Own PR (integration capstone) |
 
 ## Risks
 
@@ -68,10 +70,10 @@ clear boundary.
    through the CLI entry point. If T15 bakes logic into the click handler, T26
    and T27 will force a refactor. Same applies to T20.
 
-3. **T13/T17 validation overlap.** T13 needs to validate review results, and T17
-   defines the validation function. Either build T17 first and import it from
-   T13, or accept that T13 will need a follow-up tweak when T17 lands.
-   Recommendation: build T17 before T13, or at least in the same PR.
+3. **T13 depends on T17 for validation.** T17 must land before T13. The
+   milestone grouping enforces this (M6 before M7), but implementers should be
+   aware that T13 cannot be started until T17's `validate_review_result` is
+   available to import.
 
 4. **T20 is the heaviest integration ticket.** It touches 6 prior modules (T13,
    T15, T16, T17, T18, T19). This is where most bugs will surface. Plan extra
