@@ -148,6 +148,10 @@ capsaicin ticket review [TICKET_ID]
 Behavior:
 
 - find the ticket in `in-review`
+- verify that the current `git diff HEAD` (tracked files only) matches the
+  `run_diffs.diff_text` captured at the end of the implementation run; if
+  they differ, reject the review with a workspace-drift error and require
+  the user to either re-run implementation or acknowledge the drift
 - capture and persist the tracked-file review baseline before invoking the
   reviewer
 - update `orchestrator_state` with the active review run
@@ -169,7 +173,10 @@ Behavior:
 - if parsing or validation fails, mark the run `parse_error` and retry or block
 - on valid `fail`, persist findings, update acceptance-criteria statuses for
   checked criteria, and move to `revise`
-- on valid `pass`, move to `human-gate` with `gate_reason = 'review_passed'`
+- on valid `pass` with `confidence: high` or `confidence: medium`, move to
+  `human-gate` with `gate_reason = 'review_passed'`
+- on valid `pass` with `confidence: low`, move to `human-gate` with
+  `gate_reason = 'low_confidence_pass'`
 - on valid `escalate`, move to `human-gate` with
   `gate_reason = 'reviewer_escalated'`
 - if the cycle limit is hit, prefer `human-gate` with
@@ -179,31 +186,56 @@ Behavior:
 
 Acceptance-criteria update rule for MVP:
 
-- if a checked criterion has a blocking finding tied to it, mark it `unmet`
-- if a checked criterion has no blocking finding tied to it, mark it `met`
+- match reviewer `criteria_checked` entries to `acceptance_criteria` rows by
+  `criterion_id`
+- match reviewer findings to criteria by `acceptance_criterion_id`
+- if a checked criterion has a blocking finding with a matching
+  `acceptance_criterion_id`, mark it `unmet`
+- if a checked criterion has no blocking finding with a matching
+  `acceptance_criterion_id`, mark it `met`
 - if a criterion was not checked in this review, leave its status unchanged
+- findings with `acceptance_criterion_id = null` are general findings not tied
+  to a specific criterion
+
+Finding reconciliation on re-review cycles:
+
+- on `verdict: pass`, mark all prior open findings for the ticket as `fixed`
+  with `resolved_in_run` pointing to the preceding implementation run
+- on `verdict: fail`, match incoming findings to prior open findings by
+  `(category, location)` fingerprint:
+  - matched: update the prior finding's description and severity, link to the
+    new review run
+  - unmatched prior: mark as `fixed`
+  - unmatched new: persist as new open findings
 
 Review source-of-truth note:
 
+- the diff basis is tracked files only via `git diff HEAD`
 - the reviewer reviews the diff captured at the end of the implementation run,
   not the current working tree state
-- manual edits made after `ticket run` are not included in that review and may
-  create drift
+- the pre-review workspace drift check ensures the working tree still matches
+  the captured diff; if it does not, review is rejected
+- manual edits made after `ticket run` invalidate the review and require either
+  re-running implementation or explicitly acknowledging the drift
 
 ### `capsaicin ticket approve`
 
 Usage:
 
 ```text
-capsaicin ticket approve [TICKET_ID] [--rationale TEXT]
+capsaicin ticket approve [TICKET_ID] [--rationale TEXT] [--force]
 ```
 
 Behavior:
 
 - find the ticket in `human-gate`
+- verify that the current `git diff HEAD` matches the diff that was reviewed;
+  if they differ, reject approval unless `--force` is provided, because the
+  workspace no longer matches what was reviewed
 - record a human approval decision
-- if `gate_reason` is `cycle_limit` or `reviewer_escalated`, require a
-  rationale because approval is overriding an unresolved quality gate
+- if `gate_reason` is `cycle_limit`, `reviewer_escalated`, or
+  `low_confidence_pass`, require a rationale because approval is overriding
+  an unresolved quality gate
 - move the ticket to `pr-ready`
 - set `orchestrator_state.status = 'idle'`
 - render a PR preparation summary

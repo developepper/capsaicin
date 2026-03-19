@@ -62,6 +62,8 @@ Important records should be renderable into readable text on demand:
 
 The right design is:
 
+- `config.toml` for configuration (source of truth; DB snapshot refreshed per
+  invocation)
 - `database` for operational state
 - `rendered text views` for human inspection
 - `exported issue and PR content` for GitHub

@@ -97,6 +97,7 @@ Adapters should not decide workflow progression or own cross-ticket state.
       "severity": "blocking | warning | info",
       "category": "string",
       "location": "string | null",
+      "acceptance_criterion_id": "string | null",
       "description": "string",
       "disposition": "open | fixed | wont_fix | disputed"
     }
@@ -104,7 +105,12 @@ Adapters should not decide workflow progression or own cross-ticket state.
   "scope_reviewed": {
     "files_examined": ["string"],
     "tests_run": true,
-    "criteria_checked": ["string"]
+    "criteria_checked": [
+      {
+        "criterion_id": "string",
+        "description": "string"
+      }
+    ]
   }
 }
 ```
@@ -115,10 +121,15 @@ Interpretation rules:
 - `verdict: fail` must include at least one `blocking` finding
 - `verdict: escalate` means the reviewer could not complete a reliable review
   without human input
-- `confidence: low` should generally force a human gate even if the verdict is
-  `pass`
+- `confidence: low` forces a human gate even if the verdict is `pass`, with
+  `gate_reason = 'low_confidence_pass'`
 
 Finding IDs should be assigned by the orchestrator when findings are persisted.
+
+When a finding references a specific acceptance criterion, the reviewer should
+set `acceptance_criterion_id` to the criterion's stable ID. This enables the
+orchestrator to update criterion statuses mechanically rather than by
+guesswork.
 
 ## Review Result Validation
 
@@ -129,6 +140,10 @@ Validation rules for reviewer `structured_result`:
 - `confidence: high` is invalid if `files_examined` is empty
 - `confidence: high` is invalid if acceptance criteria were provided but
   `criteria_checked` is empty
+- `criteria_checked` entries must reference valid `criterion_id` values from the
+  run request's `acceptance_criteria`
+- `acceptance_criterion_id` on a finding, when present, must reference a valid
+  criterion ID from the run request
 - top-level review result fields must always be present, even when empty or
   false
 
@@ -210,3 +225,43 @@ unexpected tracked-file changes occurred. The check should be baseline-based:
 Reviewer prompts should also explicitly warn against treating commit messages,
 inline rationale, or self-justifying artifacts as evidence that the
 implementation is correct.
+
+## Diff Basis
+
+The diff basis for implementation change evidence and reviewer scope is
+tracked files only, via `git diff HEAD`. This applies to:
+
+- empty-implementation detection (`implementing -> human-gate`)
+- `run_diffs` content persisted after an implementation run
+- `diff_context` provided to the reviewer
+- the review baseline comparison
+
+Untracked files are excluded. If generated or untracked files matter for a
+specific project, that can be addressed in a future extension, but the MVP
+diff basis is strictly tracked files against HEAD.
+
+## Finding Reconciliation
+
+Findings accumulate across implement-review cycles. Without reconciliation,
+revise loops produce ambiguous finding lists where it is unclear which issues
+persist and which were resolved.
+
+MVP reconciliation uses a lightweight fingerprint: `(category, location)`.
+
+Rules:
+
+- on `verdict: pass` after a re-review cycle, the orchestrator marks all prior
+  open findings for the ticket as `fixed` with `resolved_in_run` pointing to
+  the implementation run that preceded the passing review
+- on `verdict: fail` after a re-review cycle, the orchestrator matches incoming
+  findings to prior open findings by `(category, location)`:
+  - matched: update the prior finding's description and severity, link to the
+    new review run
+  - unmatched prior findings: mark as `fixed` with `resolved_in_run` pointing
+    to the preceding implementation run
+  - unmatched new findings: persist as new open findings
+- on the first review cycle (no prior findings), all findings are persisted as
+  new
+
+This avoids complex semantic matching while keeping the finding list clean
+across cycles. The human at `human-gate` can override any disposition.

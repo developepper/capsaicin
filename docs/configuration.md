@@ -2,6 +2,16 @@
 
 `capsaicin` needs explicit project and runtime configuration.
 
+## Source of Truth
+
+`config.toml` on disk is the source of truth for all configuration.
+`projects.config` in the database stores a parsed snapshot that is refreshed on
+each command invocation. If the two diverge, `config.toml` wins. The database
+snapshot exists for convenience during query and prompt assembly, not as an
+independent authority.
+
+## Configuration Areas
+
 Likely configuration areas:
 
 - agent selection by role

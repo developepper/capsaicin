@@ -39,7 +39,8 @@ Recommended transitions:
   trigger: reviewer returns `verdict: fail` with at least one blocking finding
 - `in-review -> human-gate`
   trigger: reviewer returns `verdict: pass`, reviewer returns
-  `verdict: escalate`, or the cycle limit is reached
+  `verdict: escalate`, reviewer returns `verdict: pass` with
+  `confidence: low`, or the cycle limit is reached
 - `in-review -> blocked`
   trigger: reviewer run hits repeated `contract_violation` or `parse_error`
 - `revise -> implementing`
@@ -73,6 +74,8 @@ Recommended transitions:
   `gate_reason = 'review_passed'`
 - `in-review -> human-gate` on reviewer escalation should set
   `gate_reason = 'reviewer_escalated'`
+- `in-review -> human-gate` on `confidence: low` with `verdict: pass` should
+  set `gate_reason = 'low_confidence_pass'`
 - `in-review -> human-gate` on cycle limit should set
   `gate_reason = 'cycle_limit'`
 - `implementing -> blocked` from repeated execution failure should set

@@ -42,7 +42,7 @@ CREATE TABLE tickets (
     gate_reason TEXT CHECK (gate_reason IN (
                     'review_passed','reviewer_escalated','cycle_limit',
                     'implementation_failure','human_requested',
-                    'empty_implementation'
+                    'empty_implementation','low_confidence_pass'
                 )),
     status      TEXT NOT NULL DEFAULT 'ready'
                 CHECK (status IN (
@@ -113,9 +113,11 @@ CREATE TABLE findings (
     id           TEXT PRIMARY KEY,
     run_id       TEXT NOT NULL REFERENCES agent_runs(id),
     ticket_id    TEXT NOT NULL REFERENCES tickets(id),
+    acceptance_criterion_id TEXT REFERENCES acceptance_criteria(id),
     severity     TEXT NOT NULL CHECK (severity IN ('blocking','warning','info')),
     category     TEXT NOT NULL,
     location     TEXT,
+    fingerprint  TEXT NOT NULL,
     description  TEXT NOT NULL,
     disposition  TEXT NOT NULL DEFAULT 'open'
                  CHECK (disposition IN ('open','fixed','wont_fix','disputed')),
@@ -168,6 +170,10 @@ CREATE TABLE decisions (
 - store the fully serialized run request in `agent_runs.run_request`
 - denormalize reviewer verdict onto `agent_runs.verdict` for cheap loop-control
   queries
+- `findings.acceptance_criterion_id` links a finding to the specific criterion
+  it relates to, enabling mechanical criterion-status updates
+- `findings.fingerprint` is computed as `(category, location)` by the
+  orchestrator at persistence time and used for cross-cycle reconciliation
 - use `agent_runs.exit_status = 'running'` as the orchestrator-owned marker for
   in-flight runs before final status is known
 - keep large diffs in `run_diffs` instead of embedding them directly in
@@ -176,6 +182,9 @@ CREATE TABLE decisions (
 - treat reviewer runs as `agent_runs` with `role = 'reviewer'`
 - create tables in foreign-key dependency order in the migration
 - keep acceptance-criteria status only on `acceptance_criteria`
+- `projects.config` stores a snapshot of the parsed config loaded at init or
+  startup; `config.toml` on disk is the source of truth and the DB snapshot is
+  refreshed on each command invocation
 
 ## Recommended MVP Indexes
 
@@ -191,6 +200,12 @@ CREATE INDEX idx_findings_ticket_disposition
 
 CREATE INDEX idx_findings_run
     ON findings(run_id);
+
+CREATE INDEX idx_findings_criterion
+    ON findings(acceptance_criterion_id);
+
+CREATE INDEX idx_findings_fingerprint
+    ON findings(ticket_id, fingerprint, disposition);
 
 CREATE INDEX idx_state_transitions_ticket
     ON state_transitions(ticket_id, created_at);
