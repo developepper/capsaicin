@@ -106,6 +106,8 @@ Observed envelope behavior:
   `total_cost_usd`, `usage`, `modelUsage`, and `permission_denials`
 - the full MVP reviewer schema defined below has been validated successfully
   with Claude Code `structured_output`
+- Claude Code can still return schema-valid but contract-invalid reviewer
+  results, so semantic validation remains mandatory after schema validation
 
 Adapter rules for Claude Code:
 
@@ -116,6 +118,7 @@ Adapter rules for Claude Code:
   `--json-schema` rather than a simplified summary schema
 - preserve the full raw envelope in `raw_stdout` for debugging
 - treat `is_error: true` or a non-zero process exit as failure evidence
+- never treat schema compliance alone as sufficient for reviewer acceptance
 
 ## Review Result Schema
 
@@ -180,6 +183,8 @@ Validation rules for reviewer `structured_result`:
 
 If validation fails, the adapter should return `exit_status: parse_error` and
 preserve the raw output for debugging rather than trying to repair the result.
+This includes schema-valid outputs that still violate semantic rules such as
+`verdict: fail` with no blocking findings.
 
 ## Run Envelope
 

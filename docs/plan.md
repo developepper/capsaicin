@@ -383,6 +383,8 @@ use `result` as the assistant text payload.
 - fall back to parsing `result` only if `structured_output` is absent
 - validate per adapters.md rules (verdict/finding consistency, confidence
   checks, criterion ID validity)
+- treat JSON Schema compliance as necessary but not sufficient; semantic
+  contract validation still determines whether the result is accepted
 - return exit_status=parse_error when extraction or validation fails,
   preserving raw output
 - integration test with captured real Claude Code reviewer output samples
