@@ -34,3 +34,12 @@ jobs:
 
       - name: Tests
         run: pytest
+
+      - name: Init smoke test
+        run: |
+          mkdir -p /tmp/capsaicin-smoke && cd /tmp/capsaicin-smoke
+          git init
+          capsaicin init --project smoke-test --repo /tmp/capsaicin-smoke
+          test -f /tmp/capsaicin-smoke/.capsaicin/projects/smoke-test/capsaicin.db
+          test -f /tmp/capsaicin-smoke/.capsaicin/projects/smoke-test/config.toml
+          test -f /tmp/capsaicin-smoke/.capsaicin/projects/smoke-test/activity.log
