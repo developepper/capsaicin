@@ -172,8 +172,11 @@ CREATE TABLE decisions (
   queries
 - `findings.acceptance_criterion_id` links a finding to the specific criterion
   it relates to, enabling mechanical criterion-status updates
-- `findings.fingerprint` is computed as `(category, location)` by the
-  orchestrator at persistence time and used for cross-cycle reconciliation
+- `findings.fingerprint` is computed as
+  `(category, location, description_prefix)` by the orchestrator at persistence
+  time and used for cross-cycle reconciliation; `description_prefix` is the
+  first 80 characters of the description, normalized to lowercase with
+  collapsed whitespace
 - use `agent_runs.exit_status = 'running'` as the orchestrator-owned marker for
   in-flight runs before final status is known
 - keep large diffs in `run_diffs` instead of embedding them directly in

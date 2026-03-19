@@ -142,7 +142,7 @@ Behavior:
 Usage:
 
 ```text
-capsaicin ticket review [TICKET_ID]
+capsaicin ticket review [TICKET_ID] [--allow-drift]
 ```
 
 Behavior:
@@ -150,8 +150,10 @@ Behavior:
 - find the ticket in `in-review`
 - verify that the current `git diff HEAD` (tracked files only) matches the
   `run_diffs.diff_text` captured at the end of the implementation run; if
-  they differ, reject the review with a workspace-drift error and require
-  the user to either re-run implementation or acknowledge the drift
+  they differ, reject the review with a workspace-drift error unless
+  `--allow-drift` is provided; when `--allow-drift` is used, re-capture the
+  current diff as the new `run_diffs` baseline and proceed with review against
+  the updated diff
 - capture and persist the tracked-file review baseline before invoking the
   reviewer
 - update `orchestrator_state` with the active review run
@@ -202,7 +204,7 @@ Finding reconciliation on re-review cycles:
 - on `verdict: pass`, mark all prior open findings for the ticket as `fixed`
   with `resolved_in_run` pointing to the preceding implementation run
 - on `verdict: fail`, match incoming findings to prior open findings by
-  `(category, location)` fingerprint:
+  `(category, location, description_prefix)` fingerprint:
   - matched: update the prior finding's description and severity, link to the
     new review run
   - unmatched prior: mark as `fixed`

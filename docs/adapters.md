@@ -246,7 +246,12 @@ Findings accumulate across implement-review cycles. Without reconciliation,
 revise loops produce ambiguous finding lists where it is unclear which issues
 persist and which were resolved.
 
-MVP reconciliation uses a lightweight fingerprint: `(category, location)`.
+MVP reconciliation uses a lightweight fingerprint:
+`(category, location, description_prefix)` where `description_prefix` is the
+first 80 characters of the description, normalized to lowercase with collapsed
+whitespace. The prefix disambiguates findings that share the same category and
+location (especially when location is null) without requiring full semantic
+matching.
 
 Rules:
 
