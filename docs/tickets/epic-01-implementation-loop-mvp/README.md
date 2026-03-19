@@ -36,17 +36,17 @@ clear boundary.
 
 ## Phased Roadmap
 
-| Phase | Focus | Tickets |
-|-------|-------|---------|
-| 1 | Foundation | T01-T04 |
-| 2 | Project & Ticket Management | T05-T07 |
-| 3 | State Machine & Orchestrator | T08-T09 |
-| 4 | Adapter Layer | T10-T13 |
-| 5 | Implementation Pipeline | T14-T15 |
-| 6 | Review Pipeline | T16-T20 |
-| 7 | Human Gate & Decisions | T21-T23 |
-| 8 | Status & Recovery | T24-T26 |
-| 9 | Automated Loop | T27 |
+| Phase | Focus | Tickets | Status |
+|-------|-------|---------|--------|
+| 1 | Foundation | T01-T04 | T01 complete |
+| 2 | Project & Ticket Management | T05-T07 | Not started |
+| 3 | State Machine & Orchestrator | T08-T09 | Not started |
+| 4 | Adapter Layer | T10-T13 | Not started |
+| 5 | Implementation Pipeline | T14-T15 | Not started |
+| 6 | Review Pipeline | T16-T20 | Not started |
+| 7 | Human Gate & Decisions | T21-T23 | Not started |
+| 8 | Status & Recovery | T24-T26 | Not started |
+| 9 | Automated Loop | T27 | Not started |
 
 ## Suggested PR / Milestone Grouping
 

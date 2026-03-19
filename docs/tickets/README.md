@@ -11,4 +11,4 @@ Each epic is a subdirectory containing:
 
 | Epic | Directory | Status |
 |------|-----------|--------|
-| Implementation Loop MVP | [epic-01-implementation-loop-mvp](./epic-01-implementation-loop-mvp/) | Draft |
+| Implementation Loop MVP | [epic-01-implementation-loop-mvp](./epic-01-implementation-loop-mvp/) | In Progress (1/27) |
