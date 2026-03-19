@@ -258,6 +258,7 @@ class RunResult:
     run_id: str
     exit_status: str
     duration_seconds: float = 0.0
+    result_text: str = ""
     raw_stdout: str = ""
     raw_stderr: str = ""
     structured_result: ReviewResult | None = None
@@ -271,6 +272,7 @@ class RunResult:
             "run_id": self.run_id,
             "exit_status": self.exit_status,
             "duration_seconds": self.duration_seconds,
+            "result_text": self.result_text,
             "raw_stdout": self.raw_stdout,
             "raw_stderr": self.raw_stderr,
             "structured_result": (
@@ -286,6 +288,7 @@ class RunResult:
             run_id=data["run_id"],
             exit_status=data["exit_status"],
             duration_seconds=data.get("duration_seconds", 0.0),
+            result_text=data.get("result_text", ""),
             raw_stdout=data.get("raw_stdout", ""),
             raw_stderr=data.get("raw_stderr", ""),
             structured_result=ReviewResult.from_dict(sr) if sr else None,
