@@ -135,6 +135,46 @@ def load_config(config_path: str | Path) -> Config:
     )
 
 
+def config_to_snapshot(config: Config) -> dict:
+    """Serialize a Config to a dict suitable for JSON storage in projects.config."""
+    return {
+        "project": {
+            "name": config.project.name,
+            "repo_path": config.project.repo_path,
+        },
+        "adapters": {
+            "implementer": {
+                "backend": config.implementer.backend,
+                "command": config.implementer.command,
+                "model": config.implementer.model,
+                "allowed_tools": config.implementer.allowed_tools,
+            },
+            "reviewer": {
+                "backend": config.reviewer.backend,
+                "command": config.reviewer.command,
+                "model": config.reviewer.model,
+                "allowed_tools": config.reviewer.allowed_tools,
+            },
+        },
+        "limits": {
+            "max_cycles": config.limits.max_cycles,
+            "max_impl_retries": config.limits.max_impl_retries,
+            "max_review_retries": config.limits.max_review_retries,
+            "timeout_seconds": config.limits.timeout_seconds,
+        },
+        "reviewer": {
+            "mode": config.reviewer_policy.mode,
+        },
+        "ticket_selection": {
+            "order": config.ticket_selection.order,
+        },
+        "paths": {
+            "renders_dir": config.paths.renders_dir,
+            "exports_dir": config.paths.exports_dir,
+        },
+    }
+
+
 def resolve_project(capsaicin_root: str | Path) -> str:
     """Auto-resolve the project slug if exactly one project exists.
 
