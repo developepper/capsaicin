@@ -121,5 +121,51 @@ def ticket_add(title, desc, criteria, from_file, repo_path, project_slug):
         conn.close()
 
 
+@ticket.command("dep")
+@click.argument("ticket_id")
+@click.option(
+    "--on", "depends_on_id", required=True, help="ID of the dependency ticket."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_dep(ticket_id, depends_on_id, repo_path, project_slug):
+    """Add a dependency between tickets."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_dep import add_dependency
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+
+    conn = get_connection(db_path)
+    try:
+        add_dependency(conn, ticket_id, depends_on_id)
+        click.echo(f"Dependency added: {ticket_id} depends on {depends_on_id}")
+    except ValueError as e:
+        raise click.ClickException(str(e))
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()
