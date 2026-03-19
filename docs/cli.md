@@ -49,6 +49,7 @@ Behavior:
 - write default `config.toml`
 - resolve `--repo` to an absolute path before storing it
 - insert the initial `projects` row
+- create `activity.log` as an append-only debug trace file
 - create `renders/` and `exports/` directories
 
 ### `capsaicin ticket add`
@@ -243,7 +244,12 @@ Behavior:
   an unresolved quality gate
 - move the ticket to `pr-ready`
 - set `orchestrator_state.status = 'idle'`
-- render a PR preparation summary
+- print a PR preparation summary to stdout
+
+MVP note:
+
+- `pr-ready` is a terminal human-handoff state for MVP
+- PR creation and merge remain manual
 
 ### `capsaicin ticket revise`
 
@@ -278,6 +284,23 @@ Behavior:
   `done`
 - otherwise move the ticket to `blocked` and set a human-readable
   `blocked_reason`
+- set `orchestrator_state.status = 'idle'`
+
+### `capsaicin ticket unblock`
+
+Usage:
+
+```text
+capsaicin ticket unblock TICKET_ID [--reset-cycles]
+```
+
+Behavior:
+
+- accept tickets only from `blocked`
+- record a human unblock decision
+- move the ticket to `ready`
+- clear `blocked_reason`
+- optionally reset cycle and retry counters
 - set `orchestrator_state.status = 'idle'`
 
 ### `capsaicin status`

@@ -11,8 +11,8 @@
 | 5 | Implementation Pipeline | T14–T15 |
 | 6 | Review Pipeline | T16–T20 |
 | 7 | Human Gate & Decisions | T21–T23 |
-| 8 | Status & Recovery | T24–T25 |
-| 9 | Automated Loop | T26 |
+| 8 | Status & Recovery | T24–T26 |
+| 9 | Automated Loop | T27 |
 
 ## Epic: Implementation-Loop MVP
 
@@ -142,6 +142,7 @@ entrypoints). No adapter-specific validation.
 - write default `config.toml` with resolved absolute repo path
 - insert `projects` row with config snapshot in `projects.config`
 - insert `orchestrator_state` row with `status = 'idle'`
+- create `activity.log` as an append-only debug trace file
 - create `renders/` and `exports/` directories
 - slug generation from project name (lowercase, hyphens, strip special chars)
 - error if project already exists
@@ -154,6 +155,7 @@ entrypoints). No adapter-specific validation.
 - `config.toml` exists with correct defaults and absolute repo_path
 - `projects` row exists in DB
 - `orchestrator_state` row exists with `idle` status
+- `activity.log` exists
 - re-running init for the same project errors cleanly
 
 **Dependencies**: T02, T03, T04.
@@ -186,9 +188,9 @@ entrypoints). No adapter-specific validation.
 
 **Dependencies**: T05.
 
-**Notes**: Use `ulid` or `python-ulid` package for ID generation. ULIDs are
-preferred over UUIDs per data-model.md because they are sortable and more
-readable in logs.
+**Notes**: Use the `python-ulid` package for ID generation. ULIDs are preferred
+over UUIDs per data-model.md because they are sortable and more readable in
+logs.
 
 ---
 
@@ -346,6 +348,8 @@ interface.
 - map exit codes to RunResult exit_status (success/failure/timeout)
 - adapter_metadata: session_id, turns, cost, usage, modelUsage, and
   permission_denials when available
+- integration tests use mocked subprocess behavior plus captured real Claude
+  JSON envelopes in `tests/fixtures/`
 - integration test with a mock/stub subprocess (do not require real Claude Code
   for unit tests)
 
@@ -387,7 +391,8 @@ use `result` as the assistant text payload.
   contract validation still determines whether the result is accepted
 - return exit_status=parse_error when extraction or validation fails,
   preserving raw output
-- integration test with captured real Claude Code reviewer output samples
+- integration tests use captured real Claude Code reviewer JSON envelopes in
+  `tests/fixtures/`
 
 **Non-goals**: No review baseline checking (that's the orchestrator's job). No
 finding reconciliation.
@@ -681,6 +686,9 @@ validation, AC updates, and finding reconciliation.
 - ticket transitions to pr-ready
 - orchestrator state is idle
 
+**Notes**: `pr-ready` is a terminal human-handoff state in MVP. PR creation and
+merge remain manual.
+
 **Dependencies**: T08, T09, T14.
 
 ---
@@ -729,7 +737,7 @@ validation, AC updates, and finding reconciliation.
 - with --abandon: record `reject` decision, transition to `done`
 - set orchestrator status to `idle`
 
-**Non-goals**: No unblock command (that's a future ticket for blocked->ready).
+**Non-goals**: No automatic blocked-ticket recovery.
 
 **Acceptance criteria**:
 - defer without abandon transitions to blocked
@@ -743,7 +751,36 @@ validation, AC updates, and finding reconciliation.
 
 ---
 
-### T24: `capsaicin status`
+### T24: `capsaicin ticket unblock`
+
+**Goal**: Return a blocked ticket to `ready` for another attempt.
+
+**Scope**:
+- `capsaicin ticket unblock TICKET_ID [--reset-cycles]`
+- accept tickets only from `blocked`
+- record `unblock` decision
+- clear `blocked_reason`
+- transition to `ready`
+- optionally reset cycle and retry counters
+- set orchestrator status to `idle`
+- append an unblock event to `activity.log`
+
+**Non-goals**: No automatic re-run. No unblock from non-blocked states.
+
+**Acceptance criteria**:
+- blocked ticket transitions to ready
+- decision row is recorded with `decision = 'unblock'`
+- `blocked_reason` is cleared
+- `--reset-cycles` resets cycle and retry counters
+- without `--reset-cycles`, counters are preserved
+- tickets not in blocked are rejected
+- orchestrator state is idle
+
+**Dependencies**: T08, T09.
+
+---
+
+### T25: `capsaicin status`
 
 **Goal**: Render project and ticket status to stdout.
 
@@ -773,7 +810,7 @@ alignment.
 
 ---
 
-### T25: `capsaicin resume`
+### T26: `capsaicin resume`
 
 **Goal**: Recover from interrupted execution based on orchestrator state.
 
@@ -803,7 +840,7 @@ provides.
 
 ---
 
-### T26: `capsaicin loop`
+### T27: `capsaicin loop`
 
 **Goal**: Automated implement-review-revise loop.
 
@@ -836,37 +873,21 @@ provides.
 These should be resolved before or during implementation of the affected
 tickets.
 
-### 1. Activity log (affects T05)
-
-`architecture.md` lists `activity.log` in the project layout but there is no
-spec for what goes in it or how it's written. Decision: defer activity logging
-to post-MVP, create the file at init but leave it empty. Alternatively, define
-a simple append-only text log of state transitions and run completions.
-
-### 2. Rendered file output (affects T06, T21, T24)
+### 1. Rendered file output (affects T06, T21, T25)
 
 Several commands mention rendering human-readable files (ticket briefs, PR
 preparation summaries). The MVP can defer file rendering and output to stdout
 only. Rendered files in `renders/` can be a follow-up after the loop works.
 
-### 3. ULID vs UUID (affects T06)
+### 2. Post-MVP completion state (affects post-MVP)
 
-`data-model.md` says "ULIDs or UUIDs." Recommendation: ULID. They are
-time-sortable which helps with log readability and `created_at`-ordered queries.
-Use the `python-ulid` package.
+`state-machine.md` keeps `pr-ready -> done` for future automation, but MVP
+stops at `pr-ready` so the human can review, create the PR, and merge
+manually. A future `capsaicin pr create` or `capsaicin ticket complete`
+command can own that transition.
 
-### 4. PR-ready to done transition (affects post-MVP)
+### 3. Activity log format details (affects T05 and runtime tickets)
 
-`state-machine.md` says `pr-ready -> done` is triggered by PR creation and
-acceptance. The MVP has no GitHub integration. Decision: for MVP, `pr-ready` is
-a terminal display state. The `pr-ready -> done` transition can be triggered by
-a future `capsaicin pr create` command or a manual `capsaicin ticket complete`
-command added post-MVP.
-
-### 5. Blocked ticket recovery (affects post-MVP)
-
-`state-machine.md` defines `blocked -> ready` and `blocked -> done` but there
-is no CLI command for these transitions in the MVP command list. Decision: add
-`capsaicin ticket unblock TICKET_ID [--reset-cycles]` post-MVP, or extend
-`ticket defer --abandon` to cover the `blocked -> done` path (already
-partially covered).
+MVP includes `activity.log` as an append-only debug trace. The remaining choice
+is just the exact line format. Recommended default: one line per event with
+timestamp, event type, project_id, ticket_id, run_id, and a short JSON payload.

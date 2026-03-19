@@ -55,7 +55,7 @@ Recommended transitions:
 - `human-gate -> blocked`
   trigger: human decision is `defer`
 - `pr-ready -> done`
-  trigger: PR is created and accepted for completion, or later merged
+  trigger: post-MVP automation such as PR creation/merge marks the ticket done
 - `blocked -> ready`
   trigger: human explicitly unblocks and requeues the ticket
 - `blocked -> done`
@@ -90,6 +90,12 @@ Recommended transitions:
   re-scopes the work
 - `blocked -> ready` should reset cycles only when the human explicitly
   requests it
+
+MVP note:
+
+- `pr-ready` is a terminal human-handoff state in MVP
+- `pr-ready -> done` is reserved for post-MVP automation or an explicit future
+  completion command
 
 ## Illegal Transitions
 

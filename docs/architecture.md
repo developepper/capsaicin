@@ -65,6 +65,7 @@ The right design is:
 - `config.toml` for configuration (source of truth; DB snapshot refreshed per
   invocation)
 - `database` for operational state
+- `activity.log` for append-only human-readable debug tracing
 - `rendered text views` for human inspection
 - `exported issue and PR content` for GitHub
 
@@ -94,6 +95,16 @@ should not be the only or primary workflow engine.
 canonical system of record. `exports/` should be reserved for outward-facing
 artifacts such as GitHub issue bodies and PR summaries. The database remains
 canonical.
+
+For MVP, `activity.log` should be a lightweight append-only debug trace rather
+than a second system of record. It should record events such as project init,
+ticket creation, state transitions, run start/finish, drift detection,
+parse/contract failures, human decisions, and unblock actions. The database
+remains canonical.
+
+For MVP, rendered files under `renders/` can be deferred even though the
+directory exists. Operator-facing inspection can happen through stdout and
+`activity.log` until the orchestration core is proven.
 
 ## Runtime And Packaging
 

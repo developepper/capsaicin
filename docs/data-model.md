@@ -152,7 +152,7 @@ CREATE TABLE decisions (
     id          TEXT PRIMARY KEY,
     ticket_id   TEXT NOT NULL REFERENCES tickets(id),
     decision    TEXT NOT NULL CHECK (decision IN (
-                    'approve','reject','revise','defer'
+                    'approve','reject','revise','defer','unblock'
                 )),
     rationale   TEXT,
     created_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -163,8 +163,8 @@ CREATE TABLE decisions (
 
 - `agent_runs.structured_result` stores the review result payload defined in
   [adapters.md](./adapters.md)
-- use ULIDs or UUIDs for text primary keys that appear in envelopes, logs, and
-  rendered reports
+- use ULIDs for text primary keys that appear in envelopes, logs, and rendered
+  reports; use the `python-ulid` package in MVP
 - keep `structured_result` and `adapter_metadata` as JSON blobs for MVP rather
   than over-normalizing early
 - store the fully serialized run request in `agent_runs.run_request`
@@ -188,6 +188,8 @@ CREATE TABLE decisions (
 - `projects.config` stores a snapshot of the parsed config loaded at init or
   startup; `config.toml` on disk is the source of truth and the DB snapshot is
   refreshed on each command invocation
+- `activity.log` is an append-only debug trace for operators; it is not
+  canonical state
 
 ## Recommended MVP Indexes
 

@@ -82,6 +82,7 @@ Semantics:
 - `ticket approve`: no adapter config required
 - `ticket revise`: no adapter config required
 - `ticket defer`: no adapter config required
+- `ticket unblock`: no adapter config required
 - `status`: no adapter config required
 - `resume`: requires whichever adapter config is needed for the interrupted
   step
