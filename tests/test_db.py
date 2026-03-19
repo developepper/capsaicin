@@ -58,9 +58,7 @@ class TestRunMigrations:
         run_migrations(conn)
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "_migration_versions" in tables
         conn.close()
@@ -84,9 +82,7 @@ class TestRunMigrations:
 
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "demo" in tables
 
@@ -110,9 +106,7 @@ class TestRunMigrations:
             run_migrations(conn)
 
         # Should only have one version entry
-        count = conn.execute(
-            "SELECT COUNT(*) FROM _migration_versions"
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM _migration_versions").fetchone()[0]
         assert count == 1
         conn.close()
 
@@ -135,9 +129,7 @@ class TestRunMigrations:
 
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "first_table" in tables
         assert "second_table" in tables
@@ -170,15 +162,11 @@ class TestRunMigrations:
 
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "second_table" in tables
 
-        count = conn.execute(
-            "SELECT COUNT(*) FROM _migration_versions"
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM _migration_versions").fetchone()[0]
         assert count == 2
         conn.close()
 
@@ -188,8 +176,7 @@ class TestRunMigrations:
         migrations_dir = tmp_path / "migrations"
         migrations_dir.mkdir()
         (migrations_dir / "0001_bad.sql").write_text(
-            "CREATE TABLE good_table (id TEXT PRIMARY KEY);\n"
-            "THIS IS INVALID SQL;\n"
+            "CREATE TABLE good_table (id TEXT PRIMARY KEY);\nTHIS IS INVALID SQL;\n"
         )
 
         conn = get_connection(":memory:")
@@ -200,15 +187,11 @@ class TestRunMigrations:
         # Neither the table nor the version row should exist
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "good_table" not in tables
 
-        count = conn.execute(
-            "SELECT COUNT(*) FROM _migration_versions"
-        ).fetchone()[0]
+        count = conn.execute("SELECT COUNT(*) FROM _migration_versions").fetchone()[0]
         assert count == 0
 
         conn.close()
@@ -229,9 +212,7 @@ class TestRunMigrations:
         conn.commit()
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert "after_fail" in tables
         conn.close()
@@ -244,9 +225,7 @@ class TestRunMigrations:
         # Only the version table should exist
         tables = {
             row[0]
-            for row in conn.execute(
-                "SELECT name FROM sqlite_master WHERE type='table'"
-            )
+            for row in conn.execute("SELECT name FROM sqlite_master WHERE type='table'")
         }
         assert tables == {"_migration_versions"}
         conn.close()
