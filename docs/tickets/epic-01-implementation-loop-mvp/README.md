@@ -42,7 +42,7 @@ clear boundary.
 | 2 | Project & Ticket Management | T05-T07 | Complete |
 | 3 | State Machine & Orchestrator | T08-T09 | Complete |
 | 4 | Adapter Layer | T10-T13 | Complete |
-| 5 | Implementation Pipeline | T14-T15 | In progress (T14 complete) |
+| 5 | Implementation Pipeline | T14-T15 | Complete |
 | 6 | Review Pipeline | T16-T20 | In progress |
 | 7 | Human Gate & Decisions | T21-T23 | Not started |
 | 8 | Status & Recovery | T24-T26 | Not started |
