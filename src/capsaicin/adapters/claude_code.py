@@ -1,6 +1,6 @@
-"""Claude Code adapter (T12).
+"""Claude Code adapter (T12, T13).
 
-Invokes Claude Code as an implementer via subprocess.
+Invokes Claude Code as an implementer or reviewer via subprocess.
 """
 
 from __future__ import annotations
@@ -11,6 +11,8 @@ import time
 
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
+from capsaicin.prompts import REVIEW_RESULT_SCHEMA
+from capsaicin.validation import validate_review_result
 
 # Envelope fields to extract into adapter_metadata.
 _METADATA_KEYS = (
@@ -30,15 +32,29 @@ class ClaudeCodeAdapter(BaseAdapter):
         self.command = command
 
     def _build_command(self, request: RunRequest) -> list[str]:
-        """Build the subprocess command list for an implementer run."""
-        return [
+        """Build the subprocess command list."""
+        cmd = [
             self.command,
             "-p",
             "--output-format",
             "json",
-            "--",
-            request.prompt,
         ]
+
+        # Reviewer mode: add --json-schema and --allowed-tools
+        if request.role == "reviewer":
+            cmd.extend([
+                "--json-schema",
+                json.dumps(REVIEW_RESULT_SCHEMA, separators=(",", ":")),
+            ])
+            allowed_tools = request.adapter_config.get("allowed_tools", [])
+            if allowed_tools:
+                cmd.append("--allowed-tools")
+                cmd.extend(allowed_tools)
+
+        # Prompt must come after -- to avoid being parsed as flags/tool names
+        cmd.append("--")
+        cmd.append(request.prompt)
+        return cmd
 
     @staticmethod
     def _extract_metadata(envelope: dict) -> dict:
@@ -69,8 +85,64 @@ class ClaudeCodeAdapter(BaseAdapter):
         result = envelope.get("result")
         return result if isinstance(result, str) else ""
 
+    def _handle_reviewer_result(
+        self, request: RunRequest, envelope: dict, duration: float,
+        raw_stdout: str, raw_stderr: str,
+    ) -> RunResult:
+        """Extract and validate structured reviewer output."""
+        metadata = self._extract_metadata(envelope)
+        result_text = self._extract_result_text(envelope)
+
+        # Extract structured_output (primary) or fall back to result
+        structured_raw = envelope.get("structured_output")
+        if structured_raw is None:
+            # Fall back: try parsing `result` as JSON
+            result_field = envelope.get("result")
+            if isinstance(result_field, str):
+                try:
+                    structured_raw = json.loads(result_field)
+                except (json.JSONDecodeError, TypeError):
+                    pass
+
+        if not isinstance(structured_raw, dict):
+            return RunResult(
+                run_id=request.run_id,
+                exit_status="parse_error",
+                duration_seconds=duration,
+                result_text=result_text,
+                raw_stdout=raw_stdout,
+                raw_stderr=raw_stderr,
+                adapter_metadata=metadata,
+            )
+
+        # Semantic validation via T17
+        criteria_ids = [c.id for c in request.acceptance_criteria]
+        validation = validate_review_result(structured_raw, criteria_ids)
+
+        if not validation.is_valid:
+            return RunResult(
+                run_id=request.run_id,
+                exit_status="parse_error",
+                duration_seconds=duration,
+                result_text=result_text,
+                raw_stdout=raw_stdout,
+                raw_stderr=raw_stderr,
+                adapter_metadata=metadata,
+            )
+
+        return RunResult(
+            run_id=request.run_id,
+            exit_status="success",
+            duration_seconds=duration,
+            result_text=result_text,
+            raw_stdout=raw_stdout,
+            raw_stderr=raw_stderr,
+            structured_result=validation.result,
+            adapter_metadata=metadata,
+        )
+
     def execute(self, request: RunRequest) -> RunResult:
-        """Execute a Claude Code implementer run via subprocess."""
+        """Execute a Claude Code run via subprocess."""
         cmd = self._build_command(request)
         start = time.monotonic()
 
@@ -120,25 +192,30 @@ class ClaudeCodeAdapter(BaseAdapter):
                 raw_stderr=raw_stderr,
             )
 
-        result_text = self._extract_result_text(envelope)
-
         # is_error: true -> failure regardless of exit code
         if envelope.get("is_error", False):
             return RunResult(
                 run_id=request.run_id,
                 exit_status="failure",
                 duration_seconds=duration,
-                result_text=result_text,
+                result_text=self._extract_result_text(envelope),
                 raw_stdout=raw_stdout,
                 raw_stderr=raw_stderr,
                 adapter_metadata=self._extract_metadata(envelope),
             )
 
+        # Reviewer mode: extract and validate structured output
+        if request.role == "reviewer":
+            return self._handle_reviewer_result(
+                request, envelope, duration, raw_stdout, raw_stderr,
+            )
+
+        # Implementer mode: success
         return RunResult(
             run_id=request.run_id,
             exit_status="success",
             duration_seconds=duration,
-            result_text=result_text,
+            result_text=self._extract_result_text(envelope),
             raw_stdout=raw_stdout,
             raw_stderr=raw_stderr,
             adapter_metadata=self._extract_metadata(envelope),

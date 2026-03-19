@@ -1,0 +1,48 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "Review complete. Issues found.",
+  "structured_output": {
+    "verdict": "fail",
+    "confidence": "high",
+    "findings": [
+      {
+        "severity": "blocking",
+        "category": "correctness",
+        "location": "src/auth.py:42",
+        "acceptance_criterion_id": "ac-1",
+        "description": "Token expiry check is missing",
+        "disposition": "open"
+      },
+      {
+        "severity": "warning",
+        "category": "style",
+        "location": "src/auth.py:10",
+        "acceptance_criterion_id": null,
+        "description": "Unused import",
+        "disposition": "open"
+      }
+    ],
+    "scope_reviewed": {
+      "files_examined": ["src/auth.py"],
+      "tests_run": true,
+      "criteria_checked": [
+        {
+          "criterion_id": "ac-1",
+          "description": "Login returns JWT"
+        }
+      ]
+    }
+  },
+  "session_id": "sess-rev-002",
+  "num_turns": 4,
+  "total_cost_usd": 0.0287,
+  "duration_ms": 41500,
+  "usage": {
+    "input_tokens": 4500,
+    "output_tokens": 1200
+  },
+  "modelUsage": {},
+  "permission_denials": []
+}
