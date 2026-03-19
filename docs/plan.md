@@ -172,8 +172,8 @@ entrypoints). No adapter-specific validation.
 - record state transition (`null -> ready`)
 - print ticket ID and brief summary to stdout
 
-**Non-goals**: No dependency management. No rendered ticket brief files (just
-stdout). No batch import.
+**Non-goals**: No dependency management. No rendered file output to `renders/`
+(stdout only, per updated CLI spec). No batch import.
 
 **Acceptance criteria**:
 - inline creation produces a ticket row with correct fields
@@ -614,10 +614,10 @@ validation, AC updates, and finding reconciliation.
 - if parse/validation fails: mark parse_error, retry or block
 - on valid fail: reconcile findings (T19), update AC (T18), transition to
   `revise`
-- on valid pass + high/medium confidence: transition to `human-gate` with
-  `gate_reason = 'review_passed'`
-- on valid pass + low confidence: transition to `human-gate` with
-  `gate_reason = 'low_confidence_pass'`
+- on valid pass: reconcile findings (T19) to bulk-close prior open findings,
+  update AC (T18) to mark checked criteria as met, transition to `human-gate`
+  with `gate_reason = 'review_passed'` (high/medium confidence) or
+  `gate_reason = 'low_confidence_pass'` (low confidence)
 - on valid escalate: transition to `human-gate` with
   `gate_reason = 'reviewer_escalated'`
 - cycle-limit check: prefer human-gate with `gate_reason = 'cycle_limit'`
@@ -632,6 +632,8 @@ validation, AC updates, and finding reconciliation.
 - contract violation from reviewer modifying files is detected and handled
 - parse_error is handled with retry/block
 - valid fail persists findings, updates AC, transitions to revise
+- valid pass bulk-closes prior open findings via reconciliation
+- valid pass updates checked criteria to met via AC update
 - valid pass transitions to human-gate with correct gate_reason
 - low confidence pass transitions to human-gate with low_confidence_pass
 - escalate transitions to human-gate with reviewer_escalated
@@ -682,8 +684,9 @@ validation, AC updates, and finding reconciliation.
 - `capsaicin ticket revise [TICKET_ID] [--add-finding DESCRIPTION]
   [--reset-cycles]`
 - find ticket in `human-gate`
-- optionally add human-supplied findings (severity=blocking,
-  category='human_feedback')
+- optionally add human-supplied findings: create a synthetic `agent_run` with
+  `role='human'`, `mode='read-write'`, `exit_status='success'`, then attach
+  findings to that run (severity=blocking, category='human_feedback')
 - record `revise` decision
 - transition to `revise`
 - optionally reset cycle and retry counters
@@ -693,7 +696,9 @@ validation, AC updates, and finding reconciliation.
 
 **Acceptance criteria**:
 - revise transitions from human-gate to revise
-- human findings are persisted with correct fields
+- human findings are persisted with correct fields attached to a synthetic
+  human agent_run
+- the synthetic run has role='human' and is linked to the ticket
 - decision row is recorded
 - --reset-cycles resets counters
 - without --reset-cycles, counters are preserved

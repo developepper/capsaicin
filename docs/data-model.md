@@ -74,7 +74,7 @@ CREATE TABLE ticket_dependencies (
 CREATE TABLE agent_runs (
     id                TEXT PRIMARY KEY,
     ticket_id         TEXT NOT NULL REFERENCES tickets(id),
-    role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner')),
+    role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner','human')),
     mode              TEXT NOT NULL CHECK (mode IN ('read-write','read-only')),
     cycle_number      INTEGER NOT NULL,
     attempt_number    INTEGER NOT NULL DEFAULT 1,

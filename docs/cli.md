@@ -65,7 +65,8 @@ Behavior:
 - create a manual MVP ticket because planning-loop automation is deferred
 - insert the ticket in `ready`
 - insert acceptance criteria in `pending`
-- render a human-readable ticket brief
+- print a human-readable ticket brief to stdout (rendered file output to
+  `renders/` is deferred to post-MVP)
 
 MVP file import format:
 
