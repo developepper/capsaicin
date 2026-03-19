@@ -102,6 +102,14 @@ ticket creation, state transitions, run start/finish, drift detection,
 parse/contract failures, human decisions, and unblock actions. The database
 remains canonical.
 
+Recommended MVP line format:
+
+- one line per event
+- ISO 8601 timestamp first
+- event type token
+- project_id, ticket_id, and run_id when available
+- compact JSON payload at the end for extra detail
+
 For MVP, rendered files under `renders/` can be deferred even though the
 directory exists. Operator-facing inspection can happen through stdout and
 `activity.log` until the orchestration core is proven.

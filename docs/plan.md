@@ -156,6 +156,8 @@ entrypoints). No adapter-specific validation.
 - `projects` row exists in DB
 - `orchestrator_state` row exists with `idle` status
 - `activity.log` exists
+- `activity.log` uses the agreed MVP line format: ISO 8601 timestamp, event
+  type, project_id/ticket_id/run_id when present, and compact JSON payload
 - re-running init for the same project errors cleanly
 
 **Dependencies**: T02, T03, T04.
@@ -868,26 +870,28 @@ provides.
 
 ---
 
-## Open Decisions
+## Settled MVP Decisions
 
-These should be resolved before or during implementation of the affected
-tickets.
+These decisions are locked for ticket creation and implementation.
 
-### 1. Rendered file output (affects T06, T21, T25)
+### 1. Rendered file output
 
-Several commands mention rendering human-readable files (ticket briefs, PR
-preparation summaries). The MVP can defer file rendering and output to stdout
-only. Rendered files in `renders/` can be a follow-up after the loop works.
+MVP uses stdout for ticket briefs, PR preparation summaries, and status output.
+Rendered files under `renders/` are deferred until after the orchestration core
+is validated.
 
-### 2. Post-MVP completion state (affects post-MVP)
+### 2. PR-ready handling
 
-`state-machine.md` keeps `pr-ready -> done` for future automation, but MVP
-stops at `pr-ready` so the human can review, create the PR, and merge
-manually. A future `capsaicin pr create` or `capsaicin ticket complete`
-command can own that transition.
+`pr-ready` is a terminal human-handoff state in MVP. The human reviews the
+work, creates the PR manually, and merges manually. Any `pr-ready -> done`
+automation is explicitly post-MVP.
 
-### 3. Activity log format details (affects T05 and runtime tickets)
+### 3. Activity log format
 
-MVP includes `activity.log` as an append-only debug trace. The remaining choice
-is just the exact line format. Recommended default: one line per event with
-timestamp, event type, project_id, ticket_id, run_id, and a short JSON payload.
+MVP includes `activity.log` as an append-only debug trace with one line per
+event using:
+
+- ISO 8601 timestamp
+- event type
+- project_id, ticket_id, and run_id when available
+- compact JSON payload for extra detail
