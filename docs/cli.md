@@ -164,7 +164,7 @@ Behavior:
   - the captured diff being reviewed
   - ticket title, description, and acceptance criteria
   - prior findings with dispositions
-  - explicit JSON output-format instruction
+  - explicit JSON schema-constrained output instruction
   - anti-bias instruction not to trust commit messages or inline rationale
 - invoke the reviewer adapter in `read-only` mode
 - insert the run with `exit_status = 'running'` before invocation, then update

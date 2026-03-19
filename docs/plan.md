@@ -110,7 +110,8 @@ type-annotation gymnastics. Use `tomllib` (stdlib in 3.11+) for TOML.
 - `load_config(config_path) -> Config` dataclass/dict
 - validate required sections: `[project]`, `[adapters.implementer]`,
   `[adapters.reviewer]`, `[limits]`
-- apply defaults for optional fields (`timeout_seconds`, `max_turns`, etc.)
+- apply defaults for optional fields (`timeout_seconds`, adapter tool defaults,
+  etc.)
 - `resolve_project(capsaicin_root)` that implements single-project auto-resolve
   or errors on ambiguity
 - `write_default_config(path, project_name, repo_path)` for init
@@ -316,8 +317,8 @@ interface.
   criteria with statuses, prior findings (when revising), cycle info, scope
   constraint
 - reviewer prompt includes: independent reviewer role instruction, diff,
-  ticket context, criteria, prior findings, JSON output format instruction,
-  anti-bias instruction
+  ticket context, criteria, prior findings, JSON schema-constrained output
+  instruction, anti-bias instruction
 - unit tests that prompts contain required elements
 
 **Non-goals**: No template customization. No adapter-specific formatting.
@@ -343,7 +344,8 @@ interface.
 - subprocess invocation with `--print`, `--output-format json`, timeout
 - capture stdout, stderr, exit code, duration
 - map exit codes to RunResult exit_status (success/failure/timeout)
-- adapter_metadata: model, turns, cost if available
+- adapter_metadata: session_id, turns, cost, usage, modelUsage, and
+  permission_denials when available
 - integration test with a mock/stub subprocess (do not require real Claude Code
   for unit tests)
 
@@ -359,9 +361,9 @@ interface.
 
 **Dependencies**: T10, T11.
 
-**Notes**: This is the first adapter spike. The exact Claude Code CLI flags for
-non-interactive execution need to be validated. `--print` with `--output-format
-json` is the current best path for machine-consumable output.
+**Notes**: Validated Claude Code implementer invocation is
+`claude -p --output-format json -- "PROMPT"`. Parse the outer JSON envelope and
+use `result` as the assistant text payload.
 
 ---
 
@@ -371,11 +373,14 @@ json` is the current best path for machine-consumable output.
 
 **Scope**:
 - extend `ClaudeCodeAdapter` with reviewer execution path
-- invoke with read-only tool constraints (allowed_tools from config)
-- set `--max-turns` from config
-- extract inner JSON review result from assistant text in the JSON output
-  envelope
-- parse into ReviewResult type
+- invoke with read-only tool constraints via Claude Code `--allowed-tools`
+- pass the prompt after `--` so it is not parsed as additional tool names
+- provide `--json-schema` so the review result is returned in the outer JSON
+  envelope's `structured_output` field
+- pass the full MVP Review Result Schema from adapters.md, not a simplified
+  summary schema
+- parse `structured_output` into ReviewResult type
+- fall back to parsing `result` only if `structured_output` is absent
 - validate per adapters.md rules (verdict/finding consistency, confidence
   checks, criterion ID validity)
 - return exit_status=parse_error when extraction or validation fails,
@@ -386,8 +391,10 @@ json` is the current best path for machine-consumable output.
 finding reconciliation.
 
 **Acceptance criteria**:
-- reviewer invocation includes read-only tool constraints and max-turns
-- structured result is extracted from the JSON output envelope
+- reviewer invocation includes read-only tool constraints via `--allowed-tools`
+- reviewer invocation passes the prompt after `--`
+- structured result is read from the JSON output envelope's
+  `structured_output` field
 - valid ReviewResult passes validation
 - verdict:fail without blocking findings returns parse_error
 - verdict:pass with blocking findings returns parse_error
@@ -827,41 +834,26 @@ provides.
 These should be resolved before or during implementation of the affected
 tickets.
 
-### 1. Claude Code non-interactive invocation flags (affects T12, T13)
-
-The exact CLI flags for non-interactive Claude Code execution need validation.
-Current assumption is `--print` with `--output-format json`. The reviewer mode
-additionally needs `--allowedTools` or equivalent for read-only enforcement.
-This should be spiked before T12 begins — run a manual Claude Code invocation
-with the expected flags and confirm the output format.
-
-### 2. Activity log (affects T05)
+### 1. Activity log (affects T05)
 
 `architecture.md` lists `activity.log` in the project layout but there is no
 spec for what goes in it or how it's written. Decision: defer activity logging
 to post-MVP, create the file at init but leave it empty. Alternatively, define
 a simple append-only text log of state transitions and run completions.
 
-### 3. Rendered file output (affects T06, T21, T24)
+### 2. Rendered file output (affects T06, T21, T24)
 
 Several commands mention rendering human-readable files (ticket briefs, PR
 preparation summaries). The MVP can defer file rendering and output to stdout
 only. Rendered files in `renders/` can be a follow-up after the loop works.
 
-### 4. ULID vs UUID (affects T06)
+### 3. ULID vs UUID (affects T06)
 
 `data-model.md` says "ULIDs or UUIDs." Recommendation: ULID. They are
 time-sortable which helps with log readability and `created_at`-ordered queries.
 Use the `python-ulid` package.
 
-### 5. Reviewer allowed_tools enforcement (affects T13)
-
-`config.toml` has `allowed_tools` for the reviewer adapter. How this maps to
-Claude Code CLI flags needs confirmation. If Claude Code supports
-`--allowedTools` or similar, use it. If not, the read-only guarantee depends
-entirely on the baseline violation check in T16.
-
-### 6. PR-ready to done transition (affects post-MVP)
+### 4. PR-ready to done transition (affects post-MVP)
 
 `state-machine.md` says `pr-ready -> done` is triggered by PR creation and
 acceptance. The MVP has no GitHub integration. Decision: for MVP, `pr-ready` is
@@ -869,7 +861,7 @@ a terminal display state. The `pr-ready -> done` transition can be triggered by
 a future `capsaicin pr create` command or a manual `capsaicin ticket complete`
 command added post-MVP.
 
-### 7. Blocked ticket recovery (affects post-MVP)
+### 5. Blocked ticket recovery (affects post-MVP)
 
 `state-machine.md` defines `blocked -> ready` and `blocked -> done` but there
 is no CLI command for these transitions in the MVP command list. Decision: add

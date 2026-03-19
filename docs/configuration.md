@@ -46,7 +46,6 @@ max_review_retries = 2
 timeout_seconds = 300
 
 [reviewer]
-max_turns = 10
 mode = "read-only"
 
 [ticket_selection]
@@ -61,6 +60,7 @@ Semantics:
 
 - omitting `model` means "use the CLI default model"
 - omitting `allowed_tools` means "use the adapter default behavior"
+- reviewer `allowed_tools` maps to Claude Code `--allowed-tools` for the MVP
 - prompt assembly is handled by the adapter in MVP; template customization is
   deferred
 
@@ -77,8 +77,8 @@ Semantics:
 - `ticket dep`: no adapter config required
 - `ticket run`: requires implementer adapter config plus timeout and retry
   limits
-- `ticket review`: requires reviewer adapter config plus timeout, retry, and
-  reviewer max-turn settings
+- `ticket review`: requires reviewer adapter config plus timeout and retry
+  limits
 - `ticket approve`: no adapter config required
 - `ticket revise`: no adapter config required
 - `ticket defer`: no adapter config required

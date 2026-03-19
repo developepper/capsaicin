@@ -33,12 +33,15 @@ Practical implication:
 
 Practical caveats for `Claude Code` reviewer runs:
 
-- `--output-format json` wraps the interaction, so the adapter still needs to
-  extract and validate the reviewer's inner JSON result from assistant text
-- `--max-turns` should be set intentionally to bound review exploration and
-  cost
+- validated non-interactive invocation is `claude -p --output-format json -- "PROMPT"`
+- validated reviewer structured output uses `--json-schema`, which returns the
+  review payload in the outer envelope's `structured_output` field
+- validated reviewer tool restriction uses `--allowed-tools`; pass the prompt
+  after `--` so it is not parsed as additional tool names
+- `--output-format json` returns an outer transport envelope, not raw assistant
+  JSON
 - review cost is real and should eventually be governed by config defaults such
-  as max turns or other budget controls
+  as model choice, retry limits, or future budget controls
 
 ## Adapter Contract
 
@@ -85,6 +88,35 @@ The orchestrator, not the adapter, should additionally capture:
 
 Adapters should not decide workflow progression or own cross-ticket state.
 
+## Claude Code Validation
+
+The validated Claude Code invocation model for MVP is:
+
+- implementer: `claude -p --output-format json -- "PROMPT"`
+- reviewer: `claude -p --output-format json --json-schema <SCHEMA>
+  --allowed-tools <TOOLS...> -- "PROMPT"`
+
+Observed envelope behavior:
+
+- stdout is a single outer JSON result envelope when `--output-format json` is
+  used
+- plain-text replies are returned in `result`
+- schema-constrained replies are returned in `structured_output`
+- envelope fields include `is_error`, `duration_ms`, `num_turns`, `session_id`,
+  `total_cost_usd`, `usage`, `modelUsage`, and `permission_denials`
+- the full MVP reviewer schema defined below has been validated successfully
+  with Claude Code `structured_output`
+
+Adapter rules for Claude Code:
+
+- parse the outer JSON envelope first
+- if `structured_output` is present, treat it as the primary structured result
+- otherwise use `result` as the assistant text payload
+- when using reviewer mode, provide the full MVP `Review Result Schema` via
+  `--json-schema` rather than a simplified summary schema
+- preserve the full raw envelope in `raw_stdout` for debugging
+- treat `is_error: true` or a non-zero process exit as failure evidence
+
 ## Review Result Schema
 
 ```json
@@ -93,7 +125,6 @@ Adapters should not decide workflow progression or own cross-ticket state.
   "confidence": "high | medium | low",
   "findings": [
     {
-      "id": "string",
       "severity": "blocking | warning | info",
       "category": "string",
       "location": "string | null",
@@ -172,7 +203,6 @@ Run request envelope:
   ],
   "prior_findings": [],
   "timeout_seconds": 0,
-  "max_turns": 0,
   "adapter_config": {}
 }
 ```
@@ -201,8 +231,9 @@ Notes:
   session history
 - `acceptance_criteria` should remain first-class data rather than being buried
   only inside the prompt
-- `adapter_metadata` is for tool-specific details such as model, turn count, or
-  cost that do not drive workflow state directly
+- `adapter_metadata` is for tool-specific details such as `session_id`,
+  `num_turns`, `total_cost_usd`, `usage`, `modelUsage`, and
+  `permission_denials` that do not drive workflow state directly
 
 ## Fresh Session Requirement
 
