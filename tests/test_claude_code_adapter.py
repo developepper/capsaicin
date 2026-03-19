@@ -1,4 +1,4 @@
-"""Tests for Claude Code adapter — implementer mode (T12)."""
+"""Tests for Claude Code adapter — implementer and reviewer modes (T12, T13)."""
 
 from __future__ import annotations
 
@@ -10,7 +10,7 @@ from unittest.mock import patch
 import pytest
 
 from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-from capsaicin.adapters.types import RunRequest
+from capsaicin.adapters.types import AcceptanceCriterion, RunRequest
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -23,6 +23,25 @@ def _request(**overrides) -> RunRequest:
         "working_directory": "/tmp",
         "prompt": "Implement the feature",
         "timeout_seconds": 60,
+    }
+    defaults.update(overrides)
+    return RunRequest(**defaults)
+
+
+def _reviewer_request(**overrides) -> RunRequest:
+    defaults = {
+        "run_id": "run-rev-001",
+        "role": "reviewer",
+        "mode": "read-only",
+        "working_directory": "/tmp",
+        "prompt": "Review the diff",
+        "timeout_seconds": 60,
+        "acceptance_criteria": [
+            AcceptanceCriterion(id="ac-1", description="Login returns JWT"),
+        ],
+        "adapter_config": {
+            "allowed_tools": ["Read", "Glob", "Grep", "Bash"],
+        },
     }
     defaults.update(overrides)
     return RunRequest(**defaults)
@@ -276,3 +295,250 @@ class TestWorkingDirectory:
             adapter.execute(_request(working_directory="/my/repo"))
         _, kwargs = mock.call_args
         assert kwargs["cwd"] == "/my/repo"
+
+
+# ===========================================================================
+# T13: Reviewer mode tests
+# ===========================================================================
+
+
+class TestReviewerCommand:
+    def test_includes_json_schema(self):
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_reviewer_request())
+        assert "--json-schema" in cmd
+
+    def test_includes_allowed_tools(self):
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_reviewer_request())
+        assert "--allowed-tools" in cmd
+        idx = cmd.index("--allowed-tools")
+        # Tools should follow --allowed-tools, before --
+        dash_idx = cmd.index("--")
+        tools_between = cmd[idx + 1 : dash_idx]
+        assert "Read" in tools_between
+        assert "Glob" in tools_between
+
+    def test_no_allowed_tools_when_empty(self):
+        adapter = ClaudeCodeAdapter()
+        req = _reviewer_request(adapter_config={})
+        cmd = adapter._build_command(req)
+        assert "--allowed-tools" not in cmd
+
+    def test_prompt_after_double_dash(self):
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_reviewer_request(prompt="--review this"))
+        dash_idx = cmd.index("--")
+        assert cmd[dash_idx + 1] == "--review this"
+
+    def test_implementer_has_no_schema(self):
+        """Implementer mode should not include --json-schema."""
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_request())
+        assert "--json-schema" not in cmd
+        assert "--allowed-tools" not in cmd
+
+
+class TestReviewerFixtures:
+    def test_pass_envelope(self):
+        envelope = (FIXTURES / "claude_reviewer_pass.json").read_text()
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "success"
+        assert result.structured_result is not None
+        assert result.structured_result.verdict == "pass"
+        assert result.structured_result.confidence == "high"
+        assert len(result.structured_result.findings) == 1
+        assert result.structured_result.findings[0].severity == "info"
+        assert result.adapter_metadata["session_id"] == "sess-rev-001"
+
+    def test_fail_envelope(self):
+        envelope = (FIXTURES / "claude_reviewer_fail.json").read_text()
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "success"
+        assert result.structured_result is not None
+        assert result.structured_result.verdict == "fail"
+        assert any(f.severity == "blocking" for f in result.structured_result.findings)
+
+    def test_raw_envelope_preserved_on_reviewer_success(self):
+        envelope = (FIXTURES / "claude_reviewer_pass.json").read_text()
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        parsed = json.loads(result.raw_stdout)
+        assert "structured_output" in parsed
+
+
+class TestReviewerValidation:
+    def test_fail_without_blocking_is_parse_error(self):
+        """verdict:fail with no blocking finding -> parse_error."""
+        raw_output = {
+            "verdict": "fail",
+            "confidence": "high",
+            "findings": [
+                {
+                    "severity": "warning",
+                    "category": "style",
+                    "description": "Nit",
+                    "disposition": "open",
+                }
+            ],
+            "scope_reviewed": {
+                "files_examined": ["a.py"],
+                "tests_run": True,
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"
+        assert result.structured_result is None
+        assert result.raw_stdout == envelope
+
+    def test_pass_with_blocking_is_parse_error(self):
+        """verdict:pass with blocking finding -> parse_error."""
+        raw_output = {
+            "verdict": "pass",
+            "confidence": "high",
+            "findings": [
+                {
+                    "severity": "blocking",
+                    "category": "correctness",
+                    "description": "Bug",
+                    "disposition": "open",
+                }
+            ],
+            "scope_reviewed": {
+                "files_examined": ["a.py"],
+                "tests_run": True,
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"
+
+    def test_high_confidence_empty_files_is_parse_error(self):
+        raw_output = {
+            "verdict": "pass",
+            "confidence": "high",
+            "findings": [],
+            "scope_reviewed": {
+                "files_examined": [],
+                "tests_run": False,
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"
+
+    def test_invalid_criterion_id_is_parse_error(self):
+        raw_output = {
+            "verdict": "fail",
+            "confidence": "high",
+            "findings": [
+                {
+                    "severity": "blocking",
+                    "category": "correctness",
+                    "description": "Bug",
+                    "acceptance_criterion_id": "nonexistent",
+                    "disposition": "open",
+                }
+            ],
+            "scope_reviewed": {
+                "files_examined": ["a.py"],
+                "tests_run": True,
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"
+
+    def test_missing_structured_output_falls_back_to_result(self):
+        """When structured_output is absent, try parsing result as JSON."""
+        review_data = {
+            "verdict": "pass",
+            "confidence": "high",
+            "findings": [],
+            "scope_reviewed": {
+                "files_examined": ["a.py"],
+                "tests_run": True,
+                "criteria_checked": [{"criterion_id": "ac-1", "description": "X"}],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "result": json.dumps(review_data),
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "success"
+        assert result.structured_result is not None
+        assert result.structured_result.verdict == "pass"
+
+    def test_no_structured_output_and_unparseable_result_is_parse_error(self):
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "result": "just plain text, no JSON",
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"
+        assert result.raw_stdout == envelope
+
+    def test_missing_top_level_field_is_parse_error(self):
+        """Missing required field in structured_output -> parse_error."""
+        raw_output = {
+            "verdict": "pass",
+            "confidence": "high",
+            # missing "findings" and "scope_reviewed"
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": raw_output,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_reviewer_request())
+        assert result.exit_status == "parse_error"

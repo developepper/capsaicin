@@ -1,0 +1,45 @@
+{
+  "type": "result",
+  "subtype": "success",
+  "is_error": false,
+  "result": "Review complete.",
+  "structured_output": {
+    "verdict": "pass",
+    "confidence": "high",
+    "findings": [
+      {
+        "severity": "info",
+        "category": "documentation",
+        "location": "src/auth.py:1",
+        "acceptance_criterion_id": null,
+        "description": "Consider adding a module docstring",
+        "disposition": "open"
+      }
+    ],
+    "scope_reviewed": {
+      "files_examined": ["src/auth.py", "tests/test_auth.py"],
+      "tests_run": true,
+      "criteria_checked": [
+        {
+          "criterion_id": "ac-1",
+          "description": "Login returns JWT"
+        }
+      ]
+    }
+  },
+  "session_id": "sess-rev-001",
+  "num_turns": 3,
+  "total_cost_usd": 0.0215,
+  "duration_ms": 32100,
+  "usage": {
+    "input_tokens": 4200,
+    "output_tokens": 800
+  },
+  "modelUsage": {
+    "claude-sonnet-4-20250514": {
+      "input_tokens": 4200,
+      "output_tokens": 800
+    }
+  },
+  "permission_denials": []
+}
