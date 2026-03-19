@@ -1,1 +1,12 @@
 .idea/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+dist/
+build/
+
+# Testing / Linting
+.pytest_cache/
+.ruff_cache/
