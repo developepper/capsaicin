@@ -216,9 +216,11 @@ Review source-of-truth note:
 - the reviewer reviews the diff captured at the end of the implementation run,
   not the current working tree state
 - the pre-review workspace drift check ensures the working tree still matches
-  the captured diff; if it does not, review is rejected
-- manual edits made after `ticket run` invalidate the review and require either
-  re-running implementation or explicitly acknowledging the drift
+  the captured diff; if it does not, review is rejected unless `--allow-drift`
+  is provided
+- manual edits made after `ticket run` invalidate the original review baseline;
+  `--allow-drift` establishes a new baseline by re-capturing the current diff,
+  so the review covers the actual workspace state rather than stale content
 
 ### `capsaicin ticket approve`
 

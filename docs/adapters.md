@@ -260,8 +260,8 @@ Rules:
   the implementation run that preceded the passing review
 - on `verdict: fail` after a re-review cycle, the orchestrator matches incoming
   findings to prior open findings by `(category, location)`:
-  - matched: update the prior finding's description and severity, link to the
-    new review run
+  - matched by `(category, location, description_prefix)` fingerprint: update
+    the prior finding's description and severity, link to the new review run
   - unmatched prior findings: mark as `fixed` with `resolved_in_run` pointing
     to the preceding implementation run
   - unmatched new findings: persist as new open findings
