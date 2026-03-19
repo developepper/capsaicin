@@ -43,7 +43,7 @@ clear boundary.
 | 3 | State Machine & Orchestrator | T08-T09 | Complete |
 | 4 | Adapter Layer | T10-T13 | Complete |
 | 5 | Implementation Pipeline | T14-T15 | Complete |
-| 6 | Review Pipeline | T16-T20 | In progress (T16, T17, T18 complete) |
+| 6 | Review Pipeline | T16-T20 | In progress (T16, T17, T18, T19 complete) |
 | 7 | Human Gate & Decisions | T21-T23 | Not started |
 | 8 | Status & Recovery | T24-T26 | Not started |
 | 9 | Automated Loop | T27 | Not started |
