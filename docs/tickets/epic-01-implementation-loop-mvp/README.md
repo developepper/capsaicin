@@ -23,6 +23,13 @@ Key sequencing decisions:
 - T21, T22, T23, T24 are independent human-gate commands that can all be built
   in parallel.
 - T27 is a pure integration ticket — it calls T15 and T20 pipelines in-process.
+- CI should be phased in with the implementation work rather than as a separate
+  epic:
+  - T01: initial GitHub Actions workflow with docs/meta checks, Python setup,
+    editable install, `ruff format --check`, `capsaicin --help`, and `pytest`
+  - T05: extend CI with `capsaicin init` smoke coverage
+  - T12/T13: rely on captured fixtures and mocked subprocess tests in CI; do
+    not add live Claude integration to CI
 
 No merges or splits from the T01-T27 structure in `plan.md`. Each ticket has a
 clear boundary.
@@ -94,3 +101,6 @@ clear boundary.
    load-bearing for state machine correctness. T09 tests should cover edge
    cases: cycle limit hit during revise, retry limit hit during implementation,
    reset behavior on unblock.
+
+8. **CI scope should stay deterministic.** Use captured fixtures and local
+   smoke tests only. Do not introduce live Claude Code invocations in CI.
