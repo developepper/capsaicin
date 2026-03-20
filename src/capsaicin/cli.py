@@ -590,5 +590,62 @@ def ticket_unblock_cmd(ticket_id, reset_cycles, repo_path, project_slug):
         conn.close()
 
 
+@cli.command()
+@click.option(
+    "--ticket", "ticket_id", default=None, help="Show detail for a specific ticket."
+)
+@click.option(
+    "--verbose", is_flag=True, default=False, help="Include run and transition history."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def status(ticket_id, verbose, repo_path, project_slug):
+    """Show project or ticket status."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_status import build_project_summary, build_ticket_detail
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+
+    conn = get_connection(db_path)
+    try:
+        if ticket_id:
+            try:
+                output = build_ticket_detail(conn, ticket_id, verbose=verbose)
+            except ValueError as e:
+                raise click.ClickException(str(e))
+        else:
+            project_row = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()
+            if project_row is None:
+                raise click.ClickException("No project found in database.")
+            project_id = project_row["id"]
+            output = build_project_summary(conn, project_id)
+
+        click.echo(output)
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()

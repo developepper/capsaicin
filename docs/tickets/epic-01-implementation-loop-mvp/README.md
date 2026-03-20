@@ -45,7 +45,7 @@ clear boundary.
 | 5 | Implementation Pipeline | T14-T15 | Complete |
 | 6 | Review Pipeline | T16-T20 | Complete |
 | 7 | Human Gate & Decisions | T21-T23 | Complete |
-| 8 | Status & Recovery | T24-T26 | In progress (T24 complete) |
+| 8 | Status & Recovery | T24-T26 | In progress (T24, T25 complete) |
 | 9 | Automated Loop | T27 | Not started |
 
 ## Suggested PR / Milestone Grouping
