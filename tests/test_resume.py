@@ -199,7 +199,12 @@ class TestResumeIdle:
         env = project_env
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
         assert action == "idle"
         assert "No eligible ticket" in detail
@@ -213,7 +218,12 @@ class TestResumeIdle:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
         assert action == "run"
         assert tid in detail
@@ -241,7 +251,12 @@ class TestResumeInterruptedRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "interrupted"
@@ -279,7 +294,12 @@ class TestResumeInterruptedRun:
             )
         )
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "interrupted"
@@ -305,7 +325,12 @@ class TestResumeInterruptedRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "interrupted"
@@ -326,7 +351,12 @@ class TestResumeInterruptedRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "interrupted"
@@ -357,7 +387,12 @@ class TestResumeFinishedImplRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -378,7 +413,12 @@ class TestResumeFinishedImplRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -400,7 +440,12 @@ class TestResumeFinishedImplRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -426,7 +471,12 @@ class TestResumeFinishedImplRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -468,7 +518,12 @@ class TestResumeFinishedReviewRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -510,7 +565,12 @@ class TestResumeFinishedReviewRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -532,7 +592,12 @@ class TestResumeFinishedReviewRun:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "post_run"
@@ -564,7 +629,12 @@ class TestResumeAwaitingHuman:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "awaiting_human"
@@ -605,7 +675,12 @@ class TestResumeAwaitingHuman:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "awaiting_human"
@@ -631,7 +706,12 @@ class TestResumeAwaitingHuman:
 
         adapter = MockAdapter()
         resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         # State unchanged
@@ -664,7 +744,12 @@ class TestResumeSuspended:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "resumed_run"
@@ -702,7 +787,12 @@ class TestResumeSuspended:
             )
         )
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "resumed_review"
@@ -718,7 +808,12 @@ class TestResumeSuspended:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "suspended"
@@ -737,7 +832,12 @@ class TestResumeSuspended:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "suspended"
@@ -758,7 +858,12 @@ class TestResumeSuspended:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "suspended"
@@ -781,7 +886,12 @@ class TestResumeSuspended:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "suspended"
@@ -807,7 +917,12 @@ class TestResumeEdgeCases:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "reset"
@@ -847,7 +962,12 @@ class TestResumeEdgeCases:
         # Test with active_run_id = NULL (orphaned running state)
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "reset"
@@ -866,7 +986,12 @@ class TestResumeEdgeCases:
 
         adapter = MockAdapter()
         action, detail = resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         assert action == "reset"
@@ -911,7 +1036,12 @@ class TestActivityLog:
         env = project_env
         adapter = MockAdapter()
         resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         log_content = env["log_path"].read_text()
@@ -923,7 +1053,12 @@ class TestActivityLog:
 
         adapter = MockAdapter()
         resume_pipeline(
-            env["conn"], env["project_id"], env["config"], adapter, env["log_path"]
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
         )
 
         log_content = env["log_path"].read_text()

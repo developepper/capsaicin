@@ -112,7 +112,8 @@ def _handle_interrupted_run(
     project_id: str,
     run: dict,
     config: Config,
-    adapter: BaseAdapter,
+    impl_adapter: BaseAdapter,
+    review_adapter: BaseAdapter,
     log_path: str | Path | None = None,
 ) -> str:
     """Handle a run that was interrupted (running, no finished_at).
@@ -165,7 +166,7 @@ def _handle_interrupted_run(
             cycle_number=ticket_row["current_cycle"],
             attempt_number=0,  # reloaded inside _invoke_with_retries
             config=config,
-            adapter=adapter,
+            adapter=impl_adapter,
             log_path=log_path,
         )
     elif role == "reviewer":
@@ -191,7 +192,7 @@ def _handle_interrupted_run(
             ticket_id=ticket_id,
             impl_run_id=impl_run_id,
             config=config,
-            adapter=adapter,
+            adapter=review_adapter,
             log_path=log_path,
         )
     else:
@@ -377,7 +378,8 @@ def _resume_from_context(
     state: dict,
     resume_context: str,
     config: Config,
-    adapter: BaseAdapter,
+    impl_adapter: BaseAdapter,
+    review_adapter: BaseAdapter,
     log_path: str | Path | None = None,
 ) -> tuple[str, str]:
     """Parse resume_context and continue from the suspended step.
@@ -434,7 +436,7 @@ def _resume_from_context(
             project_id=project_id,
             ticket=ticket,
             config=config,
-            adapter=adapter,
+            adapter=impl_adapter,
             log_path=log_path,
         )
         return ("resumed_run", f"Ticket {ticket_id} -> {final_status}")
@@ -453,7 +455,7 @@ def _resume_from_context(
             project_id=project_id,
             ticket=ticket,
             config=config,
-            adapter=adapter,
+            adapter=review_adapter,
             allow_drift=ctx.get("allow_drift", False),
             log_path=log_path,
         )
@@ -471,7 +473,8 @@ def resume_pipeline(
     conn: sqlite3.Connection,
     project_id: str,
     config: Config,
-    adapter: BaseAdapter,
+    impl_adapter: BaseAdapter,
+    review_adapter: BaseAdapter,
     log_path: str | Path | None = None,
 ) -> tuple[str, str]:
     """Execute the resume pipeline based on orchestrator state.
@@ -501,7 +504,7 @@ def resume_pipeline(
             project_id=project_id,
             ticket=ticket,
             config=config,
-            adapter=adapter,
+            adapter=impl_adapter,
             log_path=log_path,
         )
         return ("run", f"Ticket {ticket['id']} -> {final_status}")
@@ -549,7 +552,13 @@ def resume_pipeline(
         else:
             # Interrupted (no finished_at)
             result_status = _handle_interrupted_run(
-                conn, project_id, run, config, adapter, log_path
+                conn,
+                project_id,
+                run,
+                config,
+                impl_adapter,
+                review_adapter,
+                log_path,
             )
             return (
                 "interrupted",
@@ -582,7 +591,8 @@ def resume_pipeline(
             state=state,
             resume_context=resume_context,
             config=config,
-            adapter=adapter,
+            impl_adapter=impl_adapter,
+            review_adapter=review_adapter,
             log_path=log_path,
         )
 
