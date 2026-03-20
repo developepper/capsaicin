@@ -161,7 +161,7 @@ def _handle_interrupted_run(
                 "blocked",
                 "system",
                 reason="Review retry limit exceeded after interrupted run.",
-                blocked_reason="reviewer_contract_violation",
+                blocked_reason="reviewer_failure",
                 log_path=log_path,
             )
             set_idle(conn, project_id)
@@ -276,18 +276,26 @@ def _handle_finished_review_run(
         log_path=log_path,
     )
 
-    # _handle_review_result returns '_retry' for failures — in resume context
-    # we treat this as needing a fresh review (set idle so user can re-run)
-    if result_status == "_retry":
+    # _handle_review_result returns '_retry:<reason>' for failures — in resume
+    # context we treat this as needing a fresh review (set idle so user can re-run)
+    if result_status.startswith("_retry"):
+        retry_reason = (
+            result_status.split(":", 1)[1]
+            if ":" in result_status
+            else "unknown"
+        )
         increment_review_attempt(conn, ticket_id)
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):
+            from capsaicin.ticket_review import _retry_reason_to_blocked_reason
+
+            blocked_reason = _retry_reason_to_blocked_reason(retry_reason)
             transition_ticket(
                 conn,
                 ticket_id,
                 "blocked",
                 "system",
-                reason="Review retry limit exceeded on resume.",
-                blocked_reason="reviewer_contract_violation",
+                reason=f"Review retry limit exceeded on resume ({retry_reason}).",
+                blocked_reason=blocked_reason,
                 log_path=log_path,
             )
             finish_run(conn, project_id)

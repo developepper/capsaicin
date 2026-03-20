@@ -197,6 +197,19 @@ def run_review_pipeline(
     )
 
 
+_RETRY_REASON_TO_BLOCKED = {
+    "contract_violation": "reviewer_contract_violation",
+    "parse_error": "reviewer_parse_error",
+    "failure": "reviewer_failure",
+    "timeout": "reviewer_timeout",
+}
+
+
+def _retry_reason_to_blocked_reason(reason: str) -> str:
+    """Map a retry failure reason to the appropriate blocked_reason."""
+    return _RETRY_REASON_TO_BLOCKED.get(reason, f"reviewer_{reason}")
+
+
 def _invoke_with_retries(
     conn: sqlite3.Connection,
     project_id: str,
@@ -256,18 +269,27 @@ def _invoke_with_retries(
             log_path=log_path,
         )
 
-        if result_status != "_retry":
+        if not result_status.startswith("_retry"):
             return result_status
+
+        # Extract the failure reason from the retry signal
+        last_retry_reason = (
+            result_status.split(":", 1)[1]
+            if ":" in result_status
+            else "unknown"
+        )
 
         # Check retry limit before looping
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):
+            # Map the actual failure mode to the correct blocked_reason
+            blocked_reason = _retry_reason_to_blocked_reason(last_retry_reason)
             transition_ticket(
                 conn,
                 ticket_id,
                 "blocked",
                 "system",
-                reason="Review retry limit exceeded.",
-                blocked_reason="reviewer_contract_violation",
+                reason=f"Review retry limit exceeded ({last_retry_reason}).",
+                blocked_reason=blocked_reason,
                 log_path=log_path,
             )
             finish_run(conn, project_id)
@@ -278,7 +300,10 @@ def _invoke_with_retries(
                     "RETRY_LIMIT",
                     project_id=project_id,
                     ticket_id=ticket_id,
-                    payload={"max_retries": config.limits.max_review_retries},
+                    payload={
+                        "max_retries": config.limits.max_review_retries,
+                        "last_failure": last_retry_reason,
+                    },
                 )
             return "blocked"
 
@@ -454,7 +479,7 @@ def _handle_review_result(
                     run_id=run_id,
                     payload={"reason": "reviewer modified tracked files"},
                 )
-            return "_retry"
+            return "_retry:contract_violation"
 
     # --- Parse error (adapter already returned parse_error) ---
     if result.exit_status == "parse_error":
@@ -467,17 +492,45 @@ def _handle_review_result(
                 run_id=run_id,
                 payload={"reason": "review result validation failed"},
             )
-        return "_retry"
+        return "_retry:parse_error"
 
     # --- Failure or timeout ---
     if result.exit_status in ("failure", "timeout"):
-        return "_retry"
+        return f"_retry:{result.exit_status}"
 
     # --- Success with valid structured result ---
     review_result = result.structured_result
     if review_result is None:
         # Should not happen if adapter returned success, but be defensive
-        return "_retry"
+        return "_retry:parse_error"
+
+    # --- Defense-in-depth: re-validate state-machine-critical invariants ---
+    # The adapter should have validated these, but a non-Claude adapter or
+    # reconstructed result from resume may not have run T17 validation.
+    verdict = review_result.verdict
+    has_blocking = any(f.severity == "blocking" for f in review_result.findings)
+    if verdict == "fail" and not has_blocking:
+        if log_path:
+            log_event(
+                log_path,
+                "VALIDATION_FAILURE",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"reason": "verdict:fail with no blocking findings"},
+            )
+        return "_retry:parse_error"
+    if verdict == "pass" and has_blocking:
+        if log_path:
+            log_event(
+                log_path,
+                "VALIDATION_FAILURE",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"reason": "verdict:pass with blocking findings"},
+            )
+        return "_retry:parse_error"
 
     verdict = review_result.verdict
     confidence = review_result.confidence
@@ -568,7 +621,7 @@ def _handle_review_result(
         return "human-gate"
 
     # Should not be reachable with valid verdicts, but be safe
-    return "_retry"
+    return "_retry:parse_error"
 
 
 def _is_first_cycle(conn: sqlite3.Connection, ticket_id: str) -> bool:

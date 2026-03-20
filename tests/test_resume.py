@@ -7,7 +7,7 @@ import subprocess
 
 import pytest
 
-from capsaicin.adapters.types import Finding, ReviewResult, RunResult, ScopeReviewed
+from capsaicin.adapters.types import CriterionChecked, Finding, ReviewResult, RunResult, ScopeReviewed
 from capsaicin.config import load_config
 from capsaicin.db import get_connection
 from capsaicin.init import init_project
@@ -104,6 +104,18 @@ def _get_ticket_status(conn, ticket_id):
     return conn.execute(
         "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
     ).fetchone()["status"]
+
+
+def _get_criteria_checked(conn, ticket_id):
+    """Build criteria_checked list from the ticket's acceptance criteria."""
+    rows = conn.execute(
+        "SELECT id, description FROM acceptance_criteria WHERE ticket_id = ?",
+        (ticket_id,),
+    ).fetchall()
+    return [
+        CriterionChecked(criterion_id=r["id"], description=r["description"])
+        for r in rows
+    ]
 
 
 def _make_implementing_ticket(env):
@@ -277,11 +289,14 @@ class TestResumeInterruptedRun:
         env["config"].limits.max_review_retries = 5
 
         # Adapter returns a pass review result for the retry
+        cc = _get_criteria_checked(env["conn"], tid)
         review_result = ReviewResult(
             verdict="pass",
             confidence="high",
             findings=[],
-            scope_reviewed=ScopeReviewed(files_examined=["impl.txt"]),
+            scope_reviewed=ScopeReviewed(
+                files_examined=["impl.txt"], criteria_checked=cc
+            ),
         )
         adapter = MockAdapter(
             result=RunResult(
@@ -495,11 +510,14 @@ class TestResumeFinishedReviewRun:
         env = project_env
         tid = _make_in_review_ticket(env)
 
+        cc = _get_criteria_checked(env["conn"], tid)
         review_result = ReviewResult(
             verdict="pass",
             confidence="high",
             findings=[],
-            scope_reviewed=ScopeReviewed(files_examined=["impl.txt"]),
+            scope_reviewed=ScopeReviewed(
+                files_examined=["impl.txt"], criteria_checked=cc
+            ),
         )
 
         # Mark review run as finished with success and structured result
@@ -535,6 +553,7 @@ class TestResumeFinishedReviewRun:
         env = project_env
         tid = _make_in_review_ticket(env)
 
+        cc = _get_criteria_checked(env["conn"], tid)
         review_result = ReviewResult(
             verdict="fail",
             confidence="high",
@@ -548,7 +567,9 @@ class TestResumeFinishedReviewRun:
                     disposition="open",
                 )
             ],
-            scope_reviewed=ScopeReviewed(files_examined=["impl.txt"]),
+            scope_reviewed=ScopeReviewed(
+                files_examined=["impl.txt"], criteria_checked=cc
+            ),
         )
 
         env["conn"].execute(
@@ -770,11 +791,14 @@ class TestResumeSuspended:
         )
         env["conn"].commit()
 
+        cc = _get_criteria_checked(env["conn"], tid)
         review_result = ReviewResult(
             verdict="pass",
             confidence="high",
             findings=[],
-            scope_reviewed=ScopeReviewed(files_examined=["impl.txt"]),
+            scope_reviewed=ScopeReviewed(
+                files_examined=["impl.txt"], criteria_checked=cc
+            ),
         )
         adapter = MockAdapter(
             result=RunResult(
