@@ -311,5 +311,284 @@ def ticket_review_cmd(ticket_id, allow_drift, repo_path, project_slug):
         conn.close()
 
 
+@ticket.command("approve")
+@click.argument("ticket_id", required=False, default=None)
+@click.option("--rationale", default=None, help="Rationale for approval.")
+@click.option(
+    "--force", is_flag=True, default=False, help="Override workspace drift check."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_approve_cmd(ticket_id, rationale, force, repo_path, project_slug):
+    """Approve a ticket at the human gate."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, load_config, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_approve import (
+        WorkspaceMismatchError,
+        approve_ticket,
+        build_approval_summary,
+        select_approve_ticket,
+    )
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    config_path = project_dir / "config.toml"
+    log_path = project_dir / "activity.log"
+
+    try:
+        config = load_config(config_path)
+    except ConfigError as e:
+        raise click.ClickException(str(e))
+
+    conn = get_connection(db_path)
+    try:
+        try:
+            ticket = select_approve_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+
+        try:
+            final_status = approve_ticket(
+                conn=conn,
+                project_id=project_id,
+                ticket=ticket,
+                repo_path=config.project.repo_path,
+                rationale=rationale,
+                force=force,
+                log_path=log_path,
+            )
+        except WorkspaceMismatchError as e:
+            raise click.ClickException(str(e))
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo()
+        click.echo(build_approval_summary(conn, ticket["id"]))
+    finally:
+        conn.close()
+
+
+@ticket.command("revise")
+@click.argument("ticket_id", required=False, default=None)
+@click.option(
+    "--add-finding",
+    "add_findings",
+    multiple=True,
+    help="Human finding description (repeatable).",
+)
+@click.option(
+    "--reset-cycles",
+    is_flag=True,
+    default=False,
+    help="Reset cycle and retry counters.",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_revise_cmd(ticket_id, add_findings, reset_cycles, repo_path, project_slug):
+    """Send a ticket back for revision from the human gate."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_revise import revise_ticket, select_revise_ticket
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    log_path = project_dir / "activity.log"
+
+    conn = get_connection(db_path)
+    try:
+        try:
+            ticket = select_revise_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+        findings_list = list(add_findings) if add_findings else None
+
+        final_status = revise_ticket(
+            conn=conn,
+            project_id=project_id,
+            ticket=ticket,
+            add_findings=findings_list,
+            reset_cycles=reset_cycles,
+            log_path=log_path,
+        )
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        if findings_list:
+            click.echo(f"  Added {len(findings_list)} finding(s)")
+        if reset_cycles:
+            click.echo("  Cycle counters reset")
+    finally:
+        conn.close()
+
+
+@ticket.command("defer")
+@click.argument("ticket_id", required=False, default=None)
+@click.option("--rationale", default=None, help="Rationale for deferral.")
+@click.option(
+    "--abandon", is_flag=True, default=False, help="Abandon the ticket entirely."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_defer_cmd(ticket_id, rationale, abandon, repo_path, project_slug):
+    """Defer or abandon a ticket from the human gate."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_defer import defer_ticket, select_defer_ticket
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    log_path = project_dir / "activity.log"
+
+    conn = get_connection(db_path)
+    try:
+        try:
+            ticket = select_defer_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+
+        final_status = defer_ticket(
+            conn=conn,
+            project_id=project_id,
+            ticket=ticket,
+            rationale=rationale,
+            abandon=abandon,
+            log_path=log_path,
+        )
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+    finally:
+        conn.close()
+
+
+@ticket.command("unblock")
+@click.argument("ticket_id")
+@click.option(
+    "--reset-cycles",
+    is_flag=True,
+    default=False,
+    help="Reset cycle and retry counters.",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_unblock_cmd(ticket_id, reset_cycles, repo_path, project_slug):
+    """Unblock a blocked ticket and return it to ready."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_unblock import select_unblock_ticket, unblock_ticket
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    log_path = project_dir / "activity.log"
+
+    conn = get_connection(db_path)
+    try:
+        try:
+            ticket = select_unblock_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+
+        final_status = unblock_ticket(
+            conn=conn,
+            project_id=project_id,
+            ticket=ticket,
+            reset_cycles=reset_cycles,
+            log_path=log_path,
+        )
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        if reset_cycles:
+            click.echo("  Cycle counters reset")
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()

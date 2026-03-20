@@ -44,8 +44,8 @@ clear boundary.
 | 4 | Adapter Layer | T10-T13 | Complete |
 | 5 | Implementation Pipeline | T14-T15 | Complete |
 | 6 | Review Pipeline | T16-T20 | Complete |
-| 7 | Human Gate & Decisions | T21-T23 | Not started |
-| 8 | Status & Recovery | T24-T26 | Not started |
+| 7 | Human Gate & Decisions | T21-T23 | Complete |
+| 8 | Status & Recovery | T24-T26 | In progress (T24 complete) |
 | 9 | Automated Loop | T27 | Not started |
 
 ## Suggested PR / Milestone Grouping
