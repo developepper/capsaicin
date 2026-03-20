@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from capsaicin.activity_log import log_event
 from capsaicin.adapters.base import BaseAdapter
-from capsaicin.adapters.types import AcceptanceCriterion, Finding, RunRequest
+from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
 from capsaicin.criteria import update_criteria_from_review
 from capsaicin.diff import get_run_diff
@@ -27,6 +26,13 @@ from capsaicin.orchestrator import (
     start_run,
 )
 from capsaicin.prompts import build_reviewer_prompt
+from capsaicin.queries import (
+    generate_id,
+    get_impl_run_id,
+    load_criteria,
+    load_open_findings,
+    now_utc,
+)
 from capsaicin.reconciliation import reconcile_findings
 from capsaicin.review_baseline import (
     WorkspaceDriftError,
@@ -35,16 +41,6 @@ from capsaicin.review_baseline import (
     handle_drift,
 )
 from capsaicin.state_machine import transition_ticket
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _generate_id() -> str:
-    from ulid import ULID
-
-    return str(ULID())
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +119,7 @@ def _insert_reviewer_run(
             prompt,
             run_request_json,
             diff_context,
-            _now(),
+            now_utc(),
         ),
     )
     conn.commit()
@@ -156,64 +152,11 @@ def _update_reviewer_run(
             json.dumps(adapter_metadata or {}),
             structured_result_json,
             verdict,
-            _now(),
+            now_utc(),
             run_id,
         ),
     )
     conn.commit()
-
-
-# ---------------------------------------------------------------------------
-# Context loaders
-# ---------------------------------------------------------------------------
-
-
-def _load_criteria(
-    conn: sqlite3.Connection, ticket_id: str
-) -> list[AcceptanceCriterion]:
-    rows = conn.execute(
-        "SELECT id, description, status FROM acceptance_criteria WHERE ticket_id = ?",
-        (ticket_id,),
-    ).fetchall()
-    return [
-        AcceptanceCriterion(
-            id=r["id"], description=r["description"], status=r["status"]
-        )
-        for r in rows
-    ]
-
-
-def _load_open_findings(conn: sqlite3.Connection, ticket_id: str) -> list[Finding]:
-    rows = conn.execute(
-        "SELECT severity, category, description, location, "
-        "acceptance_criterion_id, disposition "
-        "FROM findings WHERE ticket_id = ? AND disposition = 'open'",
-        (ticket_id,),
-    ).fetchall()
-    return [
-        Finding(
-            severity=r["severity"],
-            category=r["category"],
-            description=r["description"],
-            location=r["location"],
-            acceptance_criterion_id=r["acceptance_criterion_id"],
-            disposition=r["disposition"],
-        )
-        for r in rows
-    ]
-
-
-def _get_impl_run_id(conn: sqlite3.Connection, ticket_id: str) -> str:
-    """Get the most recent implementer run ID for a ticket."""
-    row = conn.execute(
-        "SELECT id FROM agent_runs "
-        "WHERE ticket_id = ? AND role = 'implementer' "
-        "ORDER BY started_at DESC LIMIT 1",
-        (ticket_id,),
-    ).fetchone()
-    if row is None:
-        raise ValueError(f"No implementer run found for ticket '{ticket_id}'.")
-    return row["id"]
 
 
 # ---------------------------------------------------------------------------
@@ -237,7 +180,7 @@ def run_review_pipeline(
     ticket_id = ticket["id"]
 
     # --- Find the implementation run for drift/baseline checks ---
-    impl_run_id = _get_impl_run_id(conn, ticket_id)
+    impl_run_id = get_impl_run_id(conn, ticket_id)
 
     # --- Workspace drift check (T16) ---
     handle_drift(conn, impl_run_id, config.project.repo_path, allow_drift)
@@ -267,7 +210,34 @@ def _invoke_with_retries(
 
     Returns the final ticket status.
     """
+    is_retry = False
     while True:
+        # On retries, re-check workspace drift — but skip the check if the
+        # previous attempt was a contract violation, because the reviewer
+        # itself modified tracked files and the workspace is expected to
+        # differ from the implementation diff until the next clean run.
+        if is_retry:
+            last_run = conn.execute(
+                "SELECT rb.violation FROM review_baselines rb "
+                "JOIN agent_runs ar ON ar.id = rb.run_id "
+                "WHERE ar.ticket_id = ? AND ar.role = 'reviewer' "
+                "ORDER BY ar.started_at DESC LIMIT 1",
+                (ticket_id,),
+            ).fetchone()
+            was_violation = last_run and last_run["violation"]
+            if not was_violation:
+                from capsaicin.diff import capture_diff as _cap_diff
+                from capsaicin.diff import diffs_match
+                from capsaicin.diff import get_run_diff as _get_diff
+
+                stored = _get_diff(conn, impl_run_id)
+                current = _cap_diff(config.project.repo_path)
+                if not diffs_match(stored.diff_text, current.diff_text):
+                    raise WorkspaceDriftError(
+                        "Workspace drifted between review retries. "
+                        "Use --allow-drift to re-capture the baseline."
+                    )
+
         # Reload attempt number
         ticket_row = conn.execute(
             "SELECT current_review_attempt FROM tickets WHERE id = ?",
@@ -314,6 +284,7 @@ def _invoke_with_retries(
 
         # Increment attempt and loop
         increment_review_attempt(conn, ticket_id)
+        is_retry = True
 
 
 def _invoke_once(
@@ -327,11 +298,12 @@ def _invoke_once(
     log_path: str | Path | None = None,
 ) -> str:
     """Single reviewer invocation. Returns ticket status or '_retry'."""
-    run_id = _generate_id()
+
+    run_id = generate_id()
 
     # Load context
-    criteria = _load_criteria(conn, ticket_id)
-    prior_findings = _load_open_findings(conn, ticket_id)
+    criteria = load_criteria(conn, ticket_id)
+    prior_findings = load_open_findings(conn, ticket_id)
     ticket_row = conn.execute(
         "SELECT title, description, current_cycle FROM tickets WHERE id = ?",
         (ticket_id,),

@@ -6,6 +6,7 @@ reaches ``human-gate`` or ``blocked``.
 
 from __future__ import annotations
 
+import copy
 import sqlite3
 from pathlib import Path
 
@@ -45,6 +46,8 @@ def run_loop(
 
     Returns a tuple of (final_status, detail) describing the outcome.
     """
+    # Use a shallow copy to avoid mutating the caller's config
+    config = copy.deepcopy(config)
     if max_cycles is not None:
         config.limits.max_cycles = max_cycles
 

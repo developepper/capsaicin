@@ -126,21 +126,25 @@ def _reconcile_fail(
     new_findings: list[Finding],
     now: str,
 ) -> None:
-    # Load prior open findings
+    # Load prior open findings, grouping by fingerprint.
+    # Multiple findings may share a fingerprint; use a list per fingerprint
+    # so none are silently dropped.
     prior_rows = conn.execute(
         "SELECT id, fingerprint FROM findings "
         "WHERE ticket_id = ? AND disposition = 'open'",
         (ticket_id,),
     ).fetchall()
-    prior_by_fp: dict[str, str] = {r["fingerprint"]: r["id"] for r in prior_rows}
+    prior_by_fp: dict[str, list[str]] = {}
+    for r in prior_rows:
+        prior_by_fp.setdefault(r["fingerprint"], []).append(r["id"])
     matched_prior_ids: set[str] = set()
 
     for f in new_findings:
         fp = compute_fingerprint(f.category, f.location, f.description)
 
-        if fp in prior_by_fp:
-            # Matched: update description and severity, link to new review run
-            prior_id = prior_by_fp[fp]
+        if fp in prior_by_fp and prior_by_fp[fp]:
+            # Matched: pop the first unmatched prior finding with this fingerprint
+            prior_id = prior_by_fp[fp].pop(0)
             matched_prior_ids.add(prior_id)
             conn.execute(
                 "UPDATE findings SET description = ?, severity = ?, "

@@ -175,6 +175,20 @@ def config_to_snapshot(config: Config) -> dict:
     }
 
 
+def refresh_config_snapshot(conn, config: Config) -> None:
+    """Refresh the projects.config DB snapshot from the current Config.
+
+    Per configuration.md, config.toml on disk is the source of truth and
+    the DB snapshot is refreshed on each command invocation.
+    """
+    import json
+    import sqlite3
+
+    snapshot = json.dumps(config_to_snapshot(config))
+    conn.execute("UPDATE projects SET config = ?", (snapshot,))
+    conn.commit()
+
+
 def resolve_project(capsaicin_root: str | Path) -> str:
     """Auto-resolve the project slug if exactly one project exists.
 
