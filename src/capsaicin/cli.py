@@ -391,5 +391,79 @@ def ticket_approve_cmd(ticket_id, rationale, force, repo_path, project_slug):
         conn.close()
 
 
+@ticket.command("revise")
+@click.argument("ticket_id", required=False, default=None)
+@click.option(
+    "--add-finding",
+    "add_findings",
+    multiple=True,
+    help="Human finding description (repeatable).",
+)
+@click.option(
+    "--reset-cycles",
+    is_flag=True,
+    default=False,
+    help="Reset cycle and retry counters.",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_revise_cmd(ticket_id, add_findings, reset_cycles, repo_path, project_slug):
+    """Send a ticket back for revision from the human gate."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.ticket_revise import revise_ticket, select_revise_ticket
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    log_path = project_dir / "activity.log"
+
+    conn = get_connection(db_path)
+    try:
+        try:
+            ticket = select_revise_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+        findings_list = list(add_findings) if add_findings else None
+
+        final_status = revise_ticket(
+            conn=conn,
+            project_id=project_id,
+            ticket=ticket,
+            add_findings=findings_list,
+            reset_cycles=reset_cycles,
+            log_path=log_path,
+        )
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        if findings_list:
+            click.echo(f"  Added {len(findings_list)} finding(s)")
+        if reset_cycles:
+            click.echo("  Cycle counters reset")
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()
