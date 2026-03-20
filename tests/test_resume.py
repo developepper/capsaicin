@@ -7,7 +7,13 @@ import subprocess
 
 import pytest
 
-from capsaicin.adapters.types import CriterionChecked, Finding, ReviewResult, RunResult, ScopeReviewed
+from capsaicin.adapters.types import (
+    CriterionChecked,
+    Finding,
+    ReviewResult,
+    RunResult,
+    ScopeReviewed,
+)
 from capsaicin.config import load_config
 from capsaicin.db import get_connection
 from capsaicin.init import init_project

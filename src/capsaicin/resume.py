@@ -280,9 +280,7 @@ def _handle_finished_review_run(
     # context we treat this as needing a fresh review (set idle so user can re-run)
     if result_status.startswith("_retry"):
         retry_reason = (
-            result_status.split(":", 1)[1]
-            if ":" in result_status
-            else "unknown"
+            result_status.split(":", 1)[1] if ":" in result_status else "unknown"
         )
         increment_review_attempt(conn, ticket_id)
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):

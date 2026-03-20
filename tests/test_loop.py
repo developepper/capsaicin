@@ -67,9 +67,7 @@ class MockAdapter:
             new_scope = dataclasses.replace(
                 result.structured_result.scope_reviewed,
                 criteria_checked=[
-                    CriterionChecked(
-                        criterion_id=c.id, description=c.description
-                    )
+                    CriterionChecked(criterion_id=c.id, description=c.description)
                     for c in request.acceptance_criteria
                 ],
             )

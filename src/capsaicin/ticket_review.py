@@ -274,9 +274,7 @@ def _invoke_with_retries(
 
         # Extract the failure reason from the retry signal
         last_retry_reason = (
-            result_status.split(":", 1)[1]
-            if ":" in result_status
-            else "unknown"
+            result_status.split(":", 1)[1] if ":" in result_status else "unknown"
         )
 
         # Check retry limit before looping

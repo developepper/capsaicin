@@ -176,7 +176,12 @@ def ticket_run_cmd(ticket_id, repo_path, project_slug):
     from pathlib import Path
 
     from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import ConfigError, load_config, refresh_config_snapshot, resolve_project
+    from capsaicin.config import (
+        ConfigError,
+        load_config,
+        refresh_config_snapshot,
+        resolve_project,
+    )
     from capsaicin.db import get_connection
     from capsaicin.ticket_run import run_implementation_pipeline, select_ticket
 
@@ -250,7 +255,12 @@ def ticket_review_cmd(ticket_id, allow_drift, repo_path, project_slug):
     from pathlib import Path
 
     from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import ConfigError, load_config, refresh_config_snapshot, resolve_project
+    from capsaicin.config import (
+        ConfigError,
+        load_config,
+        refresh_config_snapshot,
+        resolve_project,
+    )
     from capsaicin.db import get_connection
     from capsaicin.review_baseline import WorkspaceDriftError
     from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
@@ -327,7 +337,12 @@ def ticket_approve_cmd(ticket_id, rationale, force, repo_path, project_slug):
     """Approve a ticket at the human gate."""
     from pathlib import Path
 
-    from capsaicin.config import ConfigError, load_config, refresh_config_snapshot, resolve_project
+    from capsaicin.config import (
+        ConfigError,
+        load_config,
+        refresh_config_snapshot,
+        resolve_project,
+    )
     from capsaicin.db import get_connection
     from capsaicin.ticket_approve import (
         WorkspaceMismatchError,
@@ -661,7 +676,12 @@ def resume(repo_path, project_slug):
     from pathlib import Path
 
     from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import ConfigError, load_config, refresh_config_snapshot, resolve_project
+    from capsaicin.config import (
+        ConfigError,
+        load_config,
+        refresh_config_snapshot,
+        resolve_project,
+    )
     from capsaicin.db import get_connection
     from capsaicin.resume import resume_pipeline
 
@@ -734,7 +754,12 @@ def loop(ticket_id, max_cycles, repo_path, project_slug):
     from pathlib import Path
 
     from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import ConfigError, load_config, refresh_config_snapshot, resolve_project
+    from capsaicin.config import (
+        ConfigError,
+        load_config,
+        refresh_config_snapshot,
+        resolve_project,
+    )
     from capsaicin.db import get_connection
     from capsaicin.loop import run_loop
 
