@@ -647,5 +647,66 @@ def status(ticket_id, verbose, repo_path, project_slug):
         conn.close()
 
 
+@cli.command()
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def resume(repo_path, project_slug):
+    """Resume from interrupted execution."""
+    from pathlib import Path
+
+    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.config import ConfigError, load_config, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.resume import resume_pipeline
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    config_path = project_dir / "config.toml"
+    log_path = project_dir / "activity.log"
+
+    try:
+        config = load_config(config_path)
+    except ConfigError as e:
+        raise click.ClickException(str(e))
+
+    conn = get_connection(db_path)
+    try:
+        project_row = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()
+        if project_row is None:
+            raise click.ClickException("No project found in database.")
+        project_id = project_row["id"]
+
+        adapter = ClaudeCodeAdapter(command=config.implementer.command)
+        action, detail = resume_pipeline(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            adapter=adapter,
+            log_path=log_path,
+        )
+
+        click.echo(detail)
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()
