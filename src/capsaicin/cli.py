@@ -236,5 +236,80 @@ def ticket_run_cmd(ticket_id, repo_path, project_slug):
         conn.close()
 
 
+@ticket.command("review")
+@click.argument("ticket_id", required=False, default=None)
+@click.option(
+    "--allow-drift", is_flag=True, default=False, help="Accept workspace drift."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_review_cmd(ticket_id, allow_drift, repo_path, project_slug):
+    """Run the review pipeline for a ticket."""
+    from pathlib import Path
+
+    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.config import ConfigError, load_config, resolve_project
+    from capsaicin.db import get_connection
+    from capsaicin.review_baseline import WorkspaceDriftError
+    from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    if project_slug:
+        slug = project_slug
+        project_dir = capsaicin_root / "projects" / slug
+        if not project_dir.is_dir():
+            raise click.ClickException(f"Project '{slug}' not found at {project_dir}")
+    else:
+        try:
+            slug = resolve_project(capsaicin_root)
+        except ConfigError as e:
+            raise click.ClickException(str(e))
+
+    project_dir = capsaicin_root / "projects" / slug
+    db_path = project_dir / "capsaicin.db"
+    config_path = project_dir / "config.toml"
+    log_path = project_dir / "activity.log"
+
+    try:
+        config = load_config(config_path)
+    except ConfigError as e:
+        raise click.ClickException(str(e))
+
+    conn = get_connection(db_path)
+    try:
+        # Select ticket
+        try:
+            ticket = select_review_ticket(conn, ticket_id)
+        except ValueError as e:
+            raise click.ClickException(str(e))
+
+        project_id = ticket["project_id"]
+        click.echo(f"Running review for ticket {ticket['id']}: {ticket['title']}")
+
+        adapter = ClaudeCodeAdapter(command=config.reviewer.command)
+        try:
+            final_status = run_review_pipeline(
+                conn=conn,
+                project_id=project_id,
+                ticket=ticket,
+                config=config,
+                adapter=adapter,
+                allow_drift=allow_drift,
+                log_path=log_path,
+            )
+        except WorkspaceDriftError as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+    finally:
+        conn.close()
+
+
 if __name__ == "__main__":
     cli()
