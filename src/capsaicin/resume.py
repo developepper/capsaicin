@@ -7,7 +7,6 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from capsaicin.activity_log import log_event
@@ -23,6 +22,7 @@ from capsaicin.orchestrator import (
     increment_review_attempt,
     set_idle,
 )
+from capsaicin.queries import get_impl_run_id, now_utc
 from capsaicin.state_machine import transition_ticket
 from capsaicin.ticket_review import (
     _handle_review_result,
@@ -34,10 +34,6 @@ from capsaicin.ticket_run import (
     run_implementation_pipeline,
     select_ticket,
 )
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def get_active_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
@@ -85,24 +81,11 @@ def _reconstruct_run_result(run: dict) -> RunResult:
     )
 
 
-def _get_impl_run_id(conn: sqlite3.Connection, ticket_id: str) -> str:
-    """Get the most recent implementer run ID for a ticket."""
-    row = conn.execute(
-        "SELECT id FROM agent_runs "
-        "WHERE ticket_id = ? AND role = 'implementer' "
-        "ORDER BY started_at DESC LIMIT 1",
-        (ticket_id,),
-    ).fetchone()
-    if row is None:
-        raise ValueError(f"No implementer run found for ticket '{ticket_id}'.")
-    return row["id"]
-
-
 def _mark_run_failed(conn: sqlite3.Connection, run_id: str) -> None:
     """Mark an interrupted run as failed."""
     conn.execute(
         "UPDATE agent_runs SET exit_status = 'failure', finished_at = ? WHERE id = ?",
-        (_now(), run_id),
+        (now_utc(), run_id),
     )
     conn.commit()
 
@@ -178,14 +161,14 @@ def _handle_interrupted_run(
                 "blocked",
                 "system",
                 reason="Review retry limit exceeded after interrupted run.",
-                blocked_reason="reviewer_contract_violation",
+                blocked_reason="reviewer_failure",
                 log_path=log_path,
             )
             set_idle(conn, project_id)
             return "blocked"
 
         # Retry: re-invoke the reviewer adapter
-        impl_run_id = _get_impl_run_id(conn, ticket_id)
+        impl_run_id = get_impl_run_id(conn, ticket_id)
         return _review_invoke_with_retries(
             conn=conn,
             project_id=project_id,
@@ -279,7 +262,7 @@ def _handle_finished_review_run(
         set_idle(conn, project_id)
         return ticket["status"]
 
-    impl_run_id = _get_impl_run_id(conn, ticket_id)
+    impl_run_id = get_impl_run_id(conn, ticket_id)
     result = _reconstruct_run_result(run)
 
     result_status = _handle_review_result(
@@ -293,18 +276,24 @@ def _handle_finished_review_run(
         log_path=log_path,
     )
 
-    # _handle_review_result returns '_retry' for failures — in resume context
-    # we treat this as needing a fresh review (set idle so user can re-run)
-    if result_status == "_retry":
+    # _handle_review_result returns '_retry:<reason>' for failures — in resume
+    # context we treat this as needing a fresh review (set idle so user can re-run)
+    if result_status.startswith("_retry"):
+        retry_reason = (
+            result_status.split(":", 1)[1] if ":" in result_status else "unknown"
+        )
         increment_review_attempt(conn, ticket_id)
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):
+            from capsaicin.ticket_review import _retry_reason_to_blocked_reason
+
+            blocked_reason = _retry_reason_to_blocked_reason(retry_reason)
             transition_ticket(
                 conn,
                 ticket_id,
                 "blocked",
                 "system",
-                reason="Review retry limit exceeded on resume.",
-                blocked_reason="reviewer_contract_violation",
+                reason=f"Review retry limit exceeded on resume ({retry_reason}).",
+                blocked_reason=blocked_reason,
                 log_path=log_path,
             )
             finish_run(conn, project_id)
@@ -420,7 +409,7 @@ def _resume_from_context(
         "suspended_at = NULL, resume_context = NULL, "
         "active_ticket_id = NULL, active_run_id = NULL, "
         "updated_at = ? WHERE project_id = ?",
-        (_now(), project_id),
+        (now_utc(), project_id),
     )
     conn.commit()
 

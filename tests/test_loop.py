@@ -7,6 +7,7 @@ import subprocess
 import pytest
 
 from capsaicin.adapters.types import (
+    CriterionChecked,
     Finding,
     ReviewResult,
     RunResult,
@@ -38,7 +39,7 @@ class MockAdapter:
         if self._index < len(self._results):
             result = self._results[self._index]
             self._index += 1
-            return result
+            return self._patch_criteria_checked(result, request)
         # Default: success with no structured result (implementer)
         return RunResult(
             run_id="mock",
@@ -47,6 +48,35 @@ class MockAdapter:
             raw_stdout="ok",
             raw_stderr="",
         )
+
+    @staticmethod
+    def _patch_criteria_checked(result, request):
+        """Auto-populate criteria_checked from the request for reviewer results.
+
+        This ensures mock review results pass T17 defense-in-depth
+        validation at the orchestrator layer (confidence:high requires
+        criteria_checked when acceptance criteria are provided).
+        """
+        if (
+            result.structured_result
+            and request.acceptance_criteria
+            and not result.structured_result.scope_reviewed.criteria_checked
+        ):
+            import dataclasses
+
+            new_scope = dataclasses.replace(
+                result.structured_result.scope_reviewed,
+                criteria_checked=[
+                    CriterionChecked(criterion_id=c.id, description=c.description)
+                    for c in request.acceptance_criteria
+                ],
+            )
+            new_review = dataclasses.replace(
+                result.structured_result,
+                scope_reviewed=new_scope,
+            )
+            return dataclasses.replace(result, structured_result=new_review)
+        return result
 
 
 def _make_pass_review_result():

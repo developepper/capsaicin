@@ -8,12 +8,11 @@ from __future__ import annotations
 
 import json
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
 
 from capsaicin.activity_log import log_event
 from capsaicin.adapters.base import BaseAdapter
-from capsaicin.adapters.types import AcceptanceCriterion, Finding, RunRequest
+from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
 from capsaicin.diff import capture_diff, persist_run_diff
 from capsaicin.orchestrator import (
@@ -28,17 +27,8 @@ from capsaicin.orchestrator import (
     start_run,
 )
 from capsaicin.prompts import build_implementer_prompt
+from capsaicin.queries import generate_id, load_criteria, load_open_findings, now_utc
 from capsaicin.state_machine import transition_ticket
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _generate_id() -> str:
-    from ulid import ULID
-
-    return str(ULID())
 
 
 # ---------------------------------------------------------------------------
@@ -123,7 +113,7 @@ def _insert_agent_run(
             attempt_number,
             prompt,
             run_request_json,
-            _now(),
+            now_utc(),
         ),
     )
     conn.commit()
@@ -153,51 +143,11 @@ def _update_agent_run(
             raw_stdout,
             raw_stderr,
             json.dumps(adapter_metadata or {}),
-            _now(),
+            now_utc(),
             run_id,
         ),
     )
     conn.commit()
-
-
-# ---------------------------------------------------------------------------
-# Context loaders
-# ---------------------------------------------------------------------------
-
-
-def _load_criteria(
-    conn: sqlite3.Connection, ticket_id: str
-) -> list[AcceptanceCriterion]:
-    rows = conn.execute(
-        "SELECT id, description, status FROM acceptance_criteria WHERE ticket_id = ?",
-        (ticket_id,),
-    ).fetchall()
-    return [
-        AcceptanceCriterion(
-            id=r["id"], description=r["description"], status=r["status"]
-        )
-        for r in rows
-    ]
-
-
-def _load_open_findings(conn: sqlite3.Connection, ticket_id: str) -> list[Finding]:
-    rows = conn.execute(
-        "SELECT severity, category, description, location, "
-        "acceptance_criterion_id, disposition "
-        "FROM findings WHERE ticket_id = ? AND disposition = 'open'",
-        (ticket_id,),
-    ).fetchall()
-    return [
-        Finding(
-            severity=r["severity"],
-            category=r["category"],
-            description=r["description"],
-            location=r["location"],
-            acceptance_criterion_id=r["acceptance_criterion_id"],
-            disposition=r["disposition"],
-        )
-        for r in rows
-    ]
 
 
 # ---------------------------------------------------------------------------
@@ -354,11 +304,11 @@ def _invoke_once(
     log_path: str | Path | None = None,
 ) -> str:
     """Single adapter invocation. Returns ticket status or '_retry'."""
-    run_id = _generate_id()
+    run_id = generate_id()
 
     # Load context
-    criteria = _load_criteria(conn, ticket_id)
-    prior_findings = _load_open_findings(conn, ticket_id)
+    criteria = load_criteria(conn, ticket_id)
+    prior_findings = load_open_findings(conn, ticket_id)
     ticket_row = conn.execute(
         "SELECT title, description FROM tickets WHERE id = ?",
         (ticket_id,),

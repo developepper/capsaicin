@@ -87,12 +87,23 @@ class MockReviewAdapter(BaseAdapter):
                 adapter_metadata={},
             )
 
-        # Build scope_reviewed with files_examined populated
-        sr = self.scope_reviewed or ScopeReviewed(
-            files_examined=["impl.txt"],
-            tests_run=False,
-            criteria_checked=[],
-        )
+        # Build scope_reviewed with files_examined populated.
+        # When no explicit scope_reviewed is provided, auto-populate
+        # criteria_checked from the request so the result passes T17
+        # validation (confidence:high requires criteria_checked when
+        # criteria are provided).
+        if self.scope_reviewed is not None:
+            sr = self.scope_reviewed
+        else:
+            criteria_checked = [
+                CriterionChecked(criterion_id=c.id, description=c.description)
+                for c in request.acceptance_criteria
+            ]
+            sr = ScopeReviewed(
+                files_examined=["impl.txt"],
+                tests_run=False,
+                criteria_checked=criteria_checked,
+            )
 
         review_result = ReviewResult(
             verdict=self.verdict,
@@ -712,7 +723,7 @@ class TestParseError:
             .execute("SELECT blocked_reason FROM tickets WHERE id = ?", (tid,))
             .fetchone()
         )
-        assert row["blocked_reason"] == "reviewer_contract_violation"
+        assert row["blocked_reason"] == "reviewer_parse_error"
 
 
 # ---------------------------------------------------------------------------
