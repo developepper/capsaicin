@@ -296,8 +296,12 @@ def _move_to_human_gate(env, ticket_id):
 
     transition_ticket(env["conn"], ticket_id, "implementing", "system", reason="test")
     transition_ticket(
-        env["conn"], ticket_id, "human-gate", "system",
-        reason="test", gate_reason="review_passed",
+        env["conn"],
+        ticket_id,
+        "human-gate",
+        "system",
+        reason="test",
+        gate_reason="review_passed",
     )
     await_human(env["conn"], env["project_id"])
 
@@ -307,6 +311,10 @@ def _move_to_blocked(env, ticket_id):
 
     transition_ticket(env["conn"], ticket_id, "implementing", "system", reason="test")
     transition_ticket(
-        env["conn"], ticket_id, "blocked", "system",
-        reason="test", blocked_reason="implementation_failure",
+        env["conn"],
+        ticket_id,
+        "blocked",
+        "system",
+        reason="test",
+        blocked_reason="implementation_failure",
     )

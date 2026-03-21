@@ -1,0 +1,59 @@
+{% extends "base.html" %}
+{% block title %}{{ data.ticket.title }} — capsaicin{% endblock %}
+{% block content %}
+<h1>{{ data.ticket.title }}</h1>
+
+<dl>
+  <dt>ID</dt><dd>{{ data.ticket.id }}</dd>
+  <dt>Status</dt><dd>{{ data.ticket.status }}</dd>
+  <dt>Status Changed</dt><dd>{{ data.ticket.status_changed_at }}</dd>
+  <dt>Cycle</dt><dd>{{ data.ticket.current_cycle }} (impl attempt: {{ data.ticket.current_impl_attempt }}, review attempt: {{ data.ticket.current_review_attempt }})</dd>
+  {% if data.ticket.gate_reason %}<dt>Gate Reason</dt><dd>{{ data.ticket.gate_reason }}</dd>{% endif %}
+  {% if data.ticket.blocked_reason %}<dt>Blocked Reason</dt><dd>{{ data.ticket.blocked_reason }}</dd>{% endif %}
+</dl>
+
+<section>
+  <h2>Acceptance Criteria</h2>
+  {% if data.criteria %}
+  <ul>
+    {% for c in data.criteria %}
+    <li>[{{ c.status }}] {{ c.description }}</li>
+    {% endfor %}
+  </ul>
+  {% else %}
+  <p>(none)</p>
+  {% endif %}
+</section>
+
+<section>
+  <h2>Open Findings</h2>
+  {% if data.open_findings %}
+    {% for severity in ["blocking","warning","info"] %}
+      {% if severity in data.open_findings %}
+      <h3>{{ severity }}</h3>
+      <ul>
+        {% for f in data.open_findings[severity] %}
+        <li>[{{ f.category }}]{% if f.location %} ({{ f.location }}){% endif %} {{ f.description }}</li>
+        {% endfor %}
+      </ul>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+  <p>(none)</p>
+  {% endif %}
+</section>
+
+{% if data.last_run %}
+<section>
+  <h2>Last Run</h2>
+  <dl>
+    <dt>Role</dt><dd>{{ data.last_run.role }}</dd>
+    <dt>Exit Status</dt><dd>{{ data.last_run.exit_status }}</dd>
+    <dt>Duration</dt><dd>{{ "%.1f"|format(data.last_run.duration_seconds) if data.last_run.duration_seconds is not none else "n/a" }}s</dd>
+    <dt>Verdict</dt><dd>{{ data.last_run.verdict or "n/a" }}</dd>
+  </dl>
+</section>
+{% endif %}
+
+<p><a href="/">Back to dashboard</a></p>
+{% endblock %}

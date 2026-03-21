@@ -404,8 +404,14 @@ def render_dashboard(conn: sqlite3.Connection, project_id: str) -> str:
     if data.counts_by_status:
         lines.append("Status Counts:")
         for s in [
-            "ready", "implementing", "in-review", "revise",
-            "human-gate", "pr-ready", "blocked", "done",
+            "ready",
+            "implementing",
+            "in-review",
+            "revise",
+            "human-gate",
+            "pr-ready",
+            "blocked",
+            "done",
         ]:
             if s in data.counts_by_status:
                 lines.append(f"  {s}: {data.counts_by_status[s]}")

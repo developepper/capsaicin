@@ -430,6 +430,44 @@ def loop(ticket_id, max_cycles, repo_path, project_slug):
 
 
 @cli.command()
+@click.option(
+    "--port", type=int, default=None, help="Port to bind to (auto-selects if omitted)."
+)
+@click.option(
+    "--no-open",
+    "no_open",
+    is_flag=True,
+    default=False,
+    help="Do not open browser automatically.",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ui(port, no_open, repo_path, project_slug):
+    """Launch the local operator web UI."""
+    from capsaicin.web.server import run_server
+
+    # Resolve project context, extract the values we need, then close
+    # the connection before starting the server.  The web layer opens
+    # its own per-request connections — keeping the launcher connection
+    # alive would hold a long-lived SQLite handle for the server's
+    # entire lifetime, contradicting the request-scoped model.
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        db_path = ctx.db_path
+        project_id = _app_context(ctx).project_id
+        config_path = ctx.config_path
+        log_path = ctx.log_path
+
+    run_server(
+        db_path=db_path,
+        project_id=project_id,
+        config_path=config_path,
+        log_path=log_path,
+        port=port,
+        open_browser=not no_open,
+    )
+
+
+@cli.command()
 @click.option("--repo", "repo_path", default=None, help="Path to the repository.")
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def doctor(repo_path, project_slug):

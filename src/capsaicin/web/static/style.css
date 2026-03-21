@@ -1,0 +1,13 @@
+/* Minimal operator UI stylesheet */
+*,*::before,*::after{box-sizing:border-box}
+body{font-family:system-ui,sans-serif;margin:0;padding:0;color:#222;background:#fafafa}
+header{background:#333;color:#fff;padding:.5rem 1rem}
+header a{color:#fff;text-decoration:none;font-weight:bold}
+main{max-width:60rem;margin:1rem auto;padding:0 1rem}
+h1{margin-top:0}
+table{border-collapse:collapse;width:100%}
+th,td{text-align:left;padding:.3rem .6rem;border-bottom:1px solid #ddd}
+th{background:#eee}
+dl{display:grid;grid-template-columns:max-content 1fr;gap:.2rem 1rem}
+dt{font-weight:bold}
+a{color:#0366d6}

@@ -245,8 +245,16 @@ class TestLoopCommand:
 
         captured = {}
 
-        def fake_run_loop(conn, project_id, config, impl_adapter, review_adapter,
-                          ticket_id=None, max_cycles=None, log_path=None):
+        def fake_run_loop(
+            conn,
+            project_id,
+            config,
+            impl_adapter,
+            review_adapter,
+            ticket_id=None,
+            max_cycles=None,
+            log_path=None,
+        ):
             captured["ticket_id"] = ticket_id
             return ("human-gate", "stopped")
 
@@ -275,8 +283,16 @@ class TestLoopCommand:
         env = project_env
         tid = add_ticket(env, title="Explicit Loop")
 
-        def fake_run_loop(conn, project_id, config, impl_adapter, review_adapter,
-                          ticket_id=None, max_cycles=None, log_path=None):
+        def fake_run_loop(
+            conn,
+            project_id,
+            config,
+            impl_adapter,
+            review_adapter,
+            ticket_id=None,
+            max_cycles=None,
+            log_path=None,
+        ):
             return ("human-gate", "stopped")
 
         monkeypatch.setattr("capsaicin.loop.run_loop", fake_run_loop)
@@ -302,8 +318,16 @@ class TestLoopCommand:
         env = project_env
         tid = add_ticket(env)
 
-        def fake_run_loop(conn, project_id, config, impl_adapter, review_adapter,
-                          ticket_id=None, max_cycles=None, log_path=None):
+        def fake_run_loop(
+            conn,
+            project_id,
+            config,
+            impl_adapter,
+            review_adapter,
+            ticket_id=None,
+            max_cycles=None,
+            log_path=None,
+        ):
             # Simulate the loop moving the ticket to human-gate
             conn.execute(
                 "UPDATE tickets SET status = 'human-gate', "
@@ -351,15 +375,18 @@ class TestResumeCommand:
         )
         env["conn"].commit()
 
-        def fake_resume_pipeline(conn, project_id, config,
-                                 impl_adapter, review_adapter, log_path=None):
+        def fake_resume_pipeline(
+            conn, project_id, config, impl_adapter, review_adapter, log_path=None
+        ):
             # Simulate the pipeline clearing orchestrator state
             from capsaicin.orchestrator import set_idle
+
             set_idle(conn, project_id)
             return ("run", f"Ticket {tid} -> in-review")
 
         monkeypatch.setattr(
-            "capsaicin.resume.resume_pipeline", fake_resume_pipeline,
+            "capsaicin.resume.resume_pipeline",
+            fake_resume_pipeline,
         )
         monkeypatch.setattr(
             "capsaicin.adapters.claude_code.ClaudeCodeAdapter",
@@ -382,12 +409,14 @@ class TestResumeCommand:
         """When orchestrator is idle with no active ticket, ticket_id is empty."""
         env = project_env
 
-        def fake_resume_pipeline(conn, project_id, config,
-                                 impl_adapter, review_adapter, log_path=None):
+        def fake_resume_pipeline(
+            conn, project_id, config, impl_adapter, review_adapter, log_path=None
+        ):
             return ("idle", "No eligible ticket found.")
 
         monkeypatch.setattr(
-            "capsaicin.resume.resume_pipeline", fake_resume_pipeline,
+            "capsaicin.resume.resume_pipeline",
+            fake_resume_pipeline,
         )
         monkeypatch.setattr(
             "capsaicin.adapters.claude_code.ClaudeCodeAdapter",
@@ -412,12 +441,14 @@ class TestResumeCommand:
         tid = add_ticket(env)
         _move_to_human_gate(env, tid)
 
-        def fake_resume_pipeline(conn, project_id, config,
-                                 impl_adapter, review_adapter, log_path=None):
+        def fake_resume_pipeline(
+            conn, project_id, config, impl_adapter, review_adapter, log_path=None
+        ):
             return ("awaiting_human", "Awaiting human decision.")
 
         monkeypatch.setattr(
-            "capsaicin.resume.resume_pipeline", fake_resume_pipeline,
+            "capsaicin.resume.resume_pipeline",
+            fake_resume_pipeline,
         )
         monkeypatch.setattr(
             "capsaicin.adapters.claude_code.ClaudeCodeAdapter",

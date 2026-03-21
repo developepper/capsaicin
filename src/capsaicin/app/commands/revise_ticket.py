@@ -36,9 +36,5 @@ def revise(
     return CommandResult(
         ticket_id=ticket["id"],
         final_status=final_status,
-        detail=(
-            f"Added {len(add_findings)} finding(s)"
-            if add_findings
-            else None
-        ),
+        detail=(f"Added {len(add_findings)} finding(s)" if add_findings else None),
     )

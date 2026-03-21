@@ -172,6 +172,33 @@ services are thin orchestration wrappers that return structured outcomes.
 Query services return serializable dataclasses that delivery layers
 format for their output channel.
 
+## Web Runtime
+
+The `web/` package provides a local operator UI via `capsaicin ui`:
+
+```text
+src/capsaicin/web/
+  app.py           # Starlette ASGI app factory
+  middleware.py    # per-request SQLite connection lifecycle
+  server.py        # uvicorn launcher with port selection and browser open
+  templating.py    # shared Jinja2 template instance
+  routes/          # route handlers consuming app.queries / app.commands
+  templates/       # Jinja2 server-rendered HTML with HTMX
+  static/          # CSS and client assets
+```
+
+SQLite concurrency model for the web layer:
+
+- each HTTP request gets its own connection opened at request start and
+  closed at request end via `DBConnectionMiddleware`
+- no long-lived transactions — handlers read structured data from
+  `app.queries` and return immediately
+- WAL mode is **not** enabled by default; the single-operator local model
+  does not require it, and enabling it should be a deliberate documented
+  decision if mixed CLI/UI write contention becomes an issue
+- the server binds to `127.0.0.1` only; no auth, remote access, or
+  multi-user assumptions
+
 ## Boundaries
 
 To avoid endless looping, `capsaicin` should use bounded retry rules.

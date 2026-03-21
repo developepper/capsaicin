@@ -1,0 +1,60 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — capsaicin{% endblock %}
+{% block content %}
+<h1>Project Dashboard</h1>
+<p>{{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }}</p>
+
+{% if data.counts_by_status %}
+<section>
+  <h2>Status Counts</h2>
+  <table>
+    <thead><tr><th>Status</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for status in ["ready","implementing","in-review","revise","human-gate","pr-ready","blocked","done"] %}
+        {% if status in data.counts_by_status %}
+        <tr><td>{{ status }}</td><td>{{ data.counts_by_status[status] }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{% if data.active_ticket %}
+<section>
+  <h2>Active Ticket</h2>
+  <p><a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.id }}</a>: {{ data.active_ticket.title }} ({{ data.active_ticket.status }})</p>
+</section>
+{% endif %}
+
+{% if data.human_gate_tickets %}
+<section>
+  <h2>Awaiting Human Gate</h2>
+  <ul>
+    {% for t in data.human_gate_tickets %}
+    <li><a href="/tickets/{{ t.id }}">{{ t.id }}</a>: {{ t.title }} ({{ t.gate_reason or "unknown" }})</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+{% if data.blocked_tickets %}
+<section>
+  <h2>Blocked</h2>
+  <ul>
+    {% for t in data.blocked_tickets %}
+    <li><a href="/tickets/{{ t.id }}">{{ t.id }}</a>: {{ t.title }} ({{ t.blocked_reason or "unknown" }})</li>
+    {% endfor %}
+  </ul>
+</section>
+{% endif %}
+
+<section>
+  <h2>Next Runnable</h2>
+  {% if data.next_runnable %}
+  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.id }}</a>: {{ data.next_runnable.title }}</p>
+  {% else %}
+  <p>(none)</p>
+  {% endif %}
+</section>
+{% endblock %}
