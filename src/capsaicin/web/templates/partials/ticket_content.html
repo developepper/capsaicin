@@ -20,6 +20,114 @@
   {% endif %}
 </dl>
 
+{# --- Human-gate action forms --- #}
+{% if data.ticket.status == "human-gate" %}
+<section class="action-panel">
+  <h2>Human Decision Required</h2>
+
+  {% set gate = data.ticket.gate_reason %}
+  {% set rationale_required = gate in ("cycle_limit", "reviewer_escalated", "low_confidence_pass") %}
+
+  {% if gate == "review_passed" %}
+  <p class="gate-context">Review passed. Approve to move this ticket to PR-ready, or revise to send it back for another implementation pass.</p>
+  {% elif gate == "low_confidence_pass" %}
+  <p class="gate-context gate-warning">Review passed with low confidence. A rationale is required to approve.</p>
+  {% elif gate == "reviewer_escalated" %}
+  <p class="gate-context gate-warning">The reviewer escalated this ticket. A rationale is required to approve.</p>
+  {% elif gate == "cycle_limit" %}
+  <p class="gate-context gate-warning">The cycle limit was reached. A rationale is required to approve.</p>
+  {% elif gate == "empty_implementation" %}
+  <p class="gate-context gate-warning">The implementation produced no changes.</p>
+  {% elif gate == "permission_denied" %}
+  <p class="gate-context gate-warning">The implementation was blocked by permission denials.</p>
+  {% else %}
+  <p class="gate-context">This ticket is waiting for a human decision.</p>
+  {% endif %}
+
+  <div class="action-forms">
+    {# --- Approve form --- #}
+    <form method="post" action="/tickets/{{ data.ticket.id }}/approve" class="action-form action-approve">
+      <h3>Approve</h3>
+      <p class="action-description">Move ticket to PR-ready.</p>
+      <label for="approve-rationale">Rationale{% if rationale_required %} <strong>(required)</strong>{% endif %}</label>
+      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if rationale_required %}Explain why this is acceptable despite {{ gate }}{% endif %}">{{ "" }}</textarea>
+      <div class="action-options">
+        <label><input type="checkbox" name="force"> Force (skip workspace match check)</label>
+      </div>
+      <button type="submit" class="btn btn-approve">Approve</button>
+    </form>
+
+    {# --- Revise form --- #}
+    <form method="post" action="/tickets/{{ data.ticket.id }}/revise" class="action-form action-revise">
+      <h3>Revise</h3>
+      <p class="action-description">Send back for another implementation pass.</p>
+      <label for="revise-finding">Finding (optional)</label>
+      <textarea id="revise-finding" name="finding" rows="2" placeholder="Describe what needs to change"></textarea>
+      <div class="action-options">
+        <label><input type="checkbox" name="reset_cycles"> Reset cycle counters</label>
+      </div>
+      <button type="submit" class="btn btn-revise">Revise</button>
+    </form>
+
+    {# --- Defer form --- #}
+    <details class="action-detail">
+      <summary>Defer or abandon</summary>
+      <form method="post" action="/tickets/{{ data.ticket.id }}/defer" class="action-form action-defer">
+        <h3>Defer</h3>
+        <p class="action-description">Move ticket to blocked. Optionally abandon it entirely.</p>
+        <label for="defer-rationale">Rationale</label>
+        <textarea id="defer-rationale" name="rationale" rows="2" placeholder="Why is this being deferred?"></textarea>
+        <div class="action-options">
+          <label><input type="checkbox" name="abandon"> Abandon (move to done)</label>
+        </div>
+        <button type="submit" class="btn btn-defer">Defer</button>
+      </form>
+    </details>
+  </div>
+</section>
+{% endif %}
+
+{# --- Blocked ticket: unblock action --- #}
+{% if data.ticket.status == "blocked" %}
+<section class="action-panel">
+  <h2>Ticket Blocked</h2>
+  <p class="gate-context">This ticket is blocked{% if data.ticket.blocked_reason %}: {{ data.ticket.blocked_reason }}{% endif %}.</p>
+  <form method="post" action="/tickets/{{ data.ticket.id }}/unblock" class="action-form">
+    <div class="action-options">
+      <label><input type="checkbox" name="reset_cycles"> Reset cycle counters</label>
+    </div>
+    <button type="submit" class="btn btn-approve">Unblock</button>
+  </form>
+</section>
+{% endif %}
+
+{# --- Workflow trigger actions (run, review, loop) --- #}
+{% if data.ticket.status in ("ready", "revise") %}
+<section class="action-panel">
+  <h2>Actions</h2>
+  <div class="action-forms action-forms-inline">
+    <form method="post" action="/tickets/{{ data.ticket.id }}/run" class="action-form">
+      <button type="submit" class="btn btn-action">Run Implementation</button>
+    </form>
+    <form method="post" action="/tickets/{{ data.ticket.id }}/loop" class="action-form">
+      <button type="submit" class="btn btn-action">Run Loop</button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if data.ticket.status == "in-review" %}
+<section class="action-panel">
+  <h2>Actions</h2>
+  <form method="post" action="/tickets/{{ data.ticket.id }}/review" class="action-form">
+    <div class="action-options">
+      <label><input type="checkbox" name="allow_drift"> Allow workspace drift</label>
+    </div>
+    <button type="submit" class="btn btn-action">Run Review</button>
+  </form>
+</section>
+{% endif %}
+
 {# --- Acceptance criteria --- #}
 <section>
   <h2>Acceptance Criteria</h2>

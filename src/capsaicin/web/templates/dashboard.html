@@ -12,6 +12,11 @@
     — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
     ({{ data.active_ticket.status }})
   {% endif %}
+  {% if data.orchestrator.status in ("running", "awaiting_human", "suspended") %}
+  <form method="post" action="/actions/resume" class="orchestrator-resume">
+    <button type="submit" class="btn btn-action btn-sm">Resume</button>
+  </form>
+  {% endif %}
 </section>
 {% endif %}
 

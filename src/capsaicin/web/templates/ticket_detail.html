@@ -3,6 +3,10 @@
 {% block content %}
 <h1>{{ data.ticket.title }}</h1>
 
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
 {% include "partials/ticket_content.html" %}
 
 <p><a href="/">Back to dashboard</a></p>

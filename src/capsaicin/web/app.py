@@ -24,6 +24,16 @@ from starlette.routing import Mount, Route
 from starlette.staticfiles import StaticFiles
 
 from capsaicin.web.middleware import DBConnectionMiddleware
+from capsaicin.web.routes.actions import (
+    action_approve,
+    action_defer,
+    action_loop,
+    action_resume,
+    action_review,
+    action_revise,
+    action_run,
+    action_unblock,
+)
 from capsaicin.web.routes.dashboard import dashboard
 from capsaicin.web.routes.events import dashboard_events, ticket_events
 from capsaicin.web.routes.partials import (
@@ -55,6 +65,56 @@ def create_app(
     routes = [
         Route("/", dashboard, name="dashboard"),
         Route("/tickets/{ticket_id}", ticket_detail, name="ticket_detail"),
+        # Action routes — POST only
+        Route(
+            "/tickets/{ticket_id}/approve",
+            action_approve,
+            methods=["POST"],
+            name="action_approve",
+        ),
+        Route(
+            "/tickets/{ticket_id}/revise",
+            action_revise,
+            methods=["POST"],
+            name="action_revise",
+        ),
+        Route(
+            "/tickets/{ticket_id}/defer",
+            action_defer,
+            methods=["POST"],
+            name="action_defer",
+        ),
+        Route(
+            "/tickets/{ticket_id}/unblock",
+            action_unblock,
+            methods=["POST"],
+            name="action_unblock",
+        ),
+        Route(
+            "/tickets/{ticket_id}/run",
+            action_run,
+            methods=["POST"],
+            name="action_run",
+        ),
+        Route(
+            "/tickets/{ticket_id}/review",
+            action_review,
+            methods=["POST"],
+            name="action_review",
+        ),
+        Route(
+            "/tickets/{ticket_id}/loop",
+            action_loop,
+            methods=["POST"],
+            name="action_loop",
+        ),
+        Route(
+            "/actions/resume",
+            action_resume,
+            methods=["POST"],
+            name="action_resume",
+        ),
+        # Partials
         Route("/partials/inbox", partial_inbox, name="partial_inbox"),
         Route("/partials/queue", partial_queue, name="partial_queue"),
         Route("/partials/activity", partial_activity, name="partial_activity"),
@@ -72,6 +132,7 @@ def create_app(
             partial_ticket_content,
             name="partial_ticket_content",
         ),
+        # SSE events
         Route("/events/dashboard", dashboard_events, name="dashboard_events"),
         Route("/events/tickets/{ticket_id}", ticket_events, name="ticket_events"),
         Mount(

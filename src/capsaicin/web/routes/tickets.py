@@ -19,8 +19,10 @@ async def ticket_detail(request: Request) -> HTMLResponse:
     except ValueError:
         return PlainTextResponse(f"Ticket '{ticket_id}' not found.", status_code=404)
 
+    error = request.query_params.get("error")
+
     return templates.TemplateResponse(
         request,
         "ticket_detail.html",
-        {"data": data},
+        {"data": data, "error": error},
     )
