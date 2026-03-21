@@ -6,6 +6,7 @@ import sqlite3
 from datetime import datetime, timezone
 
 from capsaicin.adapters.types import AcceptanceCriterion, Finding
+from capsaicin.errors import TicketNotFoundError
 
 
 def now_utc() -> str:
@@ -55,6 +56,29 @@ def load_open_findings(conn: sqlite3.Connection, ticket_id: str) -> list[Finding
         )
         for r in rows
     ]
+
+
+# Superset of columns needed by all ticket-selection and reload queries.
+TICKET_COLUMNS = (
+    "id, project_id, title, description, status, "
+    "gate_reason, blocked_reason, "
+    "current_cycle, current_impl_attempt, current_review_attempt, "
+    "created_at, status_changed_at"
+)
+
+
+def load_ticket(conn: sqlite3.Connection, ticket_id: str) -> dict:
+    """Load a ticket by ID, returning a dict with all common columns.
+
+    Raises ``ValueError`` if the ticket does not exist.
+    """
+    row = conn.execute(
+        f"SELECT {TICKET_COLUMNS} FROM tickets WHERE id = ?",
+        (ticket_id,),
+    ).fetchone()
+    if row is None:
+        raise TicketNotFoundError(ticket_id)
+    return dict(row)
 
 
 def get_impl_run_id(conn: sqlite3.Connection, ticket_id: str) -> str:

@@ -6,13 +6,13 @@ reaches ``human-gate`` or ``blocked``.
 
 from __future__ import annotations
 
-import copy
 import sqlite3
 from pathlib import Path
 
 from capsaicin.activity_log import log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.config import Config
+from capsaicin.queries import load_ticket
 from capsaicin.resume import build_human_gate_context
 from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
 from capsaicin.ticket_run import run_implementation_pipeline, select_ticket
@@ -38,9 +38,10 @@ def select_ticket_for_loop(
         return select_ticket(conn, ticket_id)
 
     # Prefer revise tickets (in-flight work)
+    from capsaicin.queries import TICKET_COLUMNS
+
     revise_row = conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt "
+        f"SELECT {TICKET_COLUMNS} "
         "FROM tickets WHERE status = 'revise' "
         "ORDER BY status_changed_at ASC, created_at ASC "
         "LIMIT 1"
@@ -54,16 +55,7 @@ def select_ticket_for_loop(
 
 def _reload_ticket(conn: sqlite3.Connection, ticket_id: str) -> dict:
     """Reload ticket from DB to get fresh status."""
-    row = conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt, "
-        "gate_reason, blocked_reason "
-        "FROM tickets WHERE id = ?",
-        (ticket_id,),
-    ).fetchone()
-    if row is None:
-        raise ValueError(f"Ticket '{ticket_id}' not found.")
-    return dict(row)
+    return load_ticket(conn, ticket_id)
 
 
 def run_loop(
@@ -80,10 +72,11 @@ def run_loop(
 
     Returns a tuple of (final_status, detail) describing the outcome.
     """
-    # Use a shallow copy to avoid mutating the caller's config
-    config = copy.deepcopy(config)
     if max_cycles is not None:
-        config.limits.max_cycles = max_cycles
+        # Override limits without mutating the caller's config
+        from dataclasses import replace
+
+        config = replace(config, limits=replace(config.limits, max_cycles=max_cycles))
 
     # Select ticket — prefer revise (in-flight) before ready (new work)
     ticket = select_ticket_for_loop(conn, ticket_id)

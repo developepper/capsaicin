@@ -15,6 +15,7 @@ from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
 from capsaicin.diff import capture_diff, persist_run_diff
+from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.orchestrator import (
     await_human,
     check_cycle_limit,
@@ -27,7 +28,15 @@ from capsaicin.orchestrator import (
     start_run,
 )
 from capsaicin.prompts import build_implementer_prompt
-from capsaicin.queries import generate_id, load_criteria, load_open_findings, now_utc
+from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
+from capsaicin.queries import (
+    TICKET_COLUMNS,
+    generate_id,
+    load_criteria,
+    load_open_findings,
+    load_ticket,
+    now_utc,
+)
 from capsaicin.state_machine import transition_ticket
 
 
@@ -47,26 +56,14 @@ def select_ticket(conn: sqlite3.Connection, ticket_id: str | None = None) -> dic
     Raises ``ValueError`` if no eligible ticket is found.
     """
     if ticket_id:
-        row = conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"Ticket '{ticket_id}' not found.")
-        if row["status"] not in ("ready", "revise"):
-            raise ValueError(
-                f"Ticket '{ticket_id}' is in '{row['status']}' status; "
-                "expected 'ready' or 'revise'."
-            )
-        return dict(row)
+        ticket = load_ticket(conn, ticket_id)
+        if ticket["status"] not in ("ready", "revise"):
+            raise InvalidStatusError(ticket_id, ticket["status"], ("ready", "revise"))
+        return ticket
 
     # Auto-select: next ready ticket with all deps done, ordered by created_at
     rows = conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt, "
-        "created_at "
+        f"SELECT {TICKET_COLUMNS} "
         "FROM tickets WHERE status = 'ready' ORDER BY created_at"
     ).fetchall()
 
@@ -81,7 +78,7 @@ def select_ticket(conn: sqlite3.Connection, ticket_id: str | None = None) -> dic
         if all(d["status"] == "done" for d in deps):
             return dict(row)
 
-    raise ValueError(
+    raise NoEligibleTicketError(
         "No eligible ticket found (no 'ready' tickets with satisfied dependencies)."
     )
 
@@ -91,7 +88,7 @@ def select_ticket(conn: sqlite3.Connection, ticket_id: str | None = None) -> dic
 # ---------------------------------------------------------------------------
 
 
-def _insert_agent_run(
+def _insert_impl_run(
     conn: sqlite3.Connection,
     run_id: str,
     ticket_id: str,
@@ -119,7 +116,7 @@ def _insert_agent_run(
     conn.commit()
 
 
-def _update_agent_run(
+def _update_impl_run(
     conn: sqlite3.Connection,
     run_id: str,
     exit_status: str,
@@ -217,7 +214,7 @@ def run_implementation_pipeline(
     attempt_number = ticket_row["current_impl_attempt"]
 
     # --- Invoke adapter (with retry loop) ---
-    return _invoke_with_retries(
+    return invoke_impl_with_retries(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -229,7 +226,7 @@ def run_implementation_pipeline(
     )
 
 
-def _invoke_with_retries(
+def invoke_impl_with_retries(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -251,7 +248,7 @@ def _invoke_with_retries(
         ).fetchone()
         attempt_number = ticket_row["current_impl_attempt"]
 
-        result_status = _invoke_once(
+        outcome = _impl_invoke_once(
             conn=conn,
             project_id=project_id,
             ticket_id=ticket_id,
@@ -262,8 +259,8 @@ def _invoke_with_retries(
             log_path=log_path,
         )
 
-        if result_status != "_retry":
-            return result_status
+        if not outcome.should_retry:
+            return outcome.status
 
         # Check retry limit before looping
         if check_impl_retry_limit(conn, ticket_id, config.limits.max_impl_retries):
@@ -292,7 +289,7 @@ def _invoke_with_retries(
         increment_impl_attempt(conn, ticket_id)
 
 
-def _invoke_once(
+def _impl_invoke_once(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -301,8 +298,8 @@ def _invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
-) -> str:
-    """Single adapter invocation. Returns ticket status or '_retry'."""
+) -> PipelineOutcome:
+    """Single adapter invocation. Returns a PipelineOutcome."""
     run_id = generate_id()
 
     # Load context
@@ -338,7 +335,7 @@ def _invoke_once(
     )
 
     # Insert run record
-    _insert_agent_run(
+    _insert_impl_run(
         conn,
         run_id,
         ticket_id,
@@ -369,7 +366,7 @@ def _invoke_once(
     result = adapter.execute(run_request)
 
     # Update run record
-    _update_agent_run(
+    _update_impl_run(
         conn,
         run_id,
         exit_status=result.exit_status,
@@ -393,8 +390,8 @@ def _invoke_once(
             ),
         )
 
-    # Handle result
-    return _handle_run_result(
+    # Handle result — return PipelineOutcome
+    return handle_run_result(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -405,7 +402,7 @@ def _invoke_once(
     )
 
 
-def _handle_run_result(
+def handle_run_result(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -413,10 +410,10 @@ def _handle_run_result(
     exit_status: str,
     config: Config,
     log_path: str | Path | None = None,
-) -> str:
+) -> PipelineOutcome:
     """Process the adapter result and transition the ticket.
 
-    Returns the new ticket status, or '_retry' if the caller should retry.
+    Returns a ``PipelineOutcome`` — either a terminal status or a retry signal.
     """
     # Permission denied — route to human-gate without consuming retries
     if exit_status == "permission_denied":
@@ -440,7 +437,7 @@ def _handle_run_result(
                 run_id=run_id,
                 payload={"role": "implementer"},
             )
-        return "human-gate"
+        return PipelineOutcome.terminal("human-gate")
 
     if exit_status == "success":
         # Capture post-run diff
@@ -458,7 +455,7 @@ def _handle_run_result(
             )
             finish_run(conn, project_id)
             set_idle(conn, project_id)
-            return "in-review"
+            return PipelineOutcome.terminal("in-review")
         else:
             # Empty implementation
             transition_ticket(
@@ -472,7 +469,7 @@ def _handle_run_result(
             )
             finish_run(conn, project_id)
             await_human(conn, project_id)
-            return "human-gate"
+            return PipelineOutcome.terminal("human-gate")
 
     # Failure or timeout — signal retry
-    return "_retry"
+    return PipelineOutcome.retry(exit_status)

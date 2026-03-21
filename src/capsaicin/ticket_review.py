@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
+from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.criteria import update_criteria_from_review
 from capsaicin.diff import get_run_diff
 from capsaicin.orchestrator import (
@@ -26,11 +27,14 @@ from capsaicin.orchestrator import (
     start_run,
 )
 from capsaicin.prompts import build_reviewer_prompt
+from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
+    TICKET_COLUMNS,
     generate_id,
     get_impl_run_id,
     load_criteria,
     load_open_findings,
+    load_ticket,
     now_utc,
 )
 from capsaicin.reconciliation import reconcile_findings
@@ -61,31 +65,20 @@ def select_review_ticket(
     Raises ``ValueError`` if no eligible ticket is found.
     """
     if ticket_id:
-        row = conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"Ticket '{ticket_id}' not found.")
-        if row["status"] != "in-review":
-            raise ValueError(
-                f"Ticket '{ticket_id}' is in '{row['status']}' status; "
-                "expected 'in-review'."
-            )
-        return dict(row)
+        ticket = load_ticket(conn, ticket_id)
+        if ticket["status"] != "in-review":
+            raise InvalidStatusError(ticket_id, ticket["status"], "in-review")
+        return ticket
 
     # Auto-select: first in-review ticket by status_changed_at
     row = conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt "
+        f"SELECT {TICKET_COLUMNS} "
         "FROM tickets WHERE status = 'in-review' "
         "ORDER BY status_changed_at"
     ).fetchone()
 
     if row is None:
-        raise ValueError("No ticket found in 'in-review' status.")
+        raise NoEligibleTicketError("No ticket found in 'in-review' status.")
 
     return dict(row)
 
@@ -186,7 +179,7 @@ def run_review_pipeline(
     handle_drift(conn, impl_run_id, config.project.repo_path, allow_drift)
 
     # --- Invoke with retries ---
-    return _invoke_with_retries(
+    return invoke_review_with_retries(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -205,12 +198,12 @@ _RETRY_REASON_TO_BLOCKED = {
 }
 
 
-def _retry_reason_to_blocked_reason(reason: str) -> str:
+def retry_reason_to_blocked_reason(reason: str) -> str:
     """Map a retry failure reason to the appropriate blocked_reason."""
     return _RETRY_REASON_TO_BLOCKED.get(reason, f"reviewer_{reason}")
 
 
-def _invoke_with_retries(
+def invoke_review_with_retries(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -258,7 +251,7 @@ def _invoke_with_retries(
         ).fetchone()
         attempt_number = ticket_row["current_review_attempt"]
 
-        result_status = _invoke_once(
+        outcome = _review_invoke_once(
             conn=conn,
             project_id=project_id,
             ticket_id=ticket_id,
@@ -269,18 +262,15 @@ def _invoke_with_retries(
             log_path=log_path,
         )
 
-        if not result_status.startswith("_retry"):
-            return result_status
+        if not outcome.should_retry:
+            return outcome.status
 
-        # Extract the failure reason from the retry signal
-        last_retry_reason = (
-            result_status.split(":", 1)[1] if ":" in result_status else "unknown"
-        )
+        last_retry_reason = outcome.retry_reason or "unknown"
 
         # Check retry limit before looping
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):
             # Map the actual failure mode to the correct blocked_reason
-            blocked_reason = _retry_reason_to_blocked_reason(last_retry_reason)
+            blocked_reason = retry_reason_to_blocked_reason(last_retry_reason)
             transition_ticket(
                 conn,
                 ticket_id,
@@ -310,7 +300,7 @@ def _invoke_with_retries(
         is_retry = True
 
 
-def _invoke_once(
+def _review_invoke_once(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -319,8 +309,8 @@ def _invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
-) -> str:
-    """Single reviewer invocation. Returns ticket status or '_retry'."""
+) -> PipelineOutcome:
+    """Single reviewer invocation. Returns a PipelineOutcome."""
 
     run_id = generate_id()
 
@@ -418,7 +408,7 @@ def _invoke_once(
     # RUN_END is logged after classification so the payload reflects the
     # final run outcome (e.g. contract_violation), not the adapter's
     # initial exit_status.
-    outcome = _handle_review_result(
+    outcome = handle_review_result(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -431,7 +421,7 @@ def _invoke_once(
 
     if log_path:
         # Read the final classified exit_status from the DB, since
-        # _handle_review_result may have reclassified the run (e.g.
+        # handle_review_result may have reclassified the run (e.g.
         # contract_violation).
         final_row = conn.execute(
             "SELECT exit_status FROM agent_runs WHERE id = ?", (run_id,)
@@ -455,7 +445,7 @@ def _invoke_once(
     return outcome
 
 
-def _handle_review_result(
+def handle_review_result(
     conn: sqlite3.Connection,
     project_id: str,
     ticket_id: str,
@@ -464,10 +454,10 @@ def _handle_review_result(
     result,
     config: Config,
     log_path: str | Path | None = None,
-) -> str:
+) -> PipelineOutcome:
     """Process the reviewer result and transition the ticket.
 
-    Returns the new ticket status, or '_retry' if the caller should retry.
+    Returns a ``PipelineOutcome`` — either a terminal status or a retry signal.
     """
     # --- Contract violation check (T16) ---
     if result.exit_status == "success":
@@ -492,7 +482,7 @@ def _handle_review_result(
                     run_id=run_id,
                     payload={"reason": "reviewer modified tracked files"},
                 )
-            return "_retry:contract_violation"
+            return PipelineOutcome.retry("contract_violation")
 
     # --- Permission denied — route to human-gate without consuming retries ---
     if result.exit_status == "permission_denied":
@@ -516,7 +506,7 @@ def _handle_review_result(
                 run_id=run_id,
                 payload={"role": "reviewer"},
             )
-        return "human-gate"
+        return PipelineOutcome.terminal("human-gate")
 
     # --- Parse error (adapter already returned parse_error) ---
     if result.exit_status == "parse_error":
@@ -529,17 +519,17 @@ def _handle_review_result(
                 run_id=run_id,
                 payload={"reason": "review result validation failed"},
             )
-        return "_retry:parse_error"
+        return PipelineOutcome.retry("parse_error")
 
     # --- Failure or timeout ---
     if result.exit_status in ("failure", "timeout"):
-        return f"_retry:{result.exit_status}"
+        return PipelineOutcome.retry(result.exit_status)
 
     # --- Success with valid structured result ---
     review_result = result.structured_result
     if review_result is None:
         # Should not happen if adapter returned success, but be defensive
-        return "_retry:parse_error"
+        return PipelineOutcome.retry("parse_error")
 
     # --- Defense-in-depth: re-validate state-machine-critical invariants ---
     # The adapter should have validated these, but a non-Claude adapter or
@@ -556,7 +546,7 @@ def _handle_review_result(
                 run_id=run_id,
                 payload={"reason": "verdict:fail with no blocking findings"},
             )
-        return "_retry:parse_error"
+        return PipelineOutcome.retry("parse_error")
     if verdict == "pass" and has_blocking:
         if log_path:
             log_event(
@@ -567,7 +557,7 @@ def _handle_review_result(
                 run_id=run_id,
                 payload={"reason": "verdict:pass with blocking findings"},
             )
-        return "_retry:parse_error"
+        return PipelineOutcome.retry("parse_error")
 
     verdict = review_result.verdict
     confidence = review_result.confidence
@@ -610,7 +600,7 @@ def _handle_review_result(
                     ticket_id=ticket_id,
                     payload={"max_cycles": config.limits.max_cycles},
                 )
-            return "human-gate"
+            return PipelineOutcome.terminal("human-gate")
 
         transition_ticket(
             conn,
@@ -622,7 +612,7 @@ def _handle_review_result(
         )
         finish_run(conn, project_id)
         set_idle(conn, project_id)
-        return "revise"
+        return PipelineOutcome.terminal("revise")
 
     if verdict == "pass":
         if confidence == "low":
@@ -641,7 +631,7 @@ def _handle_review_result(
         )
         finish_run(conn, project_id)
         await_human(conn, project_id)
-        return "human-gate"
+        return PipelineOutcome.terminal("human-gate")
 
     if verdict == "escalate":
         transition_ticket(
@@ -655,10 +645,10 @@ def _handle_review_result(
         )
         finish_run(conn, project_id)
         await_human(conn, project_id)
-        return "human-gate"
+        return PipelineOutcome.terminal("human-gate")
 
     # Should not be reachable with valid verdicts, but be safe
-    return "_retry:parse_error"
+    return PipelineOutcome.retry("parse_error")
 
 
 def _is_first_cycle(conn: sqlite3.Connection, ticket_id: str) -> bool:

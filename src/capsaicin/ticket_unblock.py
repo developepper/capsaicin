@@ -37,18 +37,13 @@ def select_unblock_ticket(conn: sqlite3.Connection, ticket_id: str) -> dict:
     Returns a dict with ticket row data.
     Raises ``ValueError`` if the ticket is not found or not blocked.
     """
-    row = conn.execute(
-        "SELECT id, project_id, title, description, status, blocked_reason "
-        "FROM tickets WHERE id = ?",
-        (ticket_id,),
-    ).fetchone()
-    if row is None:
-        raise ValueError(f"Ticket '{ticket_id}' not found.")
-    if row["status"] != "blocked":
-        raise ValueError(
-            f"Ticket '{ticket_id}' is in '{row['status']}' status; expected 'blocked'."
-        )
-    return dict(row)
+    from capsaicin.errors import InvalidStatusError
+    from capsaicin.queries import load_ticket
+
+    ticket = load_ticket(conn, ticket_id)
+    if ticket["status"] != "blocked":
+        raise InvalidStatusError(ticket_id, ticket["status"], "blocked")
+    return ticket
 
 
 # ---------------------------------------------------------------------------

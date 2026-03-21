@@ -70,15 +70,9 @@ def add_ticket(env, title="Test ticket", desc="Do something", criteria=None):
 
 def get_ticket(conn, ticket_id):
     """Fetch a ticket row as a dict (superset of commonly needed columns)."""
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt, "
-            "gate_reason, blocked_reason "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-    )
+    from capsaicin.queries import load_ticket
+
+    return load_ticket(conn, ticket_id)
 
 
 def get_ticket_status(conn, ticket_id):

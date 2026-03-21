@@ -8,6 +8,11 @@ from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
 from capsaicin.diff import get_run_diff
 from capsaicin.orchestrator import get_state
+from capsaicin.errors import (
+    InvalidStatusError,
+    NoEligibleTicketError,
+    TicketNotFoundError,
+)
 from capsaicin.ticket_run import (
     run_implementation_pipeline,
     select_ticket,
@@ -104,15 +109,15 @@ class TestSelectTicket:
             "UPDATE tickets SET status = 'blocked' WHERE id = ?", (tid,)
         )
         env["conn"].commit()
-        with pytest.raises(ValueError, match="expected 'ready' or 'revise'"):
+        with pytest.raises(InvalidStatusError, match="expected 'ready' or 'revise'"):
             select_ticket(env["conn"], tid)
 
     def test_explicit_ticket_not_found(self, project_env):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(TicketNotFoundError, match="not found"):
             select_ticket(project_env["conn"], "nonexistent")
 
     def test_no_eligible_tickets(self, project_env):
-        with pytest.raises(ValueError, match="No eligible ticket"):
+        with pytest.raises(NoEligibleTicketError, match="No eligible ticket"):
             select_ticket(project_env["conn"])
 
     def test_revise_status_accepted(self, project_env):

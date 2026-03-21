@@ -6,11 +6,8 @@ Tracks active ticket/run and manages cycle/retry counters on tickets.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
 
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+from capsaicin.queries import now_utc
 
 
 def _assert_updated(cursor: sqlite3.Cursor, entity: str, id_value: str) -> None:
@@ -32,7 +29,7 @@ def start_run(
         "UPDATE orchestrator_state "
         "SET active_ticket_id = ?, active_run_id = ?, status = 'running', updated_at = ? "
         "WHERE project_id = ?",
-        (ticket_id, run_id, _now(), project_id),
+        (ticket_id, run_id, now_utc(), project_id),
     )
     _assert_updated(cur, "Project", project_id)
     conn.commit()
@@ -44,7 +41,7 @@ def finish_run(conn: sqlite3.Connection, project_id: str) -> None:
         "UPDATE orchestrator_state "
         "SET active_run_id = NULL, updated_at = ? "
         "WHERE project_id = ?",
-        (_now(), project_id),
+        (now_utc(), project_id),
     )
     _assert_updated(cur, "Project", project_id)
     conn.commit()
@@ -56,7 +53,7 @@ def await_human(conn: sqlite3.Connection, project_id: str) -> None:
         "UPDATE orchestrator_state "
         "SET status = 'awaiting_human', updated_at = ? "
         "WHERE project_id = ?",
-        (_now(), project_id),
+        (now_utc(), project_id),
     )
     _assert_updated(cur, "Project", project_id)
     conn.commit()
@@ -68,7 +65,7 @@ def set_idle(conn: sqlite3.Connection, project_id: str) -> None:
         "UPDATE orchestrator_state "
         "SET status = 'idle', active_ticket_id = NULL, active_run_id = NULL, updated_at = ? "
         "WHERE project_id = ?",
-        (_now(), project_id),
+        (now_utc(), project_id),
     )
     _assert_updated(cur, "Project", project_id)
     conn.commit()
@@ -103,7 +100,7 @@ def init_cycle(conn: sqlite3.Connection, ticket_id: str) -> None:
         "UPDATE tickets "
         "SET current_cycle = 1, current_impl_attempt = 1, current_review_attempt = 1, "
         "updated_at = ? WHERE id = ?",
-        (_now(), ticket_id),
+        (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
     conn.commit()
@@ -115,7 +112,7 @@ def increment_cycle(conn: sqlite3.Connection, ticket_id: str) -> None:
         "UPDATE tickets "
         "SET current_cycle = current_cycle + 1, current_impl_attempt = 1, "
         "updated_at = ? WHERE id = ?",
-        (_now(), ticket_id),
+        (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
     conn.commit()
@@ -127,7 +124,7 @@ def increment_impl_attempt(conn: sqlite3.Connection, ticket_id: str) -> None:
         "UPDATE tickets "
         "SET current_impl_attempt = current_impl_attempt + 1, updated_at = ? "
         "WHERE id = ?",
-        (_now(), ticket_id),
+        (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
     conn.commit()
@@ -139,7 +136,7 @@ def increment_review_attempt(conn: sqlite3.Connection, ticket_id: str) -> None:
         "UPDATE tickets "
         "SET current_review_attempt = current_review_attempt + 1, updated_at = ? "
         "WHERE id = ?",
-        (_now(), ticket_id),
+        (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
     conn.commit()
@@ -151,7 +148,7 @@ def reset_counters(conn: sqlite3.Connection, ticket_id: str) -> None:
         "UPDATE tickets "
         "SET current_cycle = 0, current_impl_attempt = 1, current_review_attempt = 1, "
         "updated_at = ? WHERE id = ?",
-        (_now(), ticket_id),
+        (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
     conn.commit()

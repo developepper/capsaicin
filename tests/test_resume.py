@@ -13,9 +13,6 @@ from capsaicin.adapters.types import (
 )
 from capsaicin.orchestrator import get_state
 from capsaicin.resume import (
-    _handle_finished_impl_run,
-    _handle_finished_review_run,
-    _handle_interrupted_run,
     build_human_gate_context,
     get_active_run,
     resume_pipeline,
