@@ -9,6 +9,17 @@ implementer runs were persisted as `exit_status: success` and routed to
 `empty_implementation` even though Claude Code reported repeated
 `permission_denials` and explicitly asked for write access in its result text.
 
+Design decision:
+
+- `permission_denied` is a first-class run outcome
+- permission-denied runs route to `human-gate`
+- `gate_reason = 'permission_denied'`
+- no automatic retries are consumed for this outcome
+
+This applies consistently to both implementer and reviewer runs. The run-level
+outcome explains what happened; the ticket-level human gate explains that human
+action is required before work can continue.
+
 ## Execution Strategy
 
 This epic should start with the adapter and schema signals that distinguish a
@@ -28,6 +39,8 @@ Key sequencing decisions:
 - T06 is independent and can land at any point in the epic.
 - T07 should follow T02/T03 so it renders the new diagnostics rather than
   inventing a second format.
+- T01 should also copy the captured Claude envelopes from `/tmp` into
+  `tests/fixtures/` so later tickets can rely on stable in-repo fixtures.
 
 ## Phased Roadmap
 
