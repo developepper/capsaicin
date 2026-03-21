@@ -31,6 +31,26 @@ Suggested MVP sequence:
 5. `capsaicin status` to render current workflow state
 6. planning-loop support and GitHub export after the core loop works
 
+## Post-MVP Direction
+
+The CLI remains the canonical operator interface and automation surface, but it
+is no longer the only intended surface after MVP.
+
+Near-term priorities after the implementation-loop MVP:
+
+1. reliability and diagnostics improvements for the existing commands and
+   adapters
+2. a local UI that exposes the same implementation-loop state and actions
+
+Planned after that:
+
+1. planning-loop automation
+2. GitHub handoff and PR automation
+3. later multi-ticket orchestration
+
+The initial UI should focus on the existing implementation loop rather than
+introducing a separate workflow model.
+
 ## Command Contract
 
 ### `capsaicin init`
@@ -249,7 +269,7 @@ Behavior:
 MVP note:
 
 - `pr-ready` is a terminal human-handoff state for MVP
-- PR creation and merge remain manual
+- PR creation and merge remain manual until post-MVP GitHub automation lands
 
 ### `capsaicin ticket revise`
 

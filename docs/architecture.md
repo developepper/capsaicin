@@ -114,6 +114,11 @@ For MVP, rendered files under `renders/` can be deferred even though the
 directory exists. Operator-facing inspection can happen through stdout and
 `activity.log` until the orchestration core is proven.
 
+Post-MVP, the preferred direction is to add a local operator UI on top of the
+same database and filesystem state rather than inventing a separate state
+system. The CLI remains important, but the UI should become the easier primary
+inspection and control surface for the implementation loop.
+
 ## Runtime And Packaging
 
 The implementation language is not chosen finally yet, but the current
@@ -159,3 +164,17 @@ Suggested defaults:
 - any blocked state requires a human decision before progression
 
 The system should optimize for good outcomes, not infinite polishing.
+
+## Post-MVP Priorities
+
+After the implementation-loop MVP, the priority order is:
+
+1. reliability and diagnostics for agent execution, setup, and operator
+   visibility
+2. a local UI for the existing implementation loop
+3. planning-loop automation
+4. GitHub export and PR handoff automation
+5. cost controls, analytics, and later multi-ticket orchestration
+
+This sequencing favors operator trust and ease of use before expanding the
+scope of automation.
