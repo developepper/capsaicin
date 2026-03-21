@@ -10,7 +10,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from capsaicin.activity_log import log_event
+from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
@@ -388,10 +388,11 @@ def _invoke_once(
             project_id=project_id,
             ticket_id=ticket_id,
             run_id=run_id,
-            payload={
-                "exit_status": result.exit_status,
-                "duration": result.duration_seconds,
-            },
+            payload=build_run_end_payload(
+                result.exit_status,
+                result.duration_seconds,
+                result.adapter_metadata,
+            ),
         )
 
     # Handle result
