@@ -23,8 +23,8 @@ This file should answer two questions:
 
 The current intended order for the next major work streams is:
 
-1. reliability and diagnostics for the implementation loop
-2. a UI for the existing implementation loop
+1. ~~reliability and diagnostics for the implementation loop~~ (done — Epic 02)
+2. ~~a UI for the existing implementation loop~~ (done — Epic 03)
 3. planning-loop automation
 4. GitHub handoff and PR automation
 
@@ -50,60 +50,33 @@ Candidate areas:
 
 ## UI For The Existing Implementation Loop
 
-Add a local operator UI on top of the existing database and filesystem state.
-
-The initial UI should focus on the current implementation loop rather than
-introducing a different workflow model.
-
-This work is now scoped as
+A local operator UI is now implemented as part of
 [epic-03-ui-for-implementation-loop](epic-03-ui-for-implementation-loop/).
 
-Preferred delivery model:
+The UI launches from `capsaicin ui`, runs a built-in HTTP server on
+`127.0.0.1`, and ships inside the Python package with no separate app install
+or build step.
 
-- launch from `capsaicin ui`
-- start a built-in local web server bound to `127.0.0.1`
-- choose an available port automatically unless `--port` is provided
-- open the browser automatically by default, with a `--no-open` option
-- ship inside the Python package with no separate app install, Node build step,
-  or Docker requirement
+What was delivered:
 
-Preferred architecture:
+- shared service and query boundaries between CLI and web (`app/commands/`,
+  `app/queries/`)
+- Starlette ASGI runtime with Jinja2 templates and vendored HTMX
+- project dashboard with orchestrator state, inbox, queue, blocked tickets,
+  next runnable ticket, and recent activity
+- ticket detail with acceptance criteria, findings, diagnostics, diff, run
+  history, and transition history
+- human-gate action forms for approve, revise, defer, and unblock
+- workflow triggers for run, review, loop, and resume
+- SSE live updates for dashboard and ticket detail
+- `python-multipart` dependency for form parsing
 
-- Python web layer in the existing repo and package
-- server-rendered UI over the existing SQLite/config state
-- shared application services between CLI and UI rather than subprocess-driven
-  UI actions
-- HTMX plus Jinja2-style templating as the default frontend approach
-- Starlette or FastAPI as the HTTP layer, with a bias toward the smallest
-  framework that cleanly supports routing, templates, static files, and SSE
-- SSE for narrowly scoped live updates such as active runs, activity feed
-  updates, and human-gate arrival
+What is intentionally not included:
 
-Initial UI priorities:
-
-1. dashboard with project overview, queue state, and active work
-2. ticket detail with acceptance criteria, findings, run history, and diff
-3. human-gate screen with clear approve, revise, and defer actions
-4. activity feed and run diagnostics, including cost, permission denials, and
-   short agent result text
-
-What to avoid initially:
-
-- no separate frontend build pipeline
-- no React or SPA-first architecture unless later requirements force it
-- no ticket-creation UI
-- no auth or multi-user assumptions
-- no shelling out to CLI commands from the web layer when shared Python
-  services can be called directly
-
-Candidate areas:
-
-- project overview and ticket queue
-- active ticket and run state
-- human-gate inbox
-- findings, acceptance criteria, and decision history
-- run history, costs, and diagnostics
-- actions for run, review, approve, revise, defer, unblock, loop, and resume
+- ticket-creation UI
+- auth, remote access, or multi-user support
+- SPA or frontend build pipeline
+- GitHub integration UI
 
 ## Planning Loop
 
