@@ -6,8 +6,9 @@ Enforces ticket transition rules from state-machine.md as a reusable module.
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
 from pathlib import Path
+
+from capsaicin.queries import now_utc
 
 from capsaicin.activity_log import log_event
 
@@ -125,7 +126,7 @@ def transition_ticket(
                 f"Ticket '{ticket_id}' has unsatisfied dependencies."
             )
 
-    now = datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
+    now = now_utc()
 
     # Build the UPDATE statement
     updates = {

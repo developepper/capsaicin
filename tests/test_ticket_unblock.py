@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.errors import InvalidStatusError, TicketNotFoundError
 from capsaicin.orchestrator import get_state
 from capsaicin.ticket_unblock import select_unblock_ticket, unblock_ticket
 from tests.conftest import add_ticket, get_ticket, get_ticket_status
@@ -49,11 +50,11 @@ class TestSelectUnblockTicket:
     def test_wrong_status(self, project_env):
         env = project_env
         tid = add_ticket(env, criteria=["criterion 1"])
-        with pytest.raises(ValueError, match="expected 'blocked'"):
+        with pytest.raises(InvalidStatusError, match="expected 'blocked'"):
             select_unblock_ticket(env["conn"], tid)
 
     def test_not_found(self, project_env):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(TicketNotFoundError, match="not found"):
             select_unblock_ticket(project_env["conn"], "nonexistent")
 
 

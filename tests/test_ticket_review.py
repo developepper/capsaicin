@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.errors import (
+    InvalidStatusError,
+    NoEligibleTicketError,
+    TicketNotFoundError,
+)
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import (
     Finding,
@@ -157,15 +162,15 @@ class TestSelectReviewTicket:
     def test_explicit_ticket_wrong_status(self, project_env):
         env = project_env
         tid = add_ticket(env)
-        with pytest.raises(ValueError, match="expected 'in-review'"):
+        with pytest.raises(InvalidStatusError, match="expected 'in-review'"):
             select_review_ticket(env["conn"], tid)
 
     def test_explicit_ticket_not_found(self, project_env):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(TicketNotFoundError, match="not found"):
             select_review_ticket(project_env["conn"], "nonexistent")
 
     def test_no_in_review_tickets(self, project_env):
-        with pytest.raises(ValueError, match="No ticket found"):
+        with pytest.raises(NoEligibleTicketError, match="No ticket found"):
             select_review_ticket(project_env["conn"])
 
 

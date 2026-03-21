@@ -52,29 +52,24 @@ def select_approve_ticket(
     Returns a dict with ticket row data.
     Raises ``ValueError`` if no eligible ticket is found.
     """
+    from capsaicin.queries import TICKET_COLUMNS, load_ticket
+
+    from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
+
     if ticket_id:
-        row = conn.execute(
-            "SELECT id, project_id, title, description, status, gate_reason "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-        if row is None:
-            raise ValueError(f"Ticket '{ticket_id}' not found.")
-        if row["status"] != "human-gate":
-            raise ValueError(
-                f"Ticket '{ticket_id}' is in '{row['status']}' status; "
-                "expected 'human-gate'."
-            )
-        return dict(row)
+        ticket = load_ticket(conn, ticket_id)
+        if ticket["status"] != "human-gate":
+            raise InvalidStatusError(ticket_id, ticket["status"], "human-gate")
+        return ticket
 
     row = conn.execute(
-        "SELECT id, project_id, title, description, status, gate_reason "
+        f"SELECT {TICKET_COLUMNS} "
         "FROM tickets WHERE status = 'human-gate' "
         "ORDER BY status_changed_at"
     ).fetchone()
 
     if row is None:
-        raise ValueError("No ticket found in 'human-gate' status.")
+        raise NoEligibleTicketError("No ticket found in 'human-gate' status.")
 
     return dict(row)
 

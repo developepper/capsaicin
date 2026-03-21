@@ -11,6 +11,7 @@ from pathlib import Path
 
 from capsaicin.activity_log import log_event
 from capsaicin.adapters.base import BaseAdapter
+from capsaicin.errors import CapsaicinError
 from capsaicin.adapters.types import ReviewResult, RunResult
 from capsaicin.config import Config
 from capsaicin.orchestrator import (
@@ -25,12 +26,12 @@ from capsaicin.orchestrator import (
 from capsaicin.queries import get_impl_run_id, now_utc
 from capsaicin.state_machine import transition_ticket
 from capsaicin.ticket_review import (
-    _handle_review_result,
-    _invoke_with_retries as _review_invoke_with_retries,
+    handle_review_result,
+    invoke_review_with_retries,
 )
 from capsaicin.ticket_run import (
-    _handle_run_result,
-    _invoke_with_retries as _impl_invoke_with_retries,
+    handle_run_result,
+    invoke_impl_with_retries,
     run_implementation_pipeline,
     select_ticket,
 )
@@ -51,17 +52,15 @@ def get_active_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
 
 
 def get_active_ticket(conn: sqlite3.Connection, ticket_id: str) -> dict | None:
-    """Load a ticket by ID."""
-    row = conn.execute(
-        "SELECT id, project_id, title, description, status, gate_reason, "
-        "blocked_reason, current_cycle, current_impl_attempt, "
-        "current_review_attempt "
-        "FROM tickets WHERE id = ?",
-        (ticket_id,),
-    ).fetchone()
-    if row is None:
+    """Load a ticket by ID, returning None if not found."""
+    from capsaicin.queries import load_ticket
+
+    from capsaicin.errors import TicketNotFoundError
+
+    try:
+        return load_ticket(conn, ticket_id)
+    except TicketNotFoundError:
         return None
-    return dict(row)
 
 
 def _reconstruct_run_result(run: dict) -> RunResult:
@@ -142,7 +141,7 @@ def _handle_interrupted_run(
             "SELECT current_cycle FROM tickets WHERE id = ?",
             (ticket_id,),
         ).fetchone()
-        return _impl_invoke_with_retries(
+        return invoke_impl_with_retries(
             conn=conn,
             project_id=project_id,
             ticket_id=ticket_id,
@@ -169,7 +168,7 @@ def _handle_interrupted_run(
 
         # Retry: re-invoke the reviewer adapter
         impl_run_id = get_impl_run_id(conn, ticket_id)
-        return _review_invoke_with_retries(
+        return invoke_review_with_retries(
             conn=conn,
             project_id=project_id,
             ticket_id=ticket_id,
@@ -206,7 +205,7 @@ def _handle_finished_impl_run(
         set_idle(conn, project_id)
         return ticket["status"]
 
-    result_status = _handle_run_result(
+    outcome = handle_run_result(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -216,9 +215,8 @@ def _handle_finished_impl_run(
         log_path=log_path,
     )
 
-    # _handle_run_result returns '_retry' for failures — in resume context
-    # we treat this as needing a fresh run (set idle so user can re-run)
-    if result_status == "_retry":
+    # Retry outcomes in resume context mean we need a fresh run
+    if outcome.should_retry:
         increment_impl_attempt(conn, ticket_id)
         if check_impl_retry_limit(conn, ticket_id, config.limits.max_impl_retries):
             transition_ticket(
@@ -237,7 +235,7 @@ def _handle_finished_impl_run(
         set_idle(conn, project_id)
         return "implementing"
 
-    return result_status
+    return outcome.status
 
 
 def _handle_finished_review_run(
@@ -265,7 +263,7 @@ def _handle_finished_review_run(
     impl_run_id = get_impl_run_id(conn, ticket_id)
     result = _reconstruct_run_result(run)
 
-    result_status = _handle_review_result(
+    outcome = handle_review_result(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -276,17 +274,14 @@ def _handle_finished_review_run(
         log_path=log_path,
     )
 
-    # _handle_review_result returns '_retry:<reason>' for failures — in resume
-    # context we treat this as needing a fresh review (set idle so user can re-run)
-    if result_status.startswith("_retry"):
-        retry_reason = (
-            result_status.split(":", 1)[1] if ":" in result_status else "unknown"
-        )
+    # Retry outcomes in resume context mean we need a fresh review
+    if outcome.should_retry:
+        retry_reason = outcome.retry_reason or "unknown"
         increment_review_attempt(conn, ticket_id)
         if check_review_retry_limit(conn, ticket_id, config.limits.max_review_retries):
-            from capsaicin.ticket_review import _retry_reason_to_blocked_reason
+            from capsaicin.ticket_review import retry_reason_to_blocked_reason
 
-            blocked_reason = _retry_reason_to_blocked_reason(retry_reason)
+            blocked_reason = retry_reason_to_blocked_reason(retry_reason)
             transition_ticket(
                 conn,
                 ticket_id,
@@ -303,7 +298,7 @@ def _handle_finished_review_run(
         set_idle(conn, project_id)
         return "in-review"
 
-    return result_status
+    return outcome.status
 
 
 def build_human_gate_context(conn: sqlite3.Connection, ticket_id: str) -> str:
@@ -493,7 +488,7 @@ def resume_pipeline(
     if orch_status == "idle":
         try:
             ticket = select_ticket(conn)
-        except ValueError as e:
+        except (ValueError, CapsaicinError) as e:
             return ("idle", str(e))
 
         final_status = run_implementation_pipeline(

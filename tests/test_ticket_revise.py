@@ -4,6 +4,11 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.errors import (
+    InvalidStatusError,
+    NoEligibleTicketError,
+    TicketNotFoundError,
+)
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import ReviewResult, RunRequest, RunResult, ScopeReviewed
 from capsaicin.orchestrator import get_state
@@ -97,15 +102,15 @@ class TestSelectReviseTicket:
     def test_wrong_status(self, project_env):
         env = project_env
         tid = add_ticket(env, criteria=["criterion 1"])
-        with pytest.raises(ValueError, match="expected 'human-gate'"):
+        with pytest.raises(InvalidStatusError, match="expected 'human-gate'"):
             select_revise_ticket(env["conn"], tid)
 
     def test_not_found(self, project_env):
-        with pytest.raises(ValueError, match="not found"):
+        with pytest.raises(TicketNotFoundError, match="not found"):
             select_revise_ticket(project_env["conn"], "nonexistent")
 
     def test_no_human_gate_tickets(self, project_env):
-        with pytest.raises(ValueError, match="No ticket found"):
+        with pytest.raises(NoEligibleTicketError, match="No ticket found"):
             select_revise_ticket(project_env["conn"])
 
 

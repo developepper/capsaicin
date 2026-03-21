@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import json
+import sqlite3
 import tomllib
 from dataclasses import dataclass, field
 from pathlib import Path
@@ -175,15 +177,12 @@ def config_to_snapshot(config: Config) -> dict:
     }
 
 
-def refresh_config_snapshot(conn, config: Config) -> None:
+def refresh_config_snapshot(conn: sqlite3.Connection, config: Config) -> None:
     """Refresh the projects.config DB snapshot from the current Config.
 
     Per configuration.md, config.toml on disk is the source of truth and
     the DB snapshot is refreshed on each command invocation.
     """
-    import json
-    import sqlite3
-
     snapshot = json.dumps(config_to_snapshot(config))
     conn.execute("UPDATE projects SET config = ?", (snapshot,))
     conn.commit()

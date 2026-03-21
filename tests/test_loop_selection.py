@@ -16,6 +16,7 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.errors import NoEligibleTicketError
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
 from capsaicin.loop import run_loop, select_ticket_for_loop
@@ -146,7 +147,7 @@ class TestSelectTicketForLoop:
 
     def test_no_eligible_tickets(self, project_env):
         """No ready or revise tickets should raise ValueError."""
-        with pytest.raises(ValueError, match="No eligible ticket"):
+        with pytest.raises(NoEligibleTicketError, match="No eligible ticket"):
             select_ticket_for_loop(project_env["conn"])
 
 
@@ -162,7 +163,7 @@ class TestTicketRunSelectionUnchanged:
         tid = add_ticket(env, "Revise only")
         _set_status(env["conn"], tid, "revise", current_cycle=1)
 
-        with pytest.raises(ValueError, match="No eligible ticket"):
+        with pytest.raises(NoEligibleTicketError, match="No eligible ticket"):
             select_ticket(env["conn"])
 
 

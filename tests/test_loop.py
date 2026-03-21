@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.errors import NoEligibleTicketError
 from capsaicin.adapters.types import (
     CriterionChecked,
     Finding,
@@ -370,7 +371,7 @@ class TestLoopAutoSelect:
     def test_no_eligible_ticket(self, project_env):
         env = project_env
         adapter = MockAdapter()
-        with pytest.raises(ValueError, match="No eligible ticket"):
+        with pytest.raises(NoEligibleTicketError, match="No eligible ticket"):
             run_loop(
                 env["conn"],
                 env["project_id"],
