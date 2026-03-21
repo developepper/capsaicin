@@ -1,5 +1,7 @@
 # Epic 02: Reliability And Diagnostics
 
+**Status**: Complete
+
 Improve operator trust in the implementation loop by surfacing blocked agent
 execution clearly, validating local setup before expensive runs, and making the
 human-gate experience more diagnostic.
