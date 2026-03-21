@@ -246,9 +246,7 @@ def check_claude_permissions(repo_path: str | Path) -> CheckResult:
             name="claude_permissions",
             status="fail",
             message=f"Missing required tool permission(s): {missing_str}",
-            detail=(
-                f"Add {missing_str} to permissions.allow in {settings_path}"
-            ),
+            detail=(f"Add {missing_str} to permissions.allow in {settings_path}"),
         )
 
     return CheckResult(

@@ -154,12 +154,18 @@ class PermissionDeniedAdapter(BaseAdapter):
             adapter_metadata={
                 "total_cost_usd": 0.85,
                 "permission_denials": [
-                    {"tool_name": "Edit", "tool_use_id": "t1",
-                     "tool_input": {"file_path": "/app/main.py"}},
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t1",
+                        "tool_input": {"file_path": "/app/main.py"},
+                    },
                 ],
                 "normalized_denials": [
-                    {"tool_name": "Edit", "tool_use_id": "t1",
-                     "file_path": "/app/main.py"},
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t1",
+                        "file_path": "/app/main.py",
+                    },
                 ],
             },
         )
@@ -313,16 +319,23 @@ def project_env(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "impl.txt").write_text("original\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
-        ["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True,
+        ["git", "commit", "-m", "init"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
     project_dir = init_project("test-proj", str(repo))
@@ -349,11 +362,14 @@ def _add_ticket(env):
 
 
 def _get_ticket(conn, tid):
-    return dict(conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt "
-        "FROM tickets WHERE id = ?", (tid,),
-    ).fetchone())
+    return dict(
+        conn.execute(
+            "SELECT id, project_id, title, description, status, "
+            "current_cycle, current_impl_attempt, current_review_attempt "
+            "FROM tickets WHERE id = ?",
+            (tid,),
+        ).fetchone()
+    )
 
 
 def _parse_run_end_payloads(log_path: Path) -> list[dict]:
@@ -507,7 +523,9 @@ class TestActivityLogReviewerPermissionDenied:
         )
 
         payloads = _parse_run_end_payloads(env["log_path"])
-        reviewer_payloads = [p for p in payloads if p["exit_status"] == "permission_denied"]
+        reviewer_payloads = [
+            p for p in payloads if p["exit_status"] == "permission_denied"
+        ]
         assert len(reviewer_payloads) == 1
         p = reviewer_payloads[0]
         assert p["total_cost_usd"] == 0.03

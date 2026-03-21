@@ -76,12 +76,21 @@ class PermissionDeniedAdapter(BaseAdapter):
             "result": "Please grant write permission so I can proceed.",
             "is_error": False,
             "permission_denials": [
-                {"tool_name": "Edit", "tool_use_id": "t1",
-                 "tool_input": {"file_path": "/app/main.py"}},
-                {"tool_name": "Edit", "tool_use_id": "t2",
-                 "tool_input": {"file_path": "/app/utils.py"}},
-                {"tool_name": "Bash", "tool_use_id": "t3",
-                 "tool_input": {"command": "mkdir build"}},
+                {
+                    "tool_name": "Edit",
+                    "tool_use_id": "t1",
+                    "tool_input": {"file_path": "/app/main.py"},
+                },
+                {
+                    "tool_name": "Edit",
+                    "tool_use_id": "t2",
+                    "tool_input": {"file_path": "/app/utils.py"},
+                },
+                {
+                    "tool_name": "Bash",
+                    "tool_use_id": "t3",
+                    "tool_input": {"command": "mkdir build"},
+                },
             ],
         }
         return RunResult(
@@ -94,9 +103,21 @@ class PermissionDeniedAdapter(BaseAdapter):
             adapter_metadata={
                 "permission_denials": envelope["permission_denials"],
                 "normalized_denials": [
-                    {"tool_name": "Edit", "tool_use_id": "t1", "file_path": "/app/main.py"},
-                    {"tool_name": "Edit", "tool_use_id": "t2", "file_path": "/app/utils.py"},
-                    {"tool_name": "Bash", "tool_use_id": "t3", "command": "mkdir build"},
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t1",
+                        "file_path": "/app/main.py",
+                    },
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t2",
+                        "file_path": "/app/utils.py",
+                    },
+                    {
+                        "tool_name": "Bash",
+                        "tool_use_id": "t3",
+                        "command": "mkdir build",
+                    },
                 ],
             },
         )
@@ -129,17 +150,23 @@ def project_env(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "impl.txt").write_text("original\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "init"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
     project_dir = init_project("test-proj", str(repo))
@@ -201,7 +228,9 @@ class TestExtractResultText:
         assert _extract_result_text_from_raw(raw) == ""
 
     def test_extracts_from_real_fixture(self):
-        raw = (FIXTURES / "claude_envelope_permission_denied_edit_only.json").read_text()
+        raw = (
+            FIXTURES / "claude_envelope_permission_denied_edit_only.json"
+        ).read_text()
         text = _extract_result_text_from_raw(raw)
         assert "permission" in text.lower()
 
@@ -283,10 +312,12 @@ class TestBuildRunOutcomeMessage:
         ticket = _get_ticket(env["conn"], tid)
 
         # Build an envelope with result text
-        envelope = json.dumps({
-            "result": "I could not find any changes to make for this ticket.",
-            "is_error": False,
-        })
+        envelope = json.dumps(
+            {
+                "result": "I could not find any changes to make for this ticket.",
+                "is_error": False,
+            }
+        )
         adapter = MockAdapter(
             exit_status="success",
             result_text="I could not find any changes to make for this ticket.",
@@ -380,10 +411,12 @@ class TestHumanGateContextDiagnostics:
         tid = _add_ticket(env)
         ticket = _get_ticket(env["conn"], tid)
 
-        envelope = json.dumps({
-            "result": "No implementation needed for this ticket.",
-            "is_error": False,
-        })
+        envelope = json.dumps(
+            {
+                "result": "No implementation needed for this ticket.",
+                "is_error": False,
+            }
+        )
         adapter = MockAdapter(
             exit_status="success",
             result_text="No implementation needed for this ticket.",
@@ -435,10 +468,12 @@ class TestLoopStopDiagnostics:
         env = project_env
         tid = _add_ticket(env)
 
-        envelope = json.dumps({
-            "result": "Nothing to implement here.",
-            "is_error": False,
-        })
+        envelope = json.dumps(
+            {
+                "result": "Nothing to implement here.",
+                "is_error": False,
+            }
+        )
         adapter = MockAdapter(
             exit_status="success",
             result_text="Nothing to implement here.",

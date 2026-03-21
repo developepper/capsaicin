@@ -64,16 +64,23 @@ def project_env(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "t@t.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "T"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "impl.txt").write_text("original\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
-        ["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True,
+        ["git", "commit", "-m", "init"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
     project_dir = init_project("test-proj", str(repo))
@@ -150,12 +157,16 @@ class TestSelectTicketForLoop:
         tid2 = _add_ticket(env, "Second revise")
         # Set tid2 with earlier status_changed_at
         _set_status(
-            env["conn"], tid1, "revise",
+            env["conn"],
+            tid1,
+            "revise",
             current_cycle=1,
             status_changed_at="2024-01-02T00:00:00Z",
         )
         _set_status(
-            env["conn"], tid2, "revise",
+            env["conn"],
+            tid2,
+            "revise",
             current_cycle=1,
             status_changed_at="2024-01-01T00:00:00Z",
         )
@@ -305,8 +316,10 @@ class TestLoopWithRevise:
 
         # Should have worked on the revise ticket
         assert final_status == "human-gate"
-        row = env["conn"].execute(
-            "SELECT status FROM tickets WHERE id = ?", (revise_tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT status FROM tickets WHERE id = ?", (revise_tid,))
+            .fetchone()
+        )
         # Revise ticket should have been processed (now in human-gate)
         assert row["status"] == "human-gate"

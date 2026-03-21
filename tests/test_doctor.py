@@ -27,16 +27,23 @@ def clean_repo(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "t@t.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "T"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "f.txt").write_text("x")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
-        ["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True,
+        ["git", "commit", "-m", "init"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     claude_dir = repo / ".claude"
     claude_dir.mkdir()
@@ -142,4 +149,6 @@ class TestDoctorHelp:
         runner = CliRunner()
         result = runner.invoke(cli, ["doctor", "--help"])
         assert result.exit_code == 0
-        assert "preflight" in result.output.lower() or "validate" in result.output.lower()
+        assert (
+            "preflight" in result.output.lower() or "validate" in result.output.lower()
+        )

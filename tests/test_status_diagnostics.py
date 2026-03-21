@@ -41,10 +41,16 @@ class PermissionDeniedAdapter(BaseAdapter):
             "result": "Please grant write permission to proceed.",
             "is_error": False,
             "permission_denials": [
-                {"tool_name": "Edit", "tool_use_id": "t1",
-                 "tool_input": {"file_path": "/app/main.py"}},
-                {"tool_name": "Bash", "tool_use_id": "t2",
-                 "tool_input": {"command": "mkdir build"}},
+                {
+                    "tool_name": "Edit",
+                    "tool_use_id": "t1",
+                    "tool_input": {"file_path": "/app/main.py"},
+                },
+                {
+                    "tool_name": "Bash",
+                    "tool_use_id": "t2",
+                    "tool_input": {"command": "mkdir build"},
+                },
             ],
         }
         return RunResult(
@@ -58,10 +64,16 @@ class PermissionDeniedAdapter(BaseAdapter):
                 "total_cost_usd": 0.85,
                 "permission_denials": envelope["permission_denials"],
                 "normalized_denials": [
-                    {"tool_name": "Edit", "tool_use_id": "t1",
-                     "file_path": "/app/main.py"},
-                    {"tool_name": "Bash", "tool_use_id": "t2",
-                     "command": "mkdir build"},
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t1",
+                        "file_path": "/app/main.py",
+                    },
+                    {
+                        "tool_name": "Bash",
+                        "tool_use_id": "t2",
+                        "command": "mkdir build",
+                    },
                 ],
             },
         )
@@ -102,16 +114,23 @@ def project_env(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "t@t.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "T"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "impl.txt").write_text("original\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
-        ["git", "commit", "-m", "init"], cwd=repo, check=True, capture_output=True,
+        ["git", "commit", "-m", "init"],
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
     project_dir = init_project("test-proj", str(repo))
@@ -137,11 +156,14 @@ def _add_ticket(env, title="Test", desc="Do it"):
 
 
 def _get_ticket(conn, tid):
-    return dict(conn.execute(
-        "SELECT id, project_id, title, description, status, "
-        "current_cycle, current_impl_attempt, current_review_attempt "
-        "FROM tickets WHERE id = ?", (tid,),
-    ).fetchone())
+    return dict(
+        conn.execute(
+            "SELECT id, project_id, title, description, status, "
+            "current_cycle, current_impl_attempt, current_review_attempt "
+            "FROM tickets WHERE id = ?",
+            (tid,),
+        ).fetchone()
+    )
 
 
 # ---------------------------------------------------------------------------

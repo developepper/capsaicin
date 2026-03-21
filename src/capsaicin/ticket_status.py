@@ -330,9 +330,7 @@ def build_ticket_detail(
             if denial_sum:
                 lines.append(f"  Denials: {denial_sum}")
 
-            result_text = _extract_result_text_from_raw(
-                last_run.get("raw_stdout")
-            )
+            result_text = _extract_result_text_from_raw(last_run.get("raw_stdout"))
             if result_text:
                 lines.append(f"  Agent Text: {_truncate(result_text)}")
     else:

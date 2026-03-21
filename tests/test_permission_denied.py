@@ -99,7 +99,11 @@ class PermissionDeniedAdapter(BaseAdapter):
             raw_stderr="",
             adapter_metadata={
                 "permission_denials": [
-                    {"tool_name": "Edit", "tool_use_id": "t1", "tool_input": {"file_path": "/a.py"}}
+                    {
+                        "tool_name": "Edit",
+                        "tool_use_id": "t1",
+                        "tool_input": {"file_path": "/a.py"},
+                    }
                 ],
                 "normalized_denials": [
                     {"tool_name": "Edit", "tool_use_id": "t1", "file_path": "/a.py"}
@@ -115,7 +119,9 @@ class PermissionDeniedAdapter(BaseAdapter):
 
 class TestPermissionDenialDetection:
     def test_edit_only_fixture_returns_permission_denied(self):
-        envelope = (FIXTURES / "claude_envelope_permission_denied_edit_only.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_edit_only.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_request())
@@ -139,7 +145,9 @@ class TestPermissionDenialDetection:
             assert "tool_use_id" in entry
 
     def test_mixed_fixture_returns_permission_denied(self):
-        envelope = (FIXTURES / "claude_envelope_permission_denied_mixed.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_mixed.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_request())
@@ -169,7 +177,9 @@ class TestPermissionDenialDetection:
         assert result.exit_status == "success"
 
     def test_result_text_preserved_on_permission_denied(self):
-        envelope = (FIXTURES / "claude_envelope_permission_denied_edit_only.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_edit_only.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_request())
@@ -177,7 +187,9 @@ class TestPermissionDenialDetection:
 
     def test_reviewer_mode_with_permission_denied(self):
         """Permission denials override reviewer structured-output parsing."""
-        envelope = (FIXTURES / "claude_envelope_permission_denied_edit_only.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_edit_only.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
@@ -186,7 +198,9 @@ class TestPermissionDenialDetection:
 
     def test_repeated_denials_preserved_as_distinct_attempts(self):
         """Each denial attempt is kept, not deduplicated."""
-        envelope = (FIXTURES / "claude_envelope_permission_denied_edit_only.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_edit_only.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_request())
@@ -195,7 +209,9 @@ class TestPermissionDenialDetection:
         assert len(result.adapter_metadata["permission_denials"]) == 3
 
     def test_raw_envelope_preserved_on_permission_denied(self):
-        envelope = (FIXTURES / "claude_envelope_permission_denied_mixed.json").read_text()
+        envelope = (
+            FIXTURES / "claude_envelope_permission_denied_mixed.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_request())
@@ -214,12 +230,20 @@ class TestDenialNormalization:
             {
                 "tool_name": "Edit",
                 "tool_use_id": "t1",
-                "tool_input": {"file_path": "/a.py", "old_string": "x", "new_string": "y"},
+                "tool_input": {
+                    "file_path": "/a.py",
+                    "old_string": "x",
+                    "new_string": "y",
+                },
             }
         ]
         normalized = ClaudeCodeAdapter._normalize_denials(raw)
         assert len(normalized) == 1
-        assert normalized[0] == {"tool_name": "Edit", "tool_use_id": "t1", "file_path": "/a.py"}
+        assert normalized[0] == {
+            "tool_name": "Edit",
+            "tool_use_id": "t1",
+            "file_path": "/a.py",
+        }
 
     def test_write_normalization(self):
         raw = [
@@ -270,17 +294,23 @@ def project_env(tmp_path):
     subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "config", "user.email", "test@test.com"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     subprocess.run(
         ["git", "config", "user.name", "Test"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
     (repo / "impl.txt").write_text("original\n")
     subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
     subprocess.run(
         ["git", "commit", "-m", "init"],
-        cwd=repo, check=True, capture_output=True,
+        cwd=repo,
+        check=True,
+        capture_output=True,
     )
 
     project_dir = init_project("test-proj", str(repo))
@@ -334,9 +364,11 @@ class TestImplPermissionDeniedPipeline:
         )
 
         assert final == "human-gate"
-        row = env["conn"].execute(
-            "SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
         assert row["status"] == "human-gate"
         assert row["gate_reason"] == "permission_denied"
 
@@ -356,9 +388,11 @@ class TestImplPermissionDeniedPipeline:
         )
 
         # Only one run should exist (no retries)
-        runs = env["conn"].execute(
-            "SELECT * FROM agent_runs WHERE ticket_id = ?", (tid,)
-        ).fetchall()
+        runs = (
+            env["conn"]
+            .execute("SELECT * FROM agent_runs WHERE ticket_id = ?", (tid,))
+            .fetchall()
+        )
         assert len(runs) == 1
         assert runs[0]["exit_status"] == "permission_denied"
 
@@ -395,10 +429,15 @@ class TestImplPermissionDeniedPipeline:
             log_path=env["log_path"],
         )
 
-        run = env["conn"].execute(
-            "SELECT exit_status, adapter_metadata, finished_at "
-            "FROM agent_runs WHERE ticket_id = ?", (tid,)
-        ).fetchone()
+        run = (
+            env["conn"]
+            .execute(
+                "SELECT exit_status, adapter_metadata, finished_at "
+                "FROM agent_runs WHERE ticket_id = ?",
+                (tid,),
+            )
+            .fetchone()
+        )
         assert run["exit_status"] == "permission_denied"
         assert run["finished_at"] is not None
         meta = json.loads(run["adapter_metadata"])
@@ -437,10 +476,15 @@ class TestImplPermissionDeniedPipeline:
             log_path=env["log_path"],
         )
 
-        transitions = env["conn"].execute(
-            "SELECT from_status, to_status FROM state_transitions "
-            "WHERE ticket_id = ? ORDER BY id", (tid,)
-        ).fetchall()
+        transitions = (
+            env["conn"]
+            .execute(
+                "SELECT from_status, to_status FROM state_transitions "
+                "WHERE ticket_id = ? ORDER BY id",
+                (tid,),
+            )
+            .fetchall()
+        )
         statuses = [(t["from_status"], t["to_status"]) for t in transitions]
         assert ("ready", "implementing") in statuses
         assert ("implementing", "human-gate") in statuses
@@ -466,9 +510,11 @@ class TestSchemaAcceptsPermissionDenied:
             ("test-run-pd", tid),
         )
         env["conn"].commit()
-        row = env["conn"].execute(
-            "SELECT exit_status FROM agent_runs WHERE id = 'test-run-pd'"
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT exit_status FROM agent_runs WHERE id = 'test-run-pd'")
+            .fetchone()
+        )
         assert row["exit_status"] == "permission_denied"
 
     def test_gate_reason_permission_denied_accepted(self, project_env):
@@ -481,9 +527,11 @@ class TestSchemaAcceptsPermissionDenied:
             (tid,),
         )
         env["conn"].commit()
-        row = env["conn"].execute(
-            "SELECT gate_reason FROM tickets WHERE id = ?", (tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT gate_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
         assert row["gate_reason"] == "permission_denied"
 
 
@@ -510,7 +558,9 @@ class TestPermissionDeniedPrecedence:
 
     def test_permission_denied_with_nonzero_exit(self):
         """permission_denials should take precedence over non-zero exit code."""
-        envelope_str = (FIXTURES / "claude_envelope_permission_denied_mixed.json").read_text()
+        envelope_str = (
+            FIXTURES / "claude_envelope_permission_denied_mixed.json"
+        ).read_text()
         adapter = ClaudeCodeAdapter()
         with patch(
             "subprocess.run", side_effect=_mock_run(stdout=envelope_str, returncode=1)
@@ -547,9 +597,7 @@ class TestPermissionDeniedPrecedence:
     def test_nonzero_exit_without_denials_still_returns_failure(self):
         """Non-zero exit with no denials should still be failure."""
         adapter = ClaudeCodeAdapter()
-        with patch(
-            "subprocess.run", side_effect=_mock_run(stdout="{}", returncode=1)
-        ):
+        with patch("subprocess.run", side_effect=_mock_run(stdout="{}", returncode=1)):
             result = adapter.execute(_request())
         assert result.exit_status == "failure"
 
@@ -576,7 +624,11 @@ class PermissionDeniedReviewAdapter(BaseAdapter):
             raw_stderr="",
             adapter_metadata={
                 "permission_denials": [
-                    {"tool_name": "Bash", "tool_use_id": "t1", "tool_input": {"command": "ls"}}
+                    {
+                        "tool_name": "Bash",
+                        "tool_use_id": "t1",
+                        "tool_input": {"command": "ls"},
+                    }
                 ],
                 "normalized_denials": [
                     {"tool_name": "Bash", "tool_use_id": "t1", "command": "ls"}
@@ -651,9 +703,11 @@ class TestReviewerPermissionDeniedPipeline:
         )
 
         assert final == "human-gate"
-        row = env["conn"].execute(
-            "SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
         assert row["status"] == "human-gate"
         assert row["gate_reason"] == "permission_denied"
 
@@ -682,10 +736,14 @@ class TestReviewerPermissionDeniedPipeline:
         )
 
         # Only one reviewer run (the impl run + one review run total)
-        reviewer_runs = env["conn"].execute(
-            "SELECT * FROM agent_runs WHERE ticket_id = ? AND role = 'reviewer'",
-            (tid,),
-        ).fetchall()
+        reviewer_runs = (
+            env["conn"]
+            .execute(
+                "SELECT * FROM agent_runs WHERE ticket_id = ? AND role = 'reviewer'",
+                (tid,),
+            )
+            .fetchall()
+        )
         assert len(reviewer_runs) == 1
         assert reviewer_runs[0]["exit_status"] == "permission_denied"
 
@@ -770,10 +828,15 @@ class TestResumePermissionDeniedImpl:
         assert final == "human-gate"
 
         # Verify the run record
-        run = env["conn"].execute(
-            "SELECT id, exit_status, finished_at FROM agent_runs "
-            "WHERE ticket_id = ? AND role = 'implementer'", (tid,)
-        ).fetchone()
+        run = (
+            env["conn"]
+            .execute(
+                "SELECT id, exit_status, finished_at FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'implementer'",
+                (tid,),
+            )
+            .fetchone()
+        )
         assert run["exit_status"] == "permission_denied"
         assert run["finished_at"] is not None
 
@@ -790,13 +853,15 @@ class TestResumePermissionDeniedImpl:
         env["conn"].commit()
 
         run_dict = dict(
-            env["conn"].execute(
+            env["conn"]
+            .execute(
                 "SELECT id, ticket_id, role, mode, exit_status, verdict, "
                 "duration_seconds, raw_stdout, raw_stderr, structured_result, "
                 "adapter_metadata, started_at, finished_at "
                 "FROM agent_runs WHERE id = ?",
                 (run["id"],),
-            ).fetchone()
+            )
+            .fetchone()
         )
 
         final_status = _handle_finished_impl_run(
@@ -808,9 +873,11 @@ class TestResumePermissionDeniedImpl:
         )
 
         assert final_status == "human-gate"
-        row = env["conn"].execute(
-            "SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
         assert row["status"] == "human-gate"
         assert row["gate_reason"] == "permission_denied"
 
@@ -845,10 +912,15 @@ class TestResumePermissionDeniedReview:
         assert final == "human-gate"
 
         # Get the reviewer run record
-        review_run = env["conn"].execute(
-            "SELECT id, exit_status, finished_at FROM agent_runs "
-            "WHERE ticket_id = ? AND role = 'reviewer'", (tid,)
-        ).fetchone()
+        review_run = (
+            env["conn"]
+            .execute(
+                "SELECT id, exit_status, finished_at FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'reviewer'",
+                (tid,),
+            )
+            .fetchone()
+        )
         assert review_run["exit_status"] == "permission_denied"
         assert review_run["finished_at"] is not None
 
@@ -865,13 +937,15 @@ class TestResumePermissionDeniedReview:
         env["conn"].commit()
 
         run_dict = dict(
-            env["conn"].execute(
+            env["conn"]
+            .execute(
                 "SELECT id, ticket_id, role, mode, exit_status, verdict, "
                 "duration_seconds, raw_stdout, raw_stderr, structured_result, "
                 "adapter_metadata, started_at, finished_at "
                 "FROM agent_runs WHERE id = ?",
                 (review_run["id"],),
-            ).fetchone()
+            )
+            .fetchone()
         )
 
         final_status = _handle_finished_review_run(
@@ -883,8 +957,10 @@ class TestResumePermissionDeniedReview:
         )
 
         assert final_status == "human-gate"
-        row = env["conn"].execute(
-            "SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,)
-        ).fetchone()
+        row = (
+            env["conn"]
+            .execute("SELECT status, gate_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
         assert row["status"] == "human-gate"
         assert row["gate_reason"] == "permission_denied"

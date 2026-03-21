@@ -91,9 +91,7 @@ class TestCheckRepoPathExists:
 
 class TestCheckIsGitRepo:
     def test_git_repo(self, tmp_path):
-        subprocess.run(
-            ["git", "init"], cwd=tmp_path, check=True, capture_output=True
-        )
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
         result = check_is_git_repo(tmp_path)
         assert result.status == "pass"
 
@@ -114,16 +112,18 @@ class TestCheckIsGitRepo:
 
 class TestCheckWorkingTreeClean:
     def test_clean_tree(self, tmp_path):
-        subprocess.run(
-            ["git", "init"], cwd=tmp_path, check=True, capture_output=True
-        )
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
         subprocess.run(
             ["git", "config", "user.email", "t@t.com"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "T"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         (tmp_path / "f.txt").write_text("x")
         subprocess.run(
@@ -131,22 +131,26 @@ class TestCheckWorkingTreeClean:
         )
         subprocess.run(
             ["git", "commit", "-m", "init"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         result = check_working_tree_clean(tmp_path)
         assert result.status == "pass"
 
     def test_dirty_tree_is_warning(self, tmp_path):
-        subprocess.run(
-            ["git", "init"], cwd=tmp_path, check=True, capture_output=True
-        )
+        subprocess.run(["git", "init"], cwd=tmp_path, check=True, capture_output=True)
         subprocess.run(
             ["git", "config", "user.email", "t@t.com"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "T"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         (tmp_path / "f.txt").write_text("x")
         subprocess.run(
@@ -154,7 +158,9 @@ class TestCheckWorkingTreeClean:
         )
         subprocess.run(
             ["git", "commit", "-m", "init"],
-            cwd=tmp_path, check=True, capture_output=True,
+            cwd=tmp_path,
+            check=True,
+            capture_output=True,
         )
         # Make it dirty
         (tmp_path / "f.txt").write_text("changed")
@@ -302,18 +308,22 @@ class TestPreflightReport:
         assert not r.has_warnings
 
     def test_with_failure(self):
-        r = PreflightReport(checks=[
-            CheckResult(name="a", status="pass", message="ok"),
-            CheckResult(name="b", status="fail", message="bad"),
-        ])
+        r = PreflightReport(
+            checks=[
+                CheckResult(name="a", status="pass", message="ok"),
+                CheckResult(name="b", status="fail", message="bad"),
+            ]
+        )
         assert not r.passed
         assert len(r.failures) == 1
 
     def test_with_warning(self):
-        r = PreflightReport(checks=[
-            CheckResult(name="a", status="pass", message="ok"),
-            CheckResult(name="b", status="warn", message="hmm"),
-        ])
+        r = PreflightReport(
+            checks=[
+                CheckResult(name="a", status="pass", message="ok"),
+                CheckResult(name="b", status="warn", message="hmm"),
+            ]
+        )
         assert r.passed
         assert r.has_warnings
         assert len(r.warnings) == 1
@@ -329,24 +339,26 @@ class TestRunPreflight:
         """Full preflight on a valid git repo with Claude permissions."""
         repo = tmp_path / "repo"
         repo.mkdir()
-        subprocess.run(
-            ["git", "init"], cwd=repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "config", "user.email", "t@t.com"],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
         subprocess.run(
             ["git", "config", "user.name", "T"],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
         (repo / "f.txt").write_text("x")
-        subprocess.run(
-            ["git", "add", "."], cwd=repo, check=True, capture_output=True
-        )
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "init"],
-            cwd=repo, check=True, capture_output=True,
+            cwd=repo,
+            check=True,
+            capture_output=True,
         )
         claude_dir = repo / ".claude"
         claude_dir.mkdir()

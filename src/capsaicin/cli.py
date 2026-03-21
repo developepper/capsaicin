@@ -872,9 +872,7 @@ def doctor(repo_path, project_slug):
                 config = load_config(config_path)
                 adapter_command = config.implementer.command
             except ConfigError as e:
-                raise click.ClickException(
-                    f"Could not load project config: {e}"
-                )
+                raise click.ClickException(f"Could not load project config: {e}")
 
     report = run_preflight(repo_path, adapter_command=adapter_command)
 
@@ -892,9 +890,7 @@ def doctor(repo_path, project_slug):
     if report.passed and not report.has_warnings:
         click.echo("All checks passed.")
     elif report.passed:
-        click.echo(
-            f"All checks passed with {len(report.warnings)} warning(s)."
-        )
+        click.echo(f"All checks passed with {len(report.warnings)} warning(s).")
     else:
         click.echo(
             f"{len(report.failures)} check(s) failed. "
