@@ -1,6 +1,10 @@
 """Status rendering module (T25, T07).
 
 Renders project summary and ticket detail to stdout.
+
+Query functions in this module are reused by ``app.queries`` for
+structured read models.  The ``render_*`` functions and their legacy
+``build_*`` aliases format those models into CLI text output.
 """
 
 from __future__ import annotations
@@ -366,6 +370,195 @@ def build_ticket_detail(
         lines.append("")
         lines.append("Transition History:")
         transitions = get_transition_history(conn, ticket_id)
+        if transitions:
+            for t in transitions:
+                reason = f" ({t['reason']})" if t["reason"] else ""
+                lines.append(
+                    f"  [{t['created_at']}] {t['from_status']} -> {t['to_status']} "
+                    f"by {t['triggered_by']}{reason}"
+                )
+        else:
+            lines.append("  (none)")
+
+    return "\n".join(lines)
+
+
+# ---------------------------------------------------------------------------
+# Rendering entry points over structured query data
+# ---------------------------------------------------------------------------
+
+
+def render_dashboard(conn: sqlite3.Connection, project_id: str) -> str:
+    """Build a CLI-formatted dashboard from the structured query layer."""
+    from capsaicin.app.queries.dashboard import get_dashboard
+
+    data = get_dashboard(conn, project_id)
+
+    lines: list[str] = []
+    lines.append(
+        f"Project Summary ({data.total_tickets} "
+        f"ticket{'s' if data.total_tickets != 1 else ''})"
+    )
+    lines.append("")
+
+    if data.counts_by_status:
+        lines.append("Status Counts:")
+        for s in [
+            "ready", "implementing", "in-review", "revise",
+            "human-gate", "pr-ready", "blocked", "done",
+        ]:
+            if s in data.counts_by_status:
+                lines.append(f"  {s}: {data.counts_by_status[s]}")
+    else:
+        lines.append("  No tickets")
+
+    lines.append("")
+    if data.active_ticket:
+        lines.append(f"Active Ticket: {data.active_ticket['id']}")
+        lines.append(f"  Title: {data.active_ticket['title']}")
+        lines.append(f"  Status: {data.active_ticket['status']}")
+    else:
+        lines.append("Active Ticket: (none)")
+
+    if data.human_gate_tickets:
+        lines.append("")
+        lines.append("Awaiting Human Gate:")
+        for t in data.human_gate_tickets:
+            reason = t["gate_reason"] or "unknown"
+            lines.append(f"  {t['id']}: {t['title']} ({reason})")
+
+    if data.blocked_tickets:
+        lines.append("")
+        lines.append("Blocked:")
+        for t in data.blocked_tickets:
+            reason = t["blocked_reason"] or "unknown"
+            lines.append(f"  {t['id']}: {t['title']} ({reason})")
+
+    lines.append("")
+    if data.next_runnable:
+        lines.append(
+            f"Next Runnable: {data.next_runnable['id']}: {data.next_runnable['title']}"
+        )
+    else:
+        lines.append("Next Runnable: (none)")
+
+    return "\n".join(lines)
+
+
+def render_ticket_detail(
+    conn: sqlite3.Connection,
+    ticket_id: str,
+    verbose: bool = False,
+) -> str:
+    """Build a CLI-formatted ticket detail from the structured query layer."""
+    from capsaicin.app.queries.ticket_detail import (
+        get_ticket_detail as _get_structured,
+    )
+
+    data = _get_structured(conn, ticket_id, verbose=verbose)
+    ticket = data.ticket
+
+    lines: list[str] = []
+
+    lines.append(f"Ticket: {ticket['id']}")
+    lines.append(f"  Title: {ticket['title']}")
+    lines.append(f"  Status: {ticket['status']}")
+    lines.append(f"  Status Changed: {ticket['status_changed_at']}")
+    lines.append(
+        f"  Cycle: {ticket['current_cycle']} "
+        f"(impl attempt: {ticket['current_impl_attempt']}, "
+        f"review attempt: {ticket['current_review_attempt']})"
+    )
+    if ticket.get("gate_reason"):
+        lines.append(f"  Gate Reason: {ticket['gate_reason']}")
+    if ticket.get("blocked_reason"):
+        lines.append(f"  Blocked Reason: {ticket['blocked_reason']}")
+
+    lines.append("")
+    lines.append("Acceptance Criteria:")
+    if data.criteria:
+        for c in data.criteria:
+            lines.append(f"  [{c['status']}] {c['description']}")
+    else:
+        lines.append("  (none)")
+
+    lines.append("")
+    lines.append("Open Findings:")
+    if data.open_findings:
+        for severity in ["blocking", "warning", "info"]:
+            if severity in data.open_findings:
+                lines.append(f"  {severity}:")
+                for f in data.open_findings[severity]:
+                    loc = f" ({f['location']})" if f["location"] else ""
+                    lines.append(f"    - [{f['category']}]{loc} {f['description']}")
+    else:
+        lines.append("  (none)")
+
+    lines.append("")
+    last_run = data.last_run
+    if last_run:
+        duration = (
+            f"{last_run['duration_seconds']:.1f}s"
+            if last_run["duration_seconds"] is not None
+            else "n/a"
+        )
+        verdict = last_run["verdict"] or "n/a"
+        lines.append("Last Run:")
+        lines.append(f"  Role: {last_run['role']}")
+        lines.append(f"  Exit Status: {last_run['exit_status']}")
+        lines.append(f"  Duration: {duration}")
+        lines.append(f"  Verdict: {verdict}")
+
+        meta = _parse_adapter_metadata(last_run.get("adapter_metadata"))
+        cost = meta.get("total_cost_usd")
+        if cost is not None:
+            lines.append(f"  Cost: ${cost:.4f}")
+
+        if data.diagnostic:
+            lines.append("")
+            for dline in data.diagnostic.splitlines():
+                lines.append(f"  {dline}")
+
+        if verbose:
+            denial_sum = denial_summary(meta)
+            if denial_sum:
+                lines.append(f"  Denials: {denial_sum}")
+
+            result_text = extract_result_text_from_raw(last_run.get("raw_stdout"))
+            if result_text:
+                lines.append(f"  Agent Text: {truncate(result_text)}")
+    else:
+        lines.append("Last Run: (none)")
+
+    if verbose:
+        lines.append("")
+        lines.append("Run History:")
+        runs = data.run_history or []
+        if runs:
+            for r in runs:
+                dur = (
+                    f"{r['duration_seconds']:.1f}s"
+                    if r["duration_seconds"] is not None
+                    else "n/a"
+                )
+                verd = r["verdict"] or "n/a"
+                run_meta = _parse_adapter_metadata(r.get("adapter_metadata"))
+                cost_str = ""
+                run_cost = run_meta.get("total_cost_usd")
+                if run_cost is not None:
+                    cost_str = f" cost=${run_cost:.4f}"
+                lines.append(
+                    f"  [{r['started_at']}] {r['role']} "
+                    f"cycle={r['cycle_number']} attempt={r['attempt_number']} "
+                    f"exit={r['exit_status']} verdict={verd} "
+                    f"duration={dur}{cost_str}"
+                )
+        else:
+            lines.append("  (none)")
+
+        lines.append("")
+        lines.append("Transition History:")
+        transitions = data.transition_history or []
         if transitions:
             for t in transitions:
                 reason = f" ({t['reason']})" if t["reason"] else ""

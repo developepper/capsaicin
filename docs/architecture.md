@@ -148,6 +148,30 @@ session isolation, and read-only execution are easier to enforce there.
 `Codex` is still a good implementation target, but its current output model is
 much weaker for machine-consumable review findings.
 
+## Application Layer
+
+The `app/` package provides shared service and read-model boundaries that
+both the CLI and future web UI consume:
+
+```text
+src/capsaicin/app/
+  context.py       # AppContext — shared project/config/DB resolution
+  commands/        # workflow mutations returning structured CommandResult
+  queries/         # read models returning dataclasses (no rendering)
+```
+
+Import direction:
+
+- `cli.py` → `app.context`, `app.commands`, `app.queries`
+- `web/*` → `app.context`, `app.commands`, `app.queries`
+- `app.commands/*` → existing workflow modules (`ticket_run`, etc.)
+- `app.queries/*` → DB helpers and `ticket_status` query functions
+
+Existing workflow modules remain the implementation engines. Command
+services are thin orchestration wrappers that return structured outcomes.
+Query services return serializable dataclasses that delivery layers
+format for their output channel.
+
 ## Boundaries
 
 To avoid endless looping, `capsaicin` should use bounded retry rules.

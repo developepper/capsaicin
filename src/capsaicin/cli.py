@@ -14,6 +14,13 @@ def _resolve_or_fail(repo_path, project_slug):
         raise click.ClickException(str(e))
 
 
+def _app_context(ctx):
+    """Build an AppContext from a ProjectContext."""
+    from capsaicin.app.context import AppContext
+
+    return AppContext.from_project_context(ctx)
+
+
 @click.group()
 def cli():
     """Capsaicin — local-first autonomous ticket loop for AI-assisted development."""
@@ -129,40 +136,31 @@ def ticket_dep(ticket_id, depends_on_id, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_run_cmd(ticket_id, repo_path, project_slug):
     """Run the implementation pipeline for a ticket."""
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import refresh_config_snapshot
-    from capsaicin.ticket_run import run_implementation_pipeline, select_ticket
+    from capsaicin.app.commands.run_ticket import run
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
-        refresh_config_snapshot(ctx.conn, ctx.config)
+        app = _app_context(ctx)
+        app.refresh_config()
 
         try:
-            ticket = select_ticket(ctx.conn, ticket_id)
+            result = run(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
+                ticket_id=ticket_id,
+                log_path=app.log_path,
+            )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        project_id = ticket["project_id"]
-        click.echo(
-            f"Running implementation for ticket {ticket['id']}: {ticket['title']}"
-        )
+        click.echo(result.detail)
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
 
-        adapter = ClaudeCodeAdapter(command=ctx.config.implementer.command)
-        final_status = run_implementation_pipeline(
-            conn=ctx.conn,
-            project_id=project_id,
-            ticket=ticket,
-            config=ctx.config,
-            adapter=adapter,
-            log_path=ctx.log_path,
-        )
-
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
-
-        # Diagnostic output for human-gate outcomes (T02)
-        if final_status == "human-gate":
+        # Diagnostic output for human-gate outcomes
+        if result.final_status == "human-gate":
             from capsaicin.diagnostics import build_run_outcome_message
 
-            diagnostic = build_run_outcome_message(ctx.conn, ticket["id"])
+            diagnostic = build_run_outcome_message(app.conn, result.ticket_id)
             if diagnostic:
                 click.echo()
                 click.echo(diagnostic)
@@ -177,37 +175,29 @@ def ticket_run_cmd(ticket_id, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_review_cmd(ticket_id, allow_drift, repo_path, project_slug):
     """Run the review pipeline for a ticket."""
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import refresh_config_snapshot
+    from capsaicin.app.commands.review_ticket import review
     from capsaicin.review_baseline import WorkspaceDriftError
-    from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
-        refresh_config_snapshot(ctx.conn, ctx.config)
+        app = _app_context(ctx)
+        app.refresh_config()
 
         try:
-            ticket = select_review_ticket(ctx.conn, ticket_id)
-        except (ValueError, CapsaicinError) as e:
-            raise click.ClickException(str(e))
-
-        project_id = ticket["project_id"]
-        click.echo(f"Running review for ticket {ticket['id']}: {ticket['title']}")
-
-        adapter = ClaudeCodeAdapter(command=ctx.config.reviewer.command)
-        try:
-            final_status = run_review_pipeline(
-                conn=ctx.conn,
-                project_id=project_id,
-                ticket=ticket,
-                config=ctx.config,
-                adapter=adapter,
+            result = review(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
+                ticket_id=ticket_id,
                 allow_drift=allow_drift,
-                log_path=ctx.log_path,
+                log_path=app.log_path,
             )
         except WorkspaceDriftError as e:
             raise click.ClickException(str(e))
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
 
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo(result.detail)
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
 
 
 @ticket.command("approve")
@@ -220,42 +210,34 @@ def ticket_review_cmd(ticket_id, allow_drift, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_approve_cmd(ticket_id, rationale, force, repo_path, project_slug):
     """Approve a ticket at the human gate."""
-    from capsaicin.config import refresh_config_snapshot
-    from capsaicin.ticket_approve import (
-        WorkspaceMismatchError,
-        approve_ticket,
-        build_approval_summary,
-        select_approve_ticket,
-    )
+    from capsaicin.app.commands.approve_ticket import approve
+    from capsaicin.ticket_approve import WorkspaceMismatchError
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
-        refresh_config_snapshot(ctx.conn, ctx.config)
+        app = _app_context(ctx)
+        app.refresh_config()
 
         try:
-            ticket = select_approve_ticket(ctx.conn, ticket_id)
-        except (ValueError, CapsaicinError) as e:
-            raise click.ClickException(str(e))
-
-        project_id = ticket["project_id"]
-
-        try:
-            final_status = approve_ticket(
-                conn=ctx.conn,
-                project_id=project_id,
-                ticket=ticket,
-                repo_path=ctx.config.project.repo_path,
+            result = approve(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
+                ticket_id=ticket_id,
                 rationale=rationale,
                 force=force,
-                log_path=ctx.log_path,
+                log_path=app.log_path,
             )
         except WorkspaceMismatchError as e:
             raise click.ClickException(str(e))
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
         click.echo()
-        click.echo(build_approval_summary(ctx.conn, ticket["id"]))
+
+        from capsaicin.ticket_approve import build_approval_summary
+
+        click.echo(build_approval_summary(app.conn, result.ticket_id))
 
 
 @ticket.command("revise")
@@ -276,27 +258,26 @@ def ticket_approve_cmd(ticket_id, rationale, force, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_revise_cmd(ticket_id, add_findings, reset_cycles, repo_path, project_slug):
     """Send a ticket back for revision from the human gate."""
-    from capsaicin.ticket_revise import revise_ticket, select_revise_ticket
+    from capsaicin.app.commands.revise_ticket import revise
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        findings_list = list(add_findings) if add_findings else None
+
         try:
-            ticket = select_revise_ticket(ctx.conn, ticket_id)
+            result = revise(
+                conn=app.conn,
+                project_id=app.project_id,
+                ticket_id=ticket_id,
+                add_findings=findings_list,
+                reset_cycles=reset_cycles,
+                log_path=app.log_path,
+            )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        project_id = ticket["project_id"]
-        findings_list = list(add_findings) if add_findings else None
-
-        final_status = revise_ticket(
-            conn=ctx.conn,
-            project_id=project_id,
-            ticket=ticket,
-            add_findings=findings_list,
-            reset_cycles=reset_cycles,
-            log_path=ctx.log_path,
-        )
-
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
         if findings_list:
             click.echo(f"  Added {len(findings_list)} finding(s)")
         if reset_cycles:
@@ -313,26 +294,24 @@ def ticket_revise_cmd(ticket_id, add_findings, reset_cycles, repo_path, project_
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_defer_cmd(ticket_id, rationale, abandon, repo_path, project_slug):
     """Defer or abandon a ticket from the human gate."""
-    from capsaicin.ticket_defer import defer_ticket, select_defer_ticket
+    from capsaicin.app.commands.defer_ticket import defer
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
         try:
-            ticket = select_defer_ticket(ctx.conn, ticket_id)
+            result = defer(
+                conn=app.conn,
+                project_id=app.project_id,
+                ticket_id=ticket_id,
+                rationale=rationale,
+                abandon=abandon,
+                log_path=app.log_path,
+            )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        project_id = ticket["project_id"]
-
-        final_status = defer_ticket(
-            conn=ctx.conn,
-            project_id=project_id,
-            ticket=ticket,
-            rationale=rationale,
-            abandon=abandon,
-            log_path=ctx.log_path,
-        )
-
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
 
 
 @ticket.command("unblock")
@@ -347,25 +326,23 @@ def ticket_defer_cmd(ticket_id, rationale, abandon, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def ticket_unblock_cmd(ticket_id, reset_cycles, repo_path, project_slug):
     """Unblock a blocked ticket and return it to ready."""
-    from capsaicin.ticket_unblock import select_unblock_ticket, unblock_ticket
+    from capsaicin.app.commands.unblock_ticket import unblock
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
         try:
-            ticket = select_unblock_ticket(ctx.conn, ticket_id)
+            result = unblock(
+                conn=app.conn,
+                project_id=app.project_id,
+                ticket_id=ticket_id,
+                reset_cycles=reset_cycles,
+                log_path=app.log_path,
+            )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        project_id = ticket["project_id"]
-
-        final_status = unblock_ticket(
-            conn=ctx.conn,
-            project_id=project_id,
-            ticket=ticket,
-            reset_cycles=reset_cycles,
-            log_path=ctx.log_path,
-        )
-
-        click.echo(f"Ticket {ticket['id']} -> {final_status}")
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
         if reset_cycles:
             click.echo("  Cycle counters reset")
 
@@ -381,17 +358,18 @@ def ticket_unblock_cmd(ticket_id, reset_cycles, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def status(ticket_id, verbose, repo_path, project_slug):
     """Show project or ticket status."""
-    from capsaicin.ticket_status import build_project_summary, build_ticket_detail
+    from capsaicin.ticket_status import render_dashboard, render_ticket_detail
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
         if ticket_id:
             try:
-                output = build_ticket_detail(ctx.conn, ticket_id, verbose=verbose)
+                output = render_ticket_detail(app.conn, ticket_id, verbose=verbose)
             except ValueError as e:
                 raise click.ClickException(str(e))
         else:
-            project_id = ctx.get_project_id()
-            output = build_project_summary(ctx.conn, project_id)
+            output = render_dashboard(app.conn, app.project_id)
 
         click.echo(output)
 
@@ -401,27 +379,20 @@ def status(ticket_id, verbose, repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def resume(repo_path, project_slug):
     """Resume from interrupted execution."""
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import refresh_config_snapshot
-    from capsaicin.resume import resume_pipeline
+    from capsaicin.app.commands.resume import resume as resume_cmd
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
-        refresh_config_snapshot(ctx.conn, ctx.config)
+        app = _app_context(ctx)
+        app.refresh_config()
 
-        project_id = ctx.get_project_id()
-
-        impl_adapter = ClaudeCodeAdapter(command=ctx.config.implementer.command)
-        review_adapter = ClaudeCodeAdapter(command=ctx.config.reviewer.command)
-        action, detail = resume_pipeline(
-            conn=ctx.conn,
-            project_id=project_id,
-            config=ctx.config,
-            impl_adapter=impl_adapter,
-            review_adapter=review_adapter,
-            log_path=ctx.log_path,
+        result = resume_cmd(
+            conn=app.conn,
+            project_id=app.project_id,
+            config=app.config,
+            log_path=app.log_path,
         )
 
-        click.echo(detail)
+        click.echo(result.detail)
 
 
 @cli.command()
@@ -437,32 +408,25 @@ def resume(repo_path, project_slug):
 @click.option("--project", "project_slug", default=None, help="Project slug.")
 def loop(ticket_id, max_cycles, repo_path, project_slug):
     """Run the implement-review-revise loop automatically."""
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-    from capsaicin.config import refresh_config_snapshot
-    from capsaicin.loop import run_loop
+    from capsaicin.app.commands.loop import loop as loop_cmd
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
-        refresh_config_snapshot(ctx.conn, ctx.config)
+        app = _app_context(ctx)
+        app.refresh_config()
 
-        project_id = ctx.get_project_id()
-
-        impl_adapter = ClaudeCodeAdapter(command=ctx.config.implementer.command)
-        review_adapter = ClaudeCodeAdapter(command=ctx.config.reviewer.command)
         try:
-            final_status, detail = run_loop(
-                conn=ctx.conn,
-                project_id=project_id,
-                config=ctx.config,
-                impl_adapter=impl_adapter,
-                review_adapter=review_adapter,
+            result = loop_cmd(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
                 ticket_id=ticket_id,
                 max_cycles=max_cycles,
-                log_path=ctx.log_path,
+                log_path=app.log_path,
             )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        click.echo(detail)
+        click.echo(result.detail)
 
 
 @cli.command()
@@ -473,7 +437,6 @@ def doctor(repo_path, project_slug):
     from pathlib import Path
 
     from capsaicin.config import load_config, resolve_project
-    from capsaicin.preflight import run_preflight
 
     if repo_path is None:
         repo_path = str(Path.cwd().resolve())
@@ -508,6 +471,8 @@ def doctor(repo_path, project_slug):
                 adapter_command = config.implementer.command
             except ConfigError as e:
                 raise click.ClickException(f"Could not load project config: {e}")
+
+    from capsaicin.preflight import run_preflight
 
     report = run_preflight(repo_path, adapter_command=adapter_command)
 
