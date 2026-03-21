@@ -25,4 +25,4 @@ Document roles:
   reviewer isolation rules
 - `configuration.md`: configuration surface and defaults
 - `cli.md`: command contract and operator-facing behavior
-- `tickets/`: planning, backlog, and archived epics
+- `tickets/`: roadmap, planning, and archived epics

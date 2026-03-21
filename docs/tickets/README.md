@@ -1,18 +1,19 @@
 # Tickets
 
-This directory contains planning materials, backlog notes, and archived ticket
+This directory contains planning materials, roadmap notes, and archived ticket
 sets organized by epic.
 
 Use this directory for work that changes over time:
 
 - active epic plans and ticket breakdowns
-- backlog and future-direction notes
+- roadmap and future-direction notes
 - archived completed epics that should not be required reading for project
   context
 
 ## Structure
 
-- [backlog.md](./backlog.md): future work, sequencing, and nice-to-have ideas
+- [roadmap.md](./roadmap.md): future work, sequencing, and open directions that
+  are not yet scoped into an epic
 - [archive/](./archive/): completed epic plans retained for history
 
 ## Archive

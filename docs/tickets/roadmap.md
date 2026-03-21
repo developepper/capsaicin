@@ -1,4 +1,4 @@
-# Backlog
+# Roadmap
 
 This document is the single place for future work that is not yet planned into
 an epic.
@@ -13,6 +13,11 @@ Use it for:
 When a direction becomes concrete enough to scope, move it into a dedicated
 epic directory under `docs/tickets/`. Once an epic is complete, move it to
 `docs/tickets/archive/`.
+
+This file should answer two questions:
+
+- what should be worked on next
+- what ideas should be kept in view but are not yet planned
 
 ## Priority Order
 
