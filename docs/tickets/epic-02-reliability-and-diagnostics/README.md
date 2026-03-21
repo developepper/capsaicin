@@ -20,6 +20,31 @@ This applies consistently to both implementer and reviewer runs. The run-level
 outcome explains what happened; the ticket-level human gate explains that human
 action is required before work can continue.
 
+## Session Start Guidance
+
+Each ticket in this epic is intended to be implementable in a fresh session.
+
+Before coding a ticket:
+
+1. read this epic README
+2. read the target ticket
+3. read every file listed in that ticket's `References`
+4. use the ticket's `Implementation Notes` as binding guidance for scope,
+   shared helpers, fixtures, and test strategy
+
+General implementation standards for this epic:
+
+- keep CI deterministic; use fixtures and mocked subprocesses instead of live
+  Claude runs
+- prefer shared helpers over duplicated logic when the existing codebase already
+  has a clear reuse point
+- preserve the existing state-machine and orchestration semantics unless the
+  ticket explicitly changes them
+- when a ticket changes a shared contract, update code, tests, persistence, and
+  docs together
+- follow project conventions: Python 3.11, `click`, SQLite, ULIDs, Ruff, and
+  append-only `activity.log` payload extensions rather than format changes
+
 ## Execution Strategy
 
 This epic should start with the adapter and schema signals that distinguish a
