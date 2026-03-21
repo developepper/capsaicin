@@ -153,11 +153,6 @@ The reviewer should check for:
 The system should not allow "looks good" reviews to replace actual findings or
 explicit no-finding outcomes.
 
-## MVP Direction
-
-The MVP should start with the implementation loop first and add the planning
-loop second.
-
 ## Design Principles
 
 - local-first over hosted-first

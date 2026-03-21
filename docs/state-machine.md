@@ -23,7 +23,7 @@ Ticket states:
 - `ticket/blocked`
 - `ticket/done`
 
-## MVP Ticket Transition Rules
+## Ticket Transition Rules
 
 Recommended transitions:
 
@@ -55,7 +55,8 @@ Recommended transitions:
 - `human-gate -> blocked`
   trigger: human decision is `defer`
 - `pr-ready -> done`
-  trigger: post-MVP automation such as PR creation/merge marks the ticket done
+  trigger: an explicit completion step such as PR creation/merge marks the
+  ticket done
 - `blocked -> ready`
   trigger: human explicitly unblocks and requeues the ticket
 - `blocked -> done`
@@ -91,11 +92,10 @@ Recommended transitions:
 - `blocked -> ready` should reset cycles only when the human explicitly
   requests it
 
-MVP note:
+Notes:
 
-- `pr-ready` is a terminal human-handoff state in MVP
-- `pr-ready -> done` is reserved for post-MVP automation or an explicit future
-  completion command
+- `pr-ready` is a terminal human-handoff state
+- `pr-ready -> done` is reserved for an explicit future completion command
 
 ## Illegal Transitions
 

@@ -1,5 +1,9 @@
 # Implementation Plan
 
+This document records the implementation plan for Epic 01, the
+implementation-loop MVP. Epic 01 is complete; this file is retained as the
+historical plan for that work.
+
 ## Phased Roadmap
 
 | Phase | Focus | Tickets |

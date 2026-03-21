@@ -23,5 +23,6 @@ Document roles:
 - `data-model.md`: SQLite schema, indexes, and persistence notes
 - `adapters.md`: agent invocation model, adapter contract, run envelopes, and
   reviewer isolation rules
-- `configuration.md`: MVP config surface and defaults
-- `cli.md`: MVP command contract and operator-facing behavior
+- `configuration.md`: configuration surface and defaults
+- `cli.md`: command contract and operator-facing behavior
+- `tickets/`: roadmap, planning, and archived epics
