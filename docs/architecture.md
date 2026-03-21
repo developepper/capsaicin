@@ -13,8 +13,8 @@ GitHub matters for:
 But the workflow itself should be able to start and run locally without
 depending on remote APIs.
 
-For MVP, `init` should resolve the repo path to an absolute path before storing
-it so later commands can run from subdirectories without ambiguity.
+`init` should resolve the repo path to an absolute path before storing it so
+later commands can run from subdirectories without ambiguity.
 
 ## State Model
 
@@ -96,13 +96,13 @@ canonical system of record. `exports/` should be reserved for outward-facing
 artifacts such as GitHub issue bodies and PR summaries. The database remains
 canonical.
 
-For MVP, `activity.log` should be a lightweight append-only debug trace rather
-than a second system of record. It should record events such as project init,
-ticket creation, state transitions, run start/finish, drift detection,
+`activity.log` should be a lightweight append-only debug trace rather than a
+second system of record. It should record events such as project init, ticket
+creation, state transitions, run start/finish, drift detection,
 parse/contract failures, human decisions, and unblock actions. The database
 remains canonical.
 
-Recommended MVP line format:
+Recommended line format:
 
 - one line per event
 - ISO 8601 timestamp first
@@ -110,21 +110,16 @@ Recommended MVP line format:
 - project_id, ticket_id, and run_id when available
 - compact JSON payload at the end for extra detail
 
-For MVP, rendered files under `renders/` can be deferred even though the
-directory exists. Operator-facing inspection can happen through stdout and
-`activity.log` until the orchestration core is proven.
-
-Post-MVP, the preferred direction is to add a local operator UI on top of the
-same database and filesystem state rather than inventing a separate state
-system. The CLI remains important, but the UI should become the easier primary
-inspection and control surface for the implementation loop.
+Rendered files under `renders/` are generated views rather than canonical
+state. Operator-facing inspection can happen through stdout, generated renders,
+`activity.log`, and any UI that reads from the same project state.
 
 ## Runtime And Packaging
 
 The implementation language is not chosen finally yet, but the current
 recommendation is:
 
-- use `Python` for the adapter-validation spike and MVP
+- use `Python` for the current implementation
 - keep the contracts and data model strict enough that a later Rust rewrite is
   possible without redesign
 
@@ -164,17 +159,3 @@ Suggested defaults:
 - any blocked state requires a human decision before progression
 
 The system should optimize for good outcomes, not infinite polishing.
-
-## Post-MVP Priorities
-
-After the implementation-loop MVP, the priority order is:
-
-1. reliability and diagnostics for agent execution, setup, and operator
-   visibility
-2. a local UI for the existing implementation loop
-3. planning-loop automation
-4. GitHub export and PR handoff automation
-5. cost controls, analytics, and later multi-ticket orchestration
-
-This sequencing favors operator trust and ease of use before expanding the
-scope of automation.

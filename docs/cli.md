@@ -1,10 +1,10 @@
 # CLI
 
-## MVP Scope
+## Scope
 
-The first useful version should be narrow and pragmatic.
+The command surface is intentionally narrow and pragmatic.
 
-MVP goals:
+Goals:
 
 - initialize a local `capsaicin` project
 - capture project-level config
@@ -14,7 +14,7 @@ MVP goals:
 - stop automatically for human input when escalation rules are triggered
 - render current ticket status and loop state for inspection
 
-The MVP does not need:
+Non-goals:
 
 - complex dashboards
 - hosted synchronization
@@ -22,34 +22,14 @@ The MVP does not need:
 - deep GitHub automation on day one
 - full planning-loop automation on day one
 
-Suggested MVP sequence:
+Command set:
 
 1. `capsaicin init` plus SQLite schema and config
 2. `capsaicin ticket run` to invoke an implementer adapter and persist the run
 3. `capsaicin ticket review` to invoke a reviewer adapter in a fresh session
 4. bounded revise and re-review loop support
 5. `capsaicin status` to render current workflow state
-6. planning-loop support and GitHub export after the core loop works
-
-## Post-MVP Direction
-
-The CLI remains the canonical operator interface and automation surface, but it
-is no longer the only intended surface after MVP.
-
-Near-term priorities after the implementation-loop MVP:
-
-1. reliability and diagnostics improvements for the existing commands and
-   adapters
-2. a local UI that exposes the same implementation-loop state and actions
-
-Planned after that:
-
-1. planning-loop automation
-2. GitHub handoff and PR automation
-3. later multi-ticket orchestration
-
-The initial UI should focus on the existing implementation loop rather than
-introducing a separate workflow model.
+6. planning-loop support and GitHub export as separate work streams
 
 ## Command Contract
 
@@ -83,13 +63,13 @@ capsaicin ticket add --from FILE
 
 Behavior:
 
-- create a manual MVP ticket because planning-loop automation is deferred
+- create a manual ticket because planning-loop automation is handled separately
 - insert the ticket in `ready`
 - insert acceptance criteria in `pending`
 - print a human-readable ticket brief to stdout (rendered file output to
-  `renders/` is deferred to post-MVP)
+  `renders/` is optional)
 
-MVP file import format:
+File import format:
 
 ```toml
 title = "Implement user authentication"
@@ -208,7 +188,7 @@ Behavior:
 - when transitioning to `human-gate`, set `orchestrator_state.status =
   'awaiting_human'`
 
-Acceptance-criteria update rule for MVP:
+Acceptance-criteria update rule:
 
 - match reviewer `criteria_checked` entries to `acceptance_criteria` rows by
   `criterion_id`
@@ -266,10 +246,10 @@ Behavior:
 - set `orchestrator_state.status = 'idle'`
 - print a PR preparation summary to stdout
 
-MVP note:
+Current behavior:
 
-- `pr-ready` is a terminal human-handoff state for MVP
-- PR creation and merge remain manual until post-MVP GitHub automation lands
+- `pr-ready` is a terminal human-handoff state
+- PR creation and merge remain manual
 
 ### `capsaicin ticket revise`
 
@@ -387,7 +367,7 @@ Behavior:
 - stop at `blocked`
 - never auto-approve
 
-This should be the primary hands-off command in MVP, with `ticket run` and
+This should be the primary hands-off command, with `ticket run` and
 `ticket review` serving as manual step controls.
 
 Loop and resume have different entry paths:

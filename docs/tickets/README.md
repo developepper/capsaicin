@@ -1,26 +1,22 @@
 # Tickets
 
-This directory contains implementation ticket sets organized by epic.
+This directory contains planning materials, backlog notes, and archived ticket
+sets organized by epic.
 
-Each epic is a subdirectory containing:
+Use this directory for work that changes over time:
 
-- `README.md` — execution strategy, PR/milestone grouping, and risks
-- `T01.md` through `TNN.md` — individual implementation tickets
+- active epic plans and ticket breakdowns
+- backlog and future-direction notes
+- archived completed epics that should not be required reading for project
+  context
 
-## Epics
+## Structure
 
-| Epic | Directory | Status   |
-|------|-----------|----------|
-| Implementation Loop MVP | [epic-01-implementation-loop-mvp](./epic-01-implementation-loop-mvp/) | Complete |
+- [backlog.md](./backlog.md): future work, sequencing, and nice-to-have ideas
+- [archive/](./archive/): completed epic plans retained for history
 
-## Next Direction
+## Archive
 
-The next epics are not planned into tickets yet, but the current intended order
-is:
-
-1. reliability and diagnostics for the implementation loop
-2. a UI for the existing implementation loop
-3. planning-loop automation
-4. GitHub handoff and PR automation
-
-Multi-ticket orchestration remains explicitly later work.
+| Epic | Directory |
+|------|-----------|
+| Epic 01: Implementation Loop | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |

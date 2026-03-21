@@ -1,8 +1,8 @@
 # Data Model
 
-## Core MVP Entities
+## Core Entities
 
-The implementation-loop-first MVP should assume entities along these lines:
+The implementation loop uses entities along these lines:
 
 - `projects`
 - `tickets`
@@ -19,7 +19,7 @@ The implementation-loop-first MVP should assume entities along these lines:
 Planning entities such as `epics` and outward-facing entities such as
 `exports` can be added after the core loop is validated.
 
-## MVP SQLite Schema
+## SQLite Schema
 
 ```sql
 CREATE TABLE projects (
@@ -164,9 +164,9 @@ CREATE TABLE decisions (
 - `agent_runs.structured_result` stores the review result payload defined in
   [adapters.md](./adapters.md)
 - use ULIDs for text primary keys that appear in envelopes, logs, and rendered
-  reports; use the `python-ulid` package in MVP
-- keep `structured_result` and `adapter_metadata` as JSON blobs for MVP rather
-  than over-normalizing early
+  reports; use the `python-ulid` package
+- keep `structured_result` and `adapter_metadata` as JSON blobs rather than
+  over-normalizing early
 - store the fully serialized run request in `agent_runs.run_request`
 - denormalize reviewer verdict onto `agent_runs.verdict` for cheap loop-control
   queries
@@ -191,7 +191,7 @@ CREATE TABLE decisions (
 - `activity.log` is an append-only debug trace for operators; it is not
   canonical state
 
-## Recommended MVP Indexes
+## Recommended Indexes
 
 ```sql
 CREATE INDEX idx_tickets_project_status

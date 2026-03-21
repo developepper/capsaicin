@@ -23,7 +23,7 @@ Likely configuration areas:
 - render and export preferences
 - GitHub integration settings
 
-## Minimum Viable Default `config.toml`
+## Default `config.toml`
 
 ```toml
 [project]
@@ -60,11 +60,11 @@ Semantics:
 
 - omitting `model` means "use the CLI default model"
 - omitting `allowed_tools` means "use the adapter default behavior"
-- reviewer `allowed_tools` maps to Claude Code `--allowed-tools` for the MVP
-- prompt assembly is handled by the adapter in MVP; template customization is
+- reviewer `allowed_tools` maps to Claude Code `--allowed-tools`
+- prompt assembly is handled by the adapter; template customization is
   deferred
 
-## MVP Project Resolution
+## Project Resolution
 
 - if `.capsaicin/projects/` contains exactly one project, use it automatically
 - if multiple projects exist, require an explicit project selection and error
@@ -89,7 +89,7 @@ Semantics:
 - `loop`: requires both implementer and reviewer adapter config plus cycle
   limits
 
-## Non-Goal For MVP
+## Non-goal
 
 Do not add `auto_approve_clean_pass` to the default config. The human gate is a
-core design principle for MVP, not an optional default behavior.
+core design principle, not an optional default behavior.

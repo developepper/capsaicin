@@ -153,33 +153,6 @@ The reviewer should check for:
 The system should not allow "looks good" reviews to replace actual findings or
 explicit no-finding outcomes.
 
-## MVP Direction
-
-The MVP should start with the implementation loop first and add the planning
-loop second.
-
-## Current Direction
-
-Epic 01 established the implementation-loop MVP. The current priority is to
-make that loop easier to trust and easier to operate before expanding the
-workflow surface further.
-
-Near-term priorities:
-
-1. reliability and diagnostics for the existing implementation loop
-2. a UI for the existing implementation loop
-
-Planned after those:
-
-1. planning-loop automation
-2. GitHub handoff and PR automation
-3. cost controls and broader workflow analytics
-4. multi-ticket orchestration
-
-This order reflects the current product goal: simplify and improve the manual
-implement-review-revise workflow that already exists, rather than adding more
-automation around the edges before the operator experience is solid.
-
 ## Design Principles
 
 - local-first over hosted-first

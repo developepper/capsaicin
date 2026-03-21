@@ -3,14 +3,6 @@
 This directory holds the working design and implementation specs for
 `capsaicin`.
 
-Current status:
-
-- Epic 01, the implementation-loop MVP, is complete.
-- The next planned areas are reliability and diagnostics first, then a UI for
-  the existing implementation loop.
-- Planning-loop automation remains part of the product direction, but it is not
-  the immediate next step.
-
 Recommended reading order:
 
 1. [overview.md](./overview.md)
@@ -31,6 +23,6 @@ Document roles:
 - `data-model.md`: SQLite schema, indexes, and persistence notes
 - `adapters.md`: agent invocation model, adapter contract, run envelopes, and
   reviewer isolation rules
-- `configuration.md`: MVP config surface and defaults
-- `cli.md`: MVP command contract and operator-facing behavior
-- `tickets/`: completed and planned implementation epics
+- `configuration.md`: configuration surface and defaults
+- `cli.md`: command contract and operator-facing behavior
+- `tickets/`: planning, backlog, and archived epics

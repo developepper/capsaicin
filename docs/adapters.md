@@ -27,7 +27,7 @@ Current direction:
 Practical implication:
 
 - prefer `Claude Code` as the first reviewer backend
-- treat `Codex` as an implementer-first backend in MVP
+- treat `Codex` as an implementer-first backend
 - avoid relying on natural-language parsing for review verdicts when a
   structured-output path exists
 
@@ -90,7 +90,7 @@ Adapters should not decide workflow progression or own cross-ticket state.
 
 ## Claude Code Validation
 
-The validated Claude Code invocation model for MVP is:
+The validated Claude Code invocation model is:
 
 - implementer: `claude -p --output-format json -- "PROMPT"`
 - reviewer: `claude -p --output-format json --json-schema <SCHEMA>
@@ -104,7 +104,7 @@ Observed envelope behavior:
 - schema-constrained replies are returned in `structured_output`
 - envelope fields include `is_error`, `duration_ms`, `num_turns`, `session_id`,
   `total_cost_usd`, `usage`, `modelUsage`, and `permission_denials`
-- the full MVP reviewer schema defined below has been validated successfully
+- the full reviewer schema defined below has been validated successfully
   with Claude Code `structured_output`
 - Claude Code can still return schema-valid but contract-invalid reviewer
   results, so semantic validation remains mandatory after schema validation
@@ -114,7 +114,7 @@ Adapter rules for Claude Code:
 - parse the outer JSON envelope first
 - if `structured_output` is present, treat it as the primary structured result
 - otherwise use `result` as the assistant text payload
-- when using reviewer mode, provide the full MVP `Review Result Schema` via
+- when using reviewer mode, provide the full `Review Result Schema` via
   `--json-schema` rather than a simplified summary schema
 - preserve the full raw envelope in `raw_stdout` for debugging
 - treat `is_error: true` or a non-zero process exit as failure evidence
@@ -273,8 +273,8 @@ tracked files only, via `git diff HEAD`. This applies to:
 - the review baseline comparison
 
 Untracked files are excluded. If generated or untracked files matter for a
-specific project, that can be addressed in a future extension, but the MVP
-diff basis is strictly tracked files against HEAD.
+specific project, that can be addressed in a future extension, but the diff
+basis is strictly tracked files against HEAD.
 
 ## Finding Reconciliation
 
@@ -282,7 +282,7 @@ Findings accumulate across implement-review cycles. Without reconciliation,
 revise loops produce ambiguous finding lists where it is unclear which issues
 persist and which were resolved.
 
-MVP reconciliation uses a lightweight fingerprint:
+Reconciliation uses a lightweight fingerprint:
 `(category, location, description_prefix)` where `description_prefix` is the
 first 80 characters of the description, normalized to lowercase with collapsed
 whitespace. The prefix disambiguates findings that share the same category and
