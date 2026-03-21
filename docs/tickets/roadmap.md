@@ -55,6 +55,9 @@ Add a local operator UI on top of the existing database and filesystem state.
 The initial UI should focus on the current implementation loop rather than
 introducing a different workflow model.
 
+This work is now scoped as
+[epic-03-ui-for-implementation-loop](epic-03-ui-for-implementation-loop/).
+
 Preferred delivery model:
 
 - launch from `capsaicin ui`
