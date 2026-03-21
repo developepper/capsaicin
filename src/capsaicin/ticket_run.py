@@ -419,6 +419,30 @@ def _handle_run_result(
 
     Returns the new ticket status, or '_retry' if the caller should retry.
     """
+    # Permission denied — route to human-gate without consuming retries
+    if exit_status == "permission_denied":
+        transition_ticket(
+            conn,
+            ticket_id,
+            "human-gate",
+            "system",
+            reason="Implementer run blocked by permission denials.",
+            gate_reason="permission_denied",
+            log_path=log_path,
+        )
+        finish_run(conn, project_id)
+        await_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "PERMISSION_DENIED",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"role": "implementer"},
+            )
+        return "human-gate"
+
     if exit_status == "success":
         # Capture post-run diff
         diff_result = capture_diff(config.project.repo_path)

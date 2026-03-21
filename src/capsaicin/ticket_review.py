@@ -479,6 +479,30 @@ def _handle_review_result(
                 )
             return "_retry:contract_violation"
 
+    # --- Permission denied — route to human-gate without consuming retries ---
+    if result.exit_status == "permission_denied":
+        transition_ticket(
+            conn,
+            ticket_id,
+            "human-gate",
+            "system",
+            reason="Reviewer run blocked by permission denials.",
+            gate_reason="permission_denied",
+            log_path=log_path,
+        )
+        finish_run(conn, project_id)
+        await_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "PERMISSION_DENIED",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"role": "reviewer"},
+            )
+        return "human-gate"
+
     # --- Parse error (adapter already returned parse_error) ---
     if result.exit_status == "parse_error":
         if log_path:

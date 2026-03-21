@@ -134,6 +134,8 @@ Behavior:
 - if the run succeeds with a non-empty diff, move to `in-review`
 - if the run succeeds with an empty diff, move to `human-gate` with
   `gate_reason = 'empty_implementation'`
+- if the run is blocked by permission denials, move to `human-gate` with
+  `gate_reason = 'permission_denied'`; do not consume retries
 - when transitioning to `human-gate`, set `orchestrator_state.status =
   'awaiting_human'`
 - if the run fails or times out, increment implementation retry state and

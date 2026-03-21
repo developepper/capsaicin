@@ -42,7 +42,8 @@ CREATE TABLE tickets (
     gate_reason TEXT CHECK (gate_reason IN (
                     'review_passed','reviewer_escalated','cycle_limit',
                     'implementation_failure','human_requested',
-                    'empty_implementation','low_confidence_pass'
+                    'empty_implementation','low_confidence_pass',
+                    'permission_denied'
                 )),
     status      TEXT NOT NULL DEFAULT 'ready'
                 CHECK (status IN (
@@ -80,7 +81,7 @@ CREATE TABLE agent_runs (
     attempt_number    INTEGER NOT NULL DEFAULT 1,
     exit_status       TEXT NOT NULL CHECK (exit_status IN (
                           'running','success','failure','timeout',
-                          'contract_violation','parse_error'
+                          'contract_violation','parse_error','permission_denied'
                       )),
     verdict           TEXT CHECK (verdict IN ('pass','fail','escalate')),
     prompt            TEXT NOT NULL,
