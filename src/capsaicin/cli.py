@@ -239,6 +239,15 @@ def ticket_run_cmd(ticket_id, repo_path, project_slug):
         )
 
         click.echo(f"Ticket {ticket['id']} -> {final_status}")
+
+        # Diagnostic output for human-gate outcomes (T02)
+        if final_status == "human-gate":
+            from capsaicin.diagnostics import build_run_outcome_message
+
+            diagnostic = build_run_outcome_message(conn, ticket["id"])
+            if diagnostic:
+                click.echo()
+                click.echo(diagnostic)
     finally:
         conn.close()
 
@@ -819,6 +828,77 @@ def loop(ticket_id, max_cycles, repo_path, project_slug):
         click.echo(detail)
     finally:
         conn.close()
+
+
+@cli.command()
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def doctor(repo_path, project_slug):
+    """Run preflight checks to validate environment and repo setup."""
+    from pathlib import Path
+
+    from capsaicin.config import ConfigError, load_config, resolve_project
+    from capsaicin.preflight import run_preflight
+
+    if repo_path is None:
+        repo_path = str(Path.cwd().resolve())
+    else:
+        repo_path = str(Path(repo_path).resolve())
+
+    capsaicin_root = Path(repo_path) / ".capsaicin"
+
+    # Resolve adapter command from config.  For a validation command,
+    # config-resolution failures should surface as errors rather than
+    # silently falling back to a default that may be wrong.
+    adapter_command = "claude"
+    if capsaicin_root.is_dir():
+        if project_slug:
+            slug = project_slug
+            project_dir = capsaicin_root / "projects" / slug
+            if not project_dir.is_dir():
+                raise click.ClickException(
+                    f"Project '{project_slug}' not found at {project_dir}"
+                )
+        else:
+            try:
+                slug = resolve_project(capsaicin_root)
+            except ConfigError as e:
+                raise click.ClickException(str(e))
+            project_dir = capsaicin_root / "projects" / slug
+
+        config_path = project_dir / "config.toml"
+        if config_path.is_file():
+            try:
+                config = load_config(config_path)
+                adapter_command = config.implementer.command
+            except ConfigError as e:
+                raise click.ClickException(f"Could not load project config: {e}")
+
+    report = run_preflight(repo_path, adapter_command=adapter_command)
+
+    # Render checklist
+    status_icons = {"pass": "OK", "warn": "WARN", "fail": "FAIL"}
+    for check in report.checks:
+        icon = status_icons[check.status]
+        click.echo(f"  [{icon}] {check.message}")
+        if check.detail and check.status != "pass":
+            for line in check.detail.splitlines():
+                click.echo(f"         {line}")
+
+    # Summary
+    click.echo()
+    if report.passed and not report.has_warnings:
+        click.echo("All checks passed.")
+    elif report.passed:
+        click.echo(f"All checks passed with {len(report.warnings)} warning(s).")
+    else:
+        click.echo(
+            f"{len(report.failures)} check(s) failed. "
+            "Fix the issues above before running agent work."
+        )
+
+    if not report.passed:
+        raise SystemExit(1)
 
 
 if __name__ == "__main__":

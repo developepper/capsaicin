@@ -32,7 +32,8 @@ Recommended transitions:
 - `implementing -> in-review`
   trigger: implementer run succeeds and a non-empty `run_diffs` record exists
 - `implementing -> human-gate`
-  trigger: implementer run succeeds but produces an empty tracked-file diff
+  trigger: implementer run succeeds but produces an empty tracked-file diff,
+  or implementer run is blocked by permission denials
 - `implementing -> blocked`
   trigger: implementer run fails repeatedly, times out repeatedly, or escalates
 - `in-review -> revise`
@@ -41,6 +42,9 @@ Recommended transitions:
   trigger: reviewer returns `verdict: pass`, reviewer returns
   `verdict: escalate`, reviewer returns `verdict: pass` with
   `confidence: low`, or the cycle limit is reached
+- `in-review -> human-gate`
+  trigger: reviewer run is blocked by permission denials
+  (`gate_reason = 'permission_denied'`; no retries consumed)
 - `in-review -> blocked`
   trigger: reviewer run hits repeated `contract_violation` or `parse_error`
 - `revise -> implementing`
@@ -69,6 +73,8 @@ Recommended transitions:
   evidence
 - `implementing -> human-gate` for empty implementation should set
   `gate_reason = 'empty_implementation'`
+- `implementing -> human-gate` for permission-denied runs should set
+  `gate_reason = 'permission_denied'`; no retries are consumed
 - `in-review -> human-gate` on `pass` requires a valid reviewer result with no
   blocking findings
 - `in-review -> human-gate` on clean pass should set

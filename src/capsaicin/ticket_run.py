@@ -10,7 +10,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from capsaicin.activity_log import log_event
+from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
@@ -127,7 +127,6 @@ def _update_agent_run(
     raw_stdout: str,
     raw_stderr: str,
     adapter_metadata: dict | None,
-    result_text: str = "",
 ) -> None:
     """Update an agent_runs row with terminal status and outputs."""
     conn.execute(
@@ -378,7 +377,6 @@ def _invoke_once(
         raw_stdout=result.raw_stdout,
         raw_stderr=result.raw_stderr,
         adapter_metadata=result.adapter_metadata,
-        result_text=result.result_text,
     )
 
     if log_path:
@@ -388,10 +386,11 @@ def _invoke_once(
             project_id=project_id,
             ticket_id=ticket_id,
             run_id=run_id,
-            payload={
-                "exit_status": result.exit_status,
-                "duration": result.duration_seconds,
-            },
+            payload=build_run_end_payload(
+                result.exit_status,
+                result.duration_seconds,
+                result.adapter_metadata,
+            ),
         )
 
     # Handle result
@@ -419,6 +418,30 @@ def _handle_run_result(
 
     Returns the new ticket status, or '_retry' if the caller should retry.
     """
+    # Permission denied — route to human-gate without consuming retries
+    if exit_status == "permission_denied":
+        transition_ticket(
+            conn,
+            ticket_id,
+            "human-gate",
+            "system",
+            reason="Implementer run blocked by permission denials.",
+            gate_reason="permission_denied",
+            log_path=log_path,
+        )
+        finish_run(conn, project_id)
+        await_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "PERMISSION_DENIED",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"role": "implementer"},
+            )
+        return "human-gate"
+
     if exit_status == "success":
         # Capture post-run diff
         diff_result = capture_diff(config.project.repo_path)

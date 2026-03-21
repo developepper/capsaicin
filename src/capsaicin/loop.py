@@ -18,6 +18,40 @@ from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
 from capsaicin.ticket_run import run_implementation_pipeline, select_ticket
 
 
+def select_ticket_for_loop(
+    conn: sqlite3.Connection, ticket_id: str | None = None
+) -> dict:
+    """Select a ticket for the automated loop.
+
+    When *ticket_id* is given, delegates to ``select_ticket`` (same
+    validation as ``ticket run``).
+
+    When no ID is given, prefers in-flight ``revise`` tickets before
+    unstarted ``ready`` work.  Revise tickets are already past dependency
+    checks so dependency satisfaction is not re-verified for them.
+
+    Ordering:
+    - revise tickets by ``status_changed_at`` ascending, then ``created_at``
+    - ready tickets by ``created_at`` with dependency satisfaction
+    """
+    if ticket_id:
+        return select_ticket(conn, ticket_id)
+
+    # Prefer revise tickets (in-flight work)
+    revise_row = conn.execute(
+        "SELECT id, project_id, title, description, status, "
+        "current_cycle, current_impl_attempt, current_review_attempt "
+        "FROM tickets WHERE status = 'revise' "
+        "ORDER BY status_changed_at ASC, created_at ASC "
+        "LIMIT 1"
+    ).fetchone()
+    if revise_row is not None:
+        return dict(revise_row)
+
+    # Fall back to ready tickets (same as select_ticket auto-selection)
+    return select_ticket(conn)
+
+
 def _reload_ticket(conn: sqlite3.Connection, ticket_id: str) -> dict:
     """Reload ticket from DB to get fresh status."""
     row = conn.execute(
@@ -51,8 +85,8 @@ def run_loop(
     if max_cycles is not None:
         config.limits.max_cycles = max_cycles
 
-    # Select ticket (must be in ready or revise)
-    ticket = select_ticket(conn, ticket_id)
+    # Select ticket — prefer revise (in-flight) before ready (new work)
+    ticket = select_ticket_for_loop(conn, ticket_id)
     tid = ticket["id"]
 
     if log_path:

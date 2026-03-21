@@ -308,6 +308,8 @@ def _handle_finished_review_run(
 
 def build_human_gate_context(conn: sqlite3.Connection, ticket_id: str) -> str:
     """Build human-gate context display for awaiting_human state."""
+    from capsaicin.diagnostics import build_human_gate_diagnostic
+
     ticket = get_active_ticket(conn, ticket_id)
     if ticket is None:
         return f"Ticket '{ticket_id}' not found."
@@ -320,6 +322,12 @@ def build_human_gate_context(conn: sqlite3.Connection, ticket_id: str) -> str:
         f"  Status: {ticket['status']}",
         f"  Gate Reason: {ticket['gate_reason'] or 'unknown'}",
     ]
+
+    # Run-outcome diagnostic (T02): surface agent text and denial details
+    diagnostic = build_human_gate_diagnostic(conn, ticket_id)
+    if diagnostic:
+        lines.append("")
+        lines.append(diagnostic)
 
     # Acceptance criteria
     criteria = conn.execute(

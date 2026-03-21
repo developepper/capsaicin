@@ -10,7 +10,7 @@ import json
 import sqlite3
 from pathlib import Path
 
-from capsaicin.activity_log import log_event
+from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
@@ -414,21 +414,11 @@ def _invoke_once(
         ),
     )
 
-    if log_path:
-        log_event(
-            log_path,
-            "RUN_END",
-            project_id=project_id,
-            ticket_id=ticket_id,
-            run_id=run_id,
-            payload={
-                "exit_status": result.exit_status,
-                "duration": result.duration_seconds,
-            },
-        )
-
     # --- Post-review checks and result handling ---
-    return _handle_review_result(
+    # RUN_END is logged after classification so the payload reflects the
+    # final run outcome (e.g. contract_violation), not the adapter's
+    # initial exit_status.
+    outcome = _handle_review_result(
         conn=conn,
         project_id=project_id,
         ticket_id=ticket_id,
@@ -438,6 +428,31 @@ def _invoke_once(
         config=config,
         log_path=log_path,
     )
+
+    if log_path:
+        # Read the final classified exit_status from the DB, since
+        # _handle_review_result may have reclassified the run (e.g.
+        # contract_violation).
+        final_row = conn.execute(
+            "SELECT exit_status FROM agent_runs WHERE id = ?", (run_id,)
+        ).fetchone()
+        final_exit_status = (
+            final_row["exit_status"] if final_row else result.exit_status
+        )
+        log_event(
+            log_path,
+            "RUN_END",
+            project_id=project_id,
+            ticket_id=ticket_id,
+            run_id=run_id,
+            payload=build_run_end_payload(
+                final_exit_status,
+                result.duration_seconds,
+                result.adapter_metadata,
+            ),
+        )
+
+    return outcome
 
 
 def _handle_review_result(
@@ -478,6 +493,30 @@ def _handle_review_result(
                     payload={"reason": "reviewer modified tracked files"},
                 )
             return "_retry:contract_violation"
+
+    # --- Permission denied — route to human-gate without consuming retries ---
+    if result.exit_status == "permission_denied":
+        transition_ticket(
+            conn,
+            ticket_id,
+            "human-gate",
+            "system",
+            reason="Reviewer run blocked by permission denials.",
+            gate_reason="permission_denied",
+            log_path=log_path,
+        )
+        finish_run(conn, project_id)
+        await_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "PERMISSION_DENIED",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                run_id=run_id,
+                payload={"role": "reviewer"},
+            )
+        return "human-gate"
 
     # --- Parse error (adapter already returned parse_error) ---
     if result.exit_status == "parse_error":

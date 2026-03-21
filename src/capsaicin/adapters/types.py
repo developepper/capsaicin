@@ -20,7 +20,14 @@ VALID_CONFIDENCES = frozenset({"high", "medium", "low"})
 VALID_SEVERITIES = frozenset({"blocking", "warning", "info"})
 VALID_DISPOSITIONS = frozenset({"open", "fixed", "wont_fix", "disputed"})
 VALID_EXIT_STATUSES = frozenset(
-    {"success", "failure", "timeout", "contract_violation", "parse_error"}
+    {
+        "success",
+        "failure",
+        "timeout",
+        "contract_violation",
+        "parse_error",
+        "permission_denied",
+    }
 )
 VALID_CRITERION_STATUSES = frozenset({"pending", "met", "unmet", "disputed"})
 

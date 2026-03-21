@@ -3,9 +3,6 @@
 from __future__ import annotations
 
 import json
-import subprocess
-
-import pytest
 
 from capsaicin.adapters.types import (
     CriterionChecked,
@@ -14,9 +11,6 @@ from capsaicin.adapters.types import (
     RunResult,
     ScopeReviewed,
 )
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
 from capsaicin.orchestrator import get_state
 from capsaicin.resume import (
     _handle_finished_impl_run,
@@ -26,7 +20,7 @@ from capsaicin.resume import (
     get_active_run,
     resume_pipeline,
 )
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
+from tests.conftest import add_ticket, get_ticket_status
 
 
 # ---------------------------------------------------------------------------
@@ -52,66 +46,6 @@ class MockAdapter:
         return self.result
 
 
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket"):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        "Do something",
-        ["criterion 1"],
-        env["log_path"],
-    )
-
-
-def _get_ticket_status(conn, ticket_id):
-    return conn.execute(
-        "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
-    ).fetchone()["status"]
-
-
 def _get_criteria_checked(conn, ticket_id):
     """Build criteria_checked list from the ticket's acceptance criteria."""
     rows = conn.execute(
@@ -126,7 +60,7 @@ def _get_criteria_checked(conn, ticket_id):
 
 def _make_implementing_ticket(env):
     """Create a ticket and move it to implementing with a running impl run."""
-    tid = _add_ticket(env)
+    tid = add_ticket(env, criteria=["criterion 1"])
     env["conn"].execute(
         "UPDATE tickets SET status = 'implementing', current_cycle = 1, "
         "current_impl_attempt = 1 WHERE id = ?",
@@ -158,7 +92,7 @@ def _make_implementing_ticket(env):
 
 def _make_in_review_ticket(env):
     """Create a ticket in in-review with a finished impl run and a running review run."""
-    tid = _add_ticket(env)
+    tid = add_ticket(env, criteria=["criterion 1"])
     env["conn"].execute(
         "UPDATE tickets SET status = 'in-review', current_cycle = 1, "
         "current_impl_attempt = 1, current_review_attempt = 1 WHERE id = ?",
@@ -229,7 +163,7 @@ class TestResumeIdle:
 
     def test_idle_selects_and_runs(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         # Make file change so diff is non-empty
         (env["repo"] / "impl.txt").write_text("changed\n")
@@ -356,7 +290,7 @@ class TestResumeInterruptedRun:
 
         assert action == "interrupted"
         assert "blocked" in detail
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
         # Adapter should NOT have been called (blocked, no retry)
         assert len(adapter.calls) == 0
 
@@ -382,7 +316,7 @@ class TestResumeInterruptedRun:
 
         assert action == "interrupted"
         assert "blocked" in detail
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
         assert len(adapter.calls) == 0
 
 
@@ -419,7 +353,7 @@ class TestResumeFinishedImplRun:
         assert action == "post_run"
         assert "implementer" in detail
         assert "in-review" in detail
-        assert _get_ticket_status(env["conn"], tid) == "in-review"
+        assert get_ticket_status(env["conn"], tid) == "in-review"
 
     def test_finished_impl_success_empty_diff(self, project_env):
         env = project_env
@@ -444,7 +378,7 @@ class TestResumeFinishedImplRun:
 
         assert action == "post_run"
         assert "human-gate" in detail
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_finished_impl_failure_blocks_at_limit(self, project_env):
         """Default max_impl_retries=2, attempt starts at 1.
@@ -471,7 +405,7 @@ class TestResumeFinishedImplRun:
 
         assert action == "post_run"
         assert "blocked" in detail
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
 
         state = get_state(env["conn"], env["project_id"])
         assert state["status"] == "idle"
@@ -503,7 +437,7 @@ class TestResumeFinishedImplRun:
         assert action == "post_run"
         assert "in-review" in detail
         # Status should still be in-review, not double-processed
-        assert _get_ticket_status(env["conn"], tid) == "in-review"
+        assert get_ticket_status(env["conn"], tid) == "in-review"
 
 
 # ---------------------------------------------------------------------------
@@ -553,7 +487,7 @@ class TestResumeFinishedReviewRun:
         assert action == "post_run"
         assert "reviewer" in detail
         assert "human-gate" in detail
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_finished_review_fail(self, project_env):
         env = project_env
@@ -603,7 +537,7 @@ class TestResumeFinishedReviewRun:
         assert action == "post_run"
         assert "reviewer" in detail
         assert "revise" in detail
-        assert _get_ticket_status(env["conn"], tid) == "revise"
+        assert get_ticket_status(env["conn"], tid) == "revise"
 
     def test_does_not_duplicate_if_already_processed(self, project_env):
         env = project_env
@@ -629,7 +563,7 @@ class TestResumeFinishedReviewRun:
 
         assert action == "post_run"
         assert "revise" in detail
-        assert _get_ticket_status(env["conn"], tid) == "revise"
+        assert get_ticket_status(env["conn"], tid) == "revise"
 
 
 # ---------------------------------------------------------------------------
@@ -640,7 +574,7 @@ class TestResumeFinishedReviewRun:
 class TestResumeAwaitingHuman:
     def test_renders_context(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="Gate Test")
+        tid = add_ticket(env, title="Gate Test", criteria=["criterion 1"])
 
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', "
@@ -672,7 +606,7 @@ class TestResumeAwaitingHuman:
 
     def test_renders_findings(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', "
@@ -717,7 +651,7 @@ class TestResumeAwaitingHuman:
     def test_no_action_taken(self, project_env):
         """Awaiting human should not change any state."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', "
@@ -744,7 +678,7 @@ class TestResumeAwaitingHuman:
         # State unchanged
         state = get_state(env["conn"], env["project_id"])
         assert state["status"] == "awaiting_human"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
 
 # ---------------------------------------------------------------------------
@@ -756,7 +690,7 @@ class TestResumeSuspended:
     def test_resume_run_step(self, project_env):
         """Suspended with step=run resumes implementation for a ready ticket."""
         env = project_env
-        tid = _add_ticket(env, title="Suspended Ticket")
+        tid = add_ticket(env, title="Suspended Ticket", criteria=["criterion 1"])
 
         # Make file change so impl produces a non-empty diff
         (env["repo"] / "impl.txt").write_text("resumed\n")
@@ -877,7 +811,7 @@ class TestResumeSuspended:
 
     def test_unknown_step_resets(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         ctx = json.dumps({"step": "unknown_step", "ticket_id": tid})
         env["conn"].execute(
             "UPDATE orchestrator_state SET status = 'suspended', "
@@ -962,7 +896,7 @@ class TestResumeEdgeCases:
     def test_missing_active_run(self, project_env):
         """Running state with a run that was deleted should reset."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         # Insert a real run, set orchestrator to reference it, then delete the run
         env["conn"].execute(
             "INSERT INTO agent_runs (id, ticket_id, role, mode, cycle_number, "
@@ -1037,7 +971,7 @@ class TestResumeEdgeCases:
 class TestBuildHumanGateContext:
     def test_basic_context(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="My Ticket")
+        tid = add_ticket(env, title="My Ticket", criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', "
             "gate_reason = 'review_passed' WHERE id = ?",

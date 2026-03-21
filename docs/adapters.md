@@ -65,8 +65,8 @@ One useful normalization is an explicit execution mode:
 
 The adapter should return at least:
 
-- exit status such as success, failure, timeout, contract violation, or parse
-  error
+- exit status such as success, failure, timeout, contract violation, parse
+  error, or permission denied
 - structured result when the CLI supports it
 - raw stdout and stderr as fallback evidence
 - duration and run metadata
@@ -104,6 +104,10 @@ Observed envelope behavior:
 - schema-constrained replies are returned in `structured_output`
 - envelope fields include `is_error`, `duration_ms`, `num_turns`, `session_id`,
   `total_cost_usd`, `usage`, `modelUsage`, and `permission_denials`
+- when `permission_denials` is a non-empty list, the adapter returns
+  `exit_status: permission_denied` regardless of role; denial details are
+  normalized into `adapter_metadata.normalized_denials` while the raw
+  `permission_denials` array is preserved verbatim in `adapter_metadata`
 - the full reviewer schema defined below has been validated successfully
   with Claude Code `structured_output`
 - Claude Code can still return schema-valid but contract-invalid reviewer
@@ -217,7 +221,7 @@ Run result envelope:
 ```json
 {
   "run_id": "string",
-  "exit_status": "success | failure | timeout | contract_violation | parse_error",
+  "exit_status": "success | failure | timeout | contract_violation | parse_error | permission_denied",
   "duration_seconds": 0,
   "raw_stdout": "string",
   "raw_stderr": "string",

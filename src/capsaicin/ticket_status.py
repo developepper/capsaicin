@@ -1,11 +1,30 @@
-"""Status rendering module (T25).
+"""Status rendering module (T25, T07).
 
 Renders project summary and ticket detail to stdout.
 """
 
 from __future__ import annotations
 
+import json
 import sqlite3
+
+from capsaicin.diagnostics import (
+    denial_summary,
+    extract_result_text_from_raw,
+    truncate,
+    build_run_outcome_message,
+)
+
+
+def _parse_adapter_metadata(raw: str | None) -> dict:
+    """Parse adapter_metadata JSON, returning {} on any failure."""
+    if not raw:
+        return {}
+    try:
+        data = json.loads(raw)
+    except (json.JSONDecodeError, TypeError):
+        return {}
+    return data if isinstance(data, dict) else {}
 
 
 def get_ticket_counts_by_status(conn: sqlite3.Connection, project_id: str) -> dict:
@@ -193,7 +212,7 @@ def get_last_run(conn: sqlite3.Connection, ticket_id: str) -> dict | None:
     """Return the most recent agent run for a ticket."""
     row = conn.execute(
         "SELECT id, role, exit_status, duration_seconds, verdict, "
-        "started_at, finished_at "
+        "started_at, finished_at, adapter_metadata, raw_stdout "
         "FROM agent_runs WHERE ticket_id = ? "
         "ORDER BY started_at DESC LIMIT 1",
         (ticket_id,),
@@ -207,7 +226,8 @@ def get_run_history(conn: sqlite3.Connection, ticket_id: str) -> list[dict]:
     """Return all runs for a ticket, ordered by start time."""
     rows = conn.execute(
         "SELECT id, role, exit_status, duration_seconds, verdict, "
-        "cycle_number, attempt_number, started_at, finished_at "
+        "cycle_number, attempt_number, started_at, finished_at, "
+        "adapter_metadata "
         "FROM agent_runs WHERE ticket_id = ? "
         "ORDER BY started_at",
         (ticket_id,),
@@ -290,6 +310,29 @@ def build_ticket_detail(
         lines.append(f"  Exit Status: {last_run['exit_status']}")
         lines.append(f"  Duration: {duration}")
         lines.append(f"  Verdict: {verdict}")
+
+        # Parse adapter_metadata for cost and denial summary
+        meta = _parse_adapter_metadata(last_run.get("adapter_metadata"))
+        cost = meta.get("total_cost_usd")
+        if cost is not None:
+            lines.append(f"  Cost: ${cost:.4f}")
+
+        # Default: concise diagnostic for permission-denied or empty-impl
+        diagnostic = build_run_outcome_message(conn, ticket_id, last_run["id"])
+        if diagnostic:
+            lines.append("")
+            for dline in diagnostic.splitlines():
+                lines.append(f"  {dline}")
+
+        # Verbose: richer last-run metadata
+        if verbose:
+            denial_sum = denial_summary(meta)
+            if denial_sum:
+                lines.append(f"  Denials: {denial_sum}")
+
+            result_text = extract_result_text_from_raw(last_run.get("raw_stdout"))
+            if result_text:
+                lines.append(f"  Agent Text: {truncate(result_text)}")
     else:
         lines.append("Last Run: (none)")
 
@@ -306,11 +349,16 @@ def build_ticket_detail(
                     else "n/a"
                 )
                 verdict = r["verdict"] or "n/a"
+                run_meta = _parse_adapter_metadata(r.get("adapter_metadata"))
+                cost_str = ""
+                run_cost = run_meta.get("total_cost_usd")
+                if run_cost is not None:
+                    cost_str = f" cost=${run_cost:.4f}"
                 lines.append(
                     f"  [{r['started_at']}] {r['role']} "
                     f"cycle={r['cycle_number']} attempt={r['attempt_number']} "
                     f"exit={r['exit_status']} verdict={verdict} "
-                    f"duration={duration}"
+                    f"duration={duration}{cost_str}"
                 )
         else:
             lines.append("  (none)")

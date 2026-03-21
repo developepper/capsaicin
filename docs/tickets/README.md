@@ -36,13 +36,9 @@ The intended session-start workflow is:
   are not yet scoped into an epic
 - [archive/](./archive/): completed epic plans retained for history
 
-## Active Epics
-
-- [epic-02-reliability-and-diagnostics](./epic-02-reliability-and-diagnostics/):
-  planned next epic
-
 ## Archive
 
-| Epic | Directory |
-|------|-----------|
+| Epic                         | Directory                                                                             |
+|------------------------------|---------------------------------------------------------------------------------------|
 | Epic 01: Implementation Loop | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |
+| Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/) |
