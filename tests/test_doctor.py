@@ -12,6 +12,7 @@ from __future__ import annotations
 
 import json
 import subprocess
+from unittest.mock import patch
 
 import pytest
 from click.testing import CliRunner
@@ -53,13 +54,15 @@ def clean_repo(tmp_path):
 
 
 class TestDoctorAllPass:
-    def test_exits_zero_when_all_pass(self, clean_repo):
+    @patch("capsaicin.preflight.shutil.which", return_value="/usr/bin/claude")
+    def test_exits_zero_when_all_pass(self, _mock_which, clean_repo):
         runner = CliRunner()
         result = runner.invoke(cli, ["doctor", "--repo", str(clean_repo)])
         assert result.exit_code == 0
         assert "All checks passed" in result.output
 
-    def test_shows_ok_markers(self, clean_repo):
+    @patch("capsaicin.preflight.shutil.which", return_value="/usr/bin/claude")
+    def test_shows_ok_markers(self, _mock_which, clean_repo):
         runner = CliRunner()
         result = runner.invoke(cli, ["doctor", "--repo", str(clean_repo)])
         assert "[OK]" in result.output
@@ -120,7 +123,8 @@ class TestDoctorProjectResolution:
         assert result.exit_code != 0
         assert "not found" in result.output.lower()
 
-    def test_valid_project_slug_works(self, clean_repo):
+    @patch("capsaicin.preflight.shutil.which", return_value="/usr/bin/claude")
+    def test_valid_project_slug_works(self, _mock_which, clean_repo):
         from capsaicin.init import init_project
 
         init_project("my-proj", str(clean_repo))
@@ -134,7 +138,8 @@ class TestDoctorProjectResolution:
 
 
 class TestDoctorWarnings:
-    def test_dirty_tree_warns_but_passes(self, clean_repo):
+    @patch("capsaicin.preflight.shutil.which", return_value="/usr/bin/claude")
+    def test_dirty_tree_warns_but_passes(self, _mock_which, clean_repo):
         """Dirty working tree should warn, not fail."""
         (clean_repo / "f.txt").write_text("dirty")
         runner = CliRunner()
