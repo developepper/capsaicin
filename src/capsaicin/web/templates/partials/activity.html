@@ -1,4 +1,4 @@
-<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s" hx-swap="outerHTML">
+<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
   <h2>Recent Activity</h2>
   {% if data.recent_runs %}
   <table>

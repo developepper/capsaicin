@@ -25,7 +25,16 @@ from starlette.staticfiles import StaticFiles
 
 from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.dashboard import dashboard
-from capsaicin.web.routes.partials import partial_activity, partial_inbox, partial_queue
+from capsaicin.web.routes.events import dashboard_events, ticket_events
+from capsaicin.web.routes.partials import (
+    partial_activity,
+    partial_blocked,
+    partial_inbox,
+    partial_next_runnable,
+    partial_orchestrator,
+    partial_queue,
+    partial_ticket_content,
+)
 from capsaicin.web.routes.tickets import ticket_detail
 
 _PACKAGE_DIR = Path(__file__).parent
@@ -49,6 +58,22 @@ def create_app(
         Route("/partials/inbox", partial_inbox, name="partial_inbox"),
         Route("/partials/queue", partial_queue, name="partial_queue"),
         Route("/partials/activity", partial_activity, name="partial_activity"),
+        Route("/partials/blocked", partial_blocked, name="partial_blocked"),
+        Route(
+            "/partials/next-runnable",
+            partial_next_runnable,
+            name="partial_next_runnable",
+        ),
+        Route(
+            "/partials/orchestrator", partial_orchestrator, name="partial_orchestrator"
+        ),
+        Route(
+            "/partials/tickets/{ticket_id}",
+            partial_ticket_content,
+            name="partial_ticket_content",
+        ),
+        Route("/events/dashboard", dashboard_events, name="dashboard_events"),
+        Route("/events/tickets/{ticket_id}", ticket_events, name="ticket_events"),
         Mount(
             "/static",
             app=StaticFiles(directory=str(_STATIC_DIR)),

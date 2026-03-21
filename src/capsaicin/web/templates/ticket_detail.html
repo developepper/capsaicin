@@ -3,166 +3,25 @@
 {% block content %}
 <h1>{{ data.ticket.title }}</h1>
 
-{# --- Ticket metadata --- #}
-<dl>
-  <dt>ID</dt><dd>{{ data.ticket.id }}</dd>
-  <dt>Status</dt><dd><span class="status-badge status-{{ data.ticket.status }}">{{ data.ticket.status }}</span></dd>
-  <dt>Status Changed</dt><dd>{{ data.ticket.status_changed_at }}</dd>
-  <dt>Cycle</dt><dd>{{ data.ticket.current_cycle }} (impl attempt: {{ data.ticket.current_impl_attempt }}, review attempt: {{ data.ticket.current_review_attempt }})</dd>
-  {% if data.ticket.gate_reason %}
-  <dt>Gate Reason</dt><dd>{{ data.ticket.gate_reason }}</dd>
-  {% endif %}
-  {% if data.ticket.blocked_reason %}
-  <dt>Blocked Reason</dt><dd>{{ data.ticket.blocked_reason }}</dd>
-  {% endif %}
-  {% if data.ticket.description %}
-  <dt>Description</dt><dd>{{ data.ticket.description }}</dd>
-  {% endif %}
-</dl>
-
-{# --- Acceptance criteria --- #}
-<section>
-  <h2>Acceptance Criteria</h2>
-  {% if data.criteria %}
-  <table>
-    <thead><tr><th>Status</th><th>Criterion</th></tr></thead>
-    <tbody>
-      {% for c in data.criteria %}
-      <tr>
-        <td><span class="criteria-{{ c.status }}">{{ c.status }}</span></td>
-        <td>{{ c.description }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-  {% else %}
-  <p class="empty">(none)</p>
-  {% endif %}
-</section>
-
-{# --- Open findings --- #}
-<section>
-  <h2>Open Findings</h2>
-  {% if data.open_findings %}
-    {% for severity in ["blocking","warning","info"] %}
-      {% if severity in data.open_findings %}
-      <h3 class="finding-{{ severity }}">{{ severity }}</h3>
-      <table>
-        <thead><tr><th>Category</th><th>Location</th><th>Description</th></tr></thead>
-        <tbody>
-          {% for f in data.open_findings[severity] %}
-          <tr>
-            <td>{{ f.category }}</td>
-            <td>{{ f.location or "—" }}</td>
-            <td>{{ f.description }}</td>
-          </tr>
-          {% endfor %}
-        </tbody>
-      </table>
-      {% endif %}
-    {% endfor %}
-  {% else %}
-  <p class="empty">(none)</p>
-  {% endif %}
-</section>
-
-{# --- Diagnostic message --- #}
-{% if data.diagnostic %}
-<section class="diagnostic-banner">
-  <h2>Diagnostic</h2>
-  <pre>{{ data.diagnostic }}</pre>
-</section>
-{% endif %}
-
-{# --- Last run --- #}
-{% if data.last_run %}
-<section>
-  <h2>Last Run</h2>
-  <dl>
-    <dt>Role</dt><dd>{{ data.last_run.role }}</dd>
-    <dt>Exit Status</dt><dd>{{ data.last_run.exit_status }}</dd>
-    <dt>Duration</dt><dd>{{ "%.1f"|format(data.last_run.duration_seconds) if data.last_run.duration_seconds is not none else "n/a" }}s</dd>
-    <dt>Verdict</dt><dd>{{ data.last_run.verdict or "n/a" }}</dd>
-    {% if data.last_run_diagnostic and data.last_run_diagnostic.cost_usd is not none %}
-    <dt>Cost</dt><dd>${{ "%.4f"|format(data.last_run_diagnostic.cost_usd) }}</dd>
-    {% endif %}
-    {% if data.last_run_diagnostic and data.last_run_diagnostic.denial_summary %}
-    <dt>Denials</dt><dd>{{ data.last_run_diagnostic.denial_summary }}</dd>
-    {% endif %}
-  </dl>
-  {% if data.last_run_diagnostic and data.last_run_diagnostic.agent_text %}
-  <details>
-    <summary>Agent text</summary>
-    <pre class="agent-text">{{ data.last_run_diagnostic.agent_text }}</pre>
-  </details>
-  {% endif %}
-</section>
-{% endif %}
-
-{# --- Diff summary --- #}
-{% if data.diff_summary %}
-<section>
-  <h2>Implementation Diff</h2>
-  {% if data.diff_summary.files_changed %}
-  <p>{{ data.diff_summary.files_changed|length }} file{{ "s" if data.diff_summary.files_changed|length != 1 else "" }} changed:</p>
-  <ul class="file-list">
-    {% for f in data.diff_summary.files_changed %}
-    <li><code>{{ f }}</code></li>
-    {% endfor %}
-  </ul>
-  {% endif %}
-  {% if data.diff_summary.diff_text %}
-  <details>
-    <summary>Show diff</summary>
-    <pre class="diff-block">{{ data.diff_summary.diff_text }}</pre>
-  </details>
-  {% endif %}
-</section>
-{% endif %}
-
-{# --- Run history --- #}
-{% if data.run_history %}
-<section>
-  <h2>Run History</h2>
-  <table>
-    <thead><tr><th>Started</th><th>Role</th><th>Cycle</th><th>Attempt</th><th>Exit</th><th>Verdict</th><th>Duration</th></tr></thead>
-    <tbody>
-      {% for r in data.run_history %}
-      <tr>
-        <td>{{ r.started_at }}</td>
-        <td>{{ r.role }}</td>
-        <td>{{ r.cycle_number }}</td>
-        <td>{{ r.attempt_number }}</td>
-        <td>{{ r.exit_status }}</td>
-        <td>{{ r.verdict or "—" }}</td>
-        <td>{{ "%.1f"|format(r.duration_seconds) if r.duration_seconds is not none else "—" }}s</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
-
-{# --- Transition history --- #}
-{% if data.transition_history %}
-<section>
-  <h2>Transition History</h2>
-  <table>
-    <thead><tr><th>Time</th><th>From</th><th>To</th><th>By</th><th>Reason</th></tr></thead>
-    <tbody>
-      {% for t in data.transition_history %}
-      <tr>
-        <td>{{ t.created_at }}</td>
-        <td>{{ t.from_status }}</td>
-        <td>{{ t.to_status }}</td>
-        <td>{{ t.triggered_by }}</td>
-        <td>{{ t.reason or "—" }}</td>
-      </tr>
-      {% endfor %}
-    </tbody>
-  </table>
-</section>
-{% endif %}
+{% include "partials/ticket_content.html" %}
 
 <p><a href="/">Back to dashboard</a></p>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var ticketId = '{{ data.ticket.id }}';
+  var src = new EventSource('/events/tickets/' + ticketId);
+  src.addEventListener('ticket-updated', function() {
+    document.body.dispatchEvent(new CustomEvent('sse-ticket'));
+  });
+  src.addEventListener('ticket-gone', function() {
+    src.close();
+  });
+  src.onerror = function() {
+    // SSE disconnected — the page remains usable as a static view.
+    // The browser's EventSource will attempt reconnection automatically.
+  };
+})();
+</script>
 {% endblock %}

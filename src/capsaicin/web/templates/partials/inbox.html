@@ -1,4 +1,4 @@
-<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s" hx-swap="outerHTML">
+<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
   <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
   {% if data.inbox and data.inbox.tickets %}
   <table>

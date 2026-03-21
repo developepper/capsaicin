@@ -5,7 +5,8 @@
 
 {# --- Orchestrator state --- #}
 {% if data.orchestrator %}
-<section class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}">
+<section id="orchestrator" class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}"
+         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
   <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
   {% if data.orchestrator.active_ticket_id and data.active_ticket %}
     — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
@@ -15,7 +16,7 @@
 {% endif %}
 
 {# --- Inbox: human-gate tickets needing decisions --- #}
-<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s" hx-swap="outerHTML">
+<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
   <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
   {% if data.inbox and data.inbox.tickets %}
   <table>
@@ -36,8 +37,8 @@
 </section>
 
 {# --- Blocked tickets --- #}
-{% if data.blocked_tickets %}
-<section id="blocked">
+<section id="blocked" hx-get="/partials/blocked" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
+  {% if data.blocked_tickets %}
   <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
   <table>
     <thead><tr><th>Ticket</th><th>Reason</th></tr></thead>
@@ -50,11 +51,14 @@
       {% endfor %}
     </tbody>
   </table>
+  {% else %}
+  <h2>Blocked</h2>
+  <p class="empty">No blocked tickets.</p>
+  {% endif %}
 </section>
-{% endif %}
 
 {# --- Next runnable ticket --- #}
-<section id="next-runnable">
+<section id="next-runnable" hx-get="/partials/next-runnable" hx-trigger="every 30s, sse-next_runnable from:body" hx-swap="outerHTML">
   <h2>Next Runnable</h2>
   {% if data.next_runnable %}
   <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.title }}</a></p>
@@ -64,7 +68,7 @@
 </section>
 
 {# --- Queue overview --- #}
-<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s" hx-swap="outerHTML">
+<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
   <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
   {% if data.counts_by_status %}
   <table>
@@ -83,7 +87,7 @@
 </section>
 
 {# --- Recent activity --- #}
-<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s" hx-swap="outerHTML">
+<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
   <h2>Recent Activity</h2>
   {% if data.recent_runs %}
   <table>
@@ -104,4 +108,21 @@
   <p class="empty">No runs yet.</p>
   {% endif %}
 </section>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var src = new EventSource('/events/dashboard');
+  var events = ['orchestrator', 'inbox', 'queue', 'blocked', 'next_runnable', 'activity'];
+  events.forEach(function(name) {
+    src.addEventListener(name, function() {
+      document.body.dispatchEvent(new CustomEvent('sse-' + name));
+    });
+  });
+  src.onerror = function() {
+    // SSE disconnected — polling fallback remains active via hx-trigger.
+    // Attempt reconnect is handled by the browser's EventSource spec.
+  };
+})();
+</script>
 {% endblock %}

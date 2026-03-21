@@ -1,0 +1,15 @@
+{% if data.orchestrator %}
+<section id="orchestrator" class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}"
+         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+  <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
+  {% if data.orchestrator.active_ticket_id and data.active_ticket %}
+    — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
+    ({{ data.active_ticket.status }})
+  {% endif %}
+</section>
+{% else %}
+<section id="orchestrator" class="orchestrator-bar orchestrator-idle"
+         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+  <strong>Orchestrator:</strong> idle
+</section>
+{% endif %}
