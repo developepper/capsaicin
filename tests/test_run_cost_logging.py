@@ -14,7 +14,6 @@ Covers:
 from __future__ import annotations
 
 import json
-import subprocess
 from pathlib import Path
 
 import pytest
@@ -28,12 +27,9 @@ from capsaicin.adapters.types import (
     RunResult,
     ScopeReviewed,
 )
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_review import run_review_pipeline
 from capsaicin.ticket_run import run_implementation_pipeline
+from tests.conftest import add_ticket, get_ticket
 
 
 # ---------------------------------------------------------------------------
@@ -308,68 +304,8 @@ class PermissionDeniedReviewAdapter(BaseAdapter):
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env):
-    return add_ticket_inline(
-        env["conn"], env["project_id"], "Test", "Do it", [], env["log_path"]
-    )
-
-
-def _get_ticket(conn, tid):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (tid,),
-        ).fetchone()
-    )
 
 
 def _parse_run_end_payloads(log_path: Path) -> list[dict]:
@@ -386,8 +322,8 @@ def _parse_run_end_payloads(log_path: Path) -> list[dict]:
 def _run_impl_to_in_review(env, ticket_id=None):
     """Run implementation pipeline to get a ticket into in-review status."""
     if ticket_id is None:
-        ticket_id = _add_ticket(env)
-    ticket = _get_ticket(env["conn"], ticket_id)
+        ticket_id = add_ticket(env, title="Test", desc="Do it")
+    ticket = get_ticket(env["conn"], ticket_id)
     adapter = DiffProducingAdapter(env["repo"])
     final = run_implementation_pipeline(
         conn=env["conn"],
@@ -409,8 +345,8 @@ def _run_impl_to_in_review(env, ticket_id=None):
 class TestActivityLogImplPermissionDenied:
     def test_run_end_includes_cost_and_denials(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -433,8 +369,8 @@ class TestActivityLogImplPermissionDenied:
 
     def test_permission_denied_not_logged_as_success(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -454,8 +390,8 @@ class TestActivityLogImplPermissionDenied:
 class TestActivityLogImplSuccessWithCost:
     def test_run_end_includes_cost_no_denials(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = SuccessAdapter()
 
         run_implementation_pipeline(
@@ -485,7 +421,7 @@ class TestActivityLogReviewerPass:
     def test_reviewer_run_end_includes_cost(self, project_env):
         env = project_env
         tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         review_adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -510,7 +446,7 @@ class TestActivityLogReviewerPermissionDenied:
     def test_reviewer_permission_denied_logged(self, project_env):
         env = project_env
         tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         review_adapter = PermissionDeniedReviewAdapter()
 
         run_review_pipeline(
@@ -540,7 +476,7 @@ class TestActivityLogReviewerContractViolation:
         adapter's initial exit_status of 'success'."""
         env = project_env
         tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         # This adapter modifies tracked files, triggering contract_violation
         review_adapter = FileModifyingReviewAdapter(env["repo"])
 

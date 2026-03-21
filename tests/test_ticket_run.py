@@ -2,23 +2,18 @@
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
-from capsaicin.db import get_connection
 from capsaicin.diff import get_run_diff
-from capsaicin.init import init_project
-from capsaicin.orchestrator import get_state, init_cycle, increment_cycle
-from capsaicin.state_machine import transition_ticket
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
+from capsaicin.orchestrator import get_state
 from capsaicin.ticket_run import (
     run_implementation_pipeline,
     select_ticket,
 )
-from capsaicin.config import load_config
+from tests.adapters import DiffProducingAdapter
+from tests.conftest import add_ticket, get_ticket, get_ticket_status
 
 
 # ---------------------------------------------------------------------------
@@ -46,115 +41,6 @@ class MockAdapter(BaseAdapter):
         )
 
 
-class DiffProducingAdapter(BaseAdapter):
-    """Adapter that modifies a file in the repo before returning success."""
-
-    def __init__(self, repo_path, filename="impl.txt", content="implemented\n"):
-        self.repo_path = repo_path
-        self.filename = filename
-        self.content = content
-        self.calls: list[RunRequest] = []
-
-    def execute(self, request: RunRequest) -> RunResult:
-        self.calls.append(request)
-        # Modify a tracked file to produce a diff
-        (self.repo_path / self.filename).write_text(self.content)
-        return RunResult(
-            run_id=request.run_id,
-            exit_status="success",
-            duration_seconds=1.0,
-            raw_stdout="done",
-            raw_stderr="",
-            adapter_metadata={},
-        )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    """Set up a project with a git repo, returning context dict."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    # Init git repo
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    # Create and commit a tracked file
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    # Init capsaicin project
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket", desc="Do something"):
-    return add_ticket_inline(
-        env["conn"], env["project_id"], title, desc, [], env["log_path"]
-    )
-
-
-def _add_ticket_with_criteria(env, title="Test", desc="Do it", criteria=None):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        desc,
-        criteria or ["criterion 1"],
-        env["log_path"],
-    )
-
-
-def _get_ticket_status(conn, ticket_id):
-    return conn.execute(
-        "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
-    ).fetchone()["status"]
-
-
-def _get_ticket(conn, ticket_id):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-    )
-
-
 # ---------------------------------------------------------------------------
 # select_ticket
 # ---------------------------------------------------------------------------
@@ -163,22 +49,22 @@ def _get_ticket(conn, ticket_id):
 class TestSelectTicket:
     def test_auto_select_ready(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         ticket = select_ticket(env["conn"])
         assert ticket["id"] == tid
         assert ticket["status"] == "ready"
 
     def test_auto_select_respects_created_at_ordering(self, project_env):
         env = project_env
-        tid1 = _add_ticket(env, title="First")
-        _add_ticket(env, title="Second")
+        tid1 = add_ticket(env, title="First")
+        add_ticket(env, title="Second")
         ticket = select_ticket(env["conn"])
         assert ticket["id"] == tid1
 
     def test_auto_select_skips_unmet_deps(self, project_env):
         env = project_env
-        tid1 = _add_ticket(env, title="Dep")
-        tid2 = _add_ticket(env, title="Blocked")
+        tid1 = add_ticket(env, title="Dep")
+        tid2 = add_ticket(env, title="Blocked")
         # tid2 depends on tid1 (which is in 'ready', not 'done')
         env["conn"].execute(
             "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
@@ -192,8 +78,8 @@ class TestSelectTicket:
 
     def test_auto_select_picks_with_done_deps(self, project_env):
         env = project_env
-        tid1 = _add_ticket(env, title="Dep")
-        tid2 = _add_ticket(env, title="Dependent")
+        tid1 = add_ticket(env, title="Dep")
+        tid2 = add_ticket(env, title="Dependent")
         env["conn"].execute(
             "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
             (tid2, tid1),
@@ -207,13 +93,13 @@ class TestSelectTicket:
 
     def test_explicit_ticket_id(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         ticket = select_ticket(env["conn"], tid)
         assert ticket["id"] == tid
 
     def test_explicit_ticket_wrong_status(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         env["conn"].execute(
             "UPDATE tickets SET status = 'blocked' WHERE id = ?", (tid,)
         )
@@ -231,7 +117,7 @@ class TestSelectTicket:
 
     def test_revise_status_accepted(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         env["conn"].execute("UPDATE tickets SET status = 'revise' WHERE id = ?", (tid,))
         env["conn"].commit()
         ticket = select_ticket(env["conn"], tid)
@@ -246,8 +132,8 @@ class TestSelectTicket:
 class TestPipelineSuccessWithDiff:
     def test_transitions_to_in_review(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
 
         adapter = DiffProducingAdapter(env["repo"])
         final = run_implementation_pipeline(
@@ -260,12 +146,12 @@ class TestPipelineSuccessWithDiff:
         )
 
         assert final == "in-review"
-        assert _get_ticket_status(env["conn"], tid) == "in-review"
+        assert get_ticket_status(env["conn"], tid) == "in-review"
 
     def test_agent_run_created(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -291,8 +177,8 @@ class TestPipelineSuccessWithDiff:
 
     def test_run_diffs_persisted(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -315,8 +201,8 @@ class TestPipelineSuccessWithDiff:
 
     def test_cycle_initialized(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -328,13 +214,13 @@ class TestPipelineSuccessWithDiff:
             env["log_path"],
         )
 
-        t = _get_ticket(env["conn"], tid)
+        t = get_ticket(env["conn"], tid)
         assert t["current_cycle"] == 1
 
     def test_state_transitions_recorded(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -361,8 +247,8 @@ class TestPipelineSuccessWithDiff:
 
     def test_orchestrator_idle_after_in_review(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -381,8 +267,8 @@ class TestPipelineSuccessWithDiff:
 
     def test_adapter_receives_prompt(self, project_env):
         env = project_env
-        tid = _add_ticket_with_criteria(env, title="Auth", desc="Add auth")
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Auth", desc="Add auth")
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(
@@ -410,8 +296,8 @@ class TestPipelineSuccessWithDiff:
 class TestPipelineEmptyDiff:
     def test_transitions_to_human_gate(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         # MockAdapter doesn't modify files, so diff will be empty
         adapter = MockAdapter(exit_status="success")
 
@@ -425,12 +311,12 @@ class TestPipelineEmptyDiff:
         )
 
         assert final == "human-gate"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_gate_reason_set(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="success")
 
         run_implementation_pipeline(
@@ -451,8 +337,8 @@ class TestPipelineEmptyDiff:
 
     def test_orchestrator_awaiting_human(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="success")
 
         run_implementation_pipeline(
@@ -476,8 +362,8 @@ class TestPipelineEmptyDiff:
 class TestPipelineFailure:
     def test_retry_increments_attempt(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         # max_impl_retries=2 in default config, so attempt 1 fails, attempt 2 fails → blocked
         adapter = MockAdapter(exit_status="failure")
 
@@ -491,12 +377,12 @@ class TestPipelineFailure:
         )
 
         assert final == "blocked"
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
 
     def test_blocked_reason_set(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="failure")
 
         run_implementation_pipeline(
@@ -517,8 +403,8 @@ class TestPipelineFailure:
 
     def test_multiple_run_records(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="failure")
 
         run_implementation_pipeline(
@@ -544,8 +430,8 @@ class TestPipelineFailure:
 
     def test_timeout_triggers_retry(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="timeout")
 
         final = run_implementation_pipeline(
@@ -561,8 +447,8 @@ class TestPipelineFailure:
 
     def test_orchestrator_idle_after_blocked(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter(exit_status="failure")
 
         run_implementation_pipeline(
@@ -586,7 +472,7 @@ class TestPipelineFailure:
 class TestCycleLimitShortcut:
     def test_revise_at_cycle_limit(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         # Manually put ticket into revise at cycle limit
         # Default max_cycles=3 in config
         env["conn"].execute(
@@ -594,7 +480,7 @@ class TestCycleLimitShortcut:
             (tid,),
         )
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         adapter = MockAdapter()  # Should NOT be called
         final = run_implementation_pipeline(
@@ -607,19 +493,19 @@ class TestCycleLimitShortcut:
         )
 
         assert final == "human-gate"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
         # Adapter should not have been invoked
         assert len(adapter.calls) == 0
 
     def test_gate_reason_cycle_limit(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         env["conn"].execute(
             "UPDATE tickets SET status = 'revise', current_cycle = 3 WHERE id = ?",
             (tid,),
         )
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter()
 
         run_implementation_pipeline(
@@ -640,13 +526,13 @@ class TestCycleLimitShortcut:
 
     def test_orchestrator_awaiting_human(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         env["conn"].execute(
             "UPDATE tickets SET status = 'revise', current_cycle = 3 WHERE id = ?",
             (tid,),
         )
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockAdapter()
 
         run_implementation_pipeline(
@@ -670,14 +556,14 @@ class TestCycleLimitShortcut:
 class TestReviseUnderLimit:
     def test_revise_increments_cycle(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         # Put ticket in revise at cycle 1 (under limit of 3)
         env["conn"].execute(
             "UPDATE tickets SET status = 'revise', current_cycle = 1 WHERE id = ?",
             (tid,),
         )
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         final = run_implementation_pipeline(
@@ -690,7 +576,7 @@ class TestReviseUnderLimit:
         )
 
         assert final == "in-review"
-        t = _get_ticket(env["conn"], tid)
+        t = get_ticket(env["conn"], tid)
         assert t["current_cycle"] == 2
 
 
@@ -702,8 +588,8 @@ class TestReviseUnderLimit:
 class TestActivityLog:
     def test_log_events_written(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = DiffProducingAdapter(env["repo"])
 
         run_implementation_pipeline(

@@ -2,13 +2,8 @@
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_status import (
     build_project_summary,
     build_ticket_detail,
@@ -18,65 +13,7 @@ from capsaicin.ticket_status import (
     get_next_runnable_ticket,
     get_ticket_counts_by_status,
 )
-
-
-# ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket", desc="Do something", criteria=None):
-    if criteria is None:
-        criteria = ["criterion 1"]
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        desc,
-        criteria,
-        env["log_path"],
-    )
+from tests.conftest import add_ticket
 
 
 # ---------------------------------------------------------------------------
@@ -92,8 +29,8 @@ class TestTicketCountsByStatus:
         assert counts == {}
 
     def test_counts_single_status(self, project_env):
-        _add_ticket(project_env)
-        _add_ticket(project_env, title="Second")
+        add_ticket(project_env, criteria=["criterion 1"])
+        add_ticket(project_env, title="Second", criteria=["criterion 1"])
         counts = get_ticket_counts_by_status(
             project_env["conn"], project_env["project_id"]
         )
@@ -101,9 +38,9 @@ class TestTicketCountsByStatus:
 
     def test_counts_multiple_statuses(self, project_env):
         env = project_env
-        t1 = _add_ticket(env, title="T1")
-        t2 = _add_ticket(env, title="T2")
-        t3 = _add_ticket(env, title="T3")
+        t1 = add_ticket(env, title="T1", criteria=["criterion 1"])
+        t2 = add_ticket(env, title="T2", criteria=["criterion 1"])
+        t3 = add_ticket(env, title="T3", criteria=["criterion 1"])
 
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', gate_reason = 'review_passed' WHERE id = ?",
@@ -133,7 +70,7 @@ class TestActiveTicket:
 
     def test_active_ticket(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE orchestrator_state SET active_ticket_id = ? WHERE project_id = ?",
             (tid, env["project_id"]),
@@ -157,7 +94,7 @@ class TestHumanGateTickets:
 
     def test_gate_tickets_with_reason(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', gate_reason = 'review_passed' WHERE id = ?",
             (tid,),
@@ -181,7 +118,7 @@ class TestBlockedTickets:
 
     def test_blocked_with_reason(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'blocked', blocked_reason = 'impl failure' WHERE id = ?",
             (tid,),
@@ -207,15 +144,15 @@ class TestNextRunnableTicket:
 
     def test_ready_ticket_no_deps(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         result = get_next_runnable_ticket(env["conn"], env["project_id"])
         assert result is not None
         assert result["id"] == tid
 
     def test_respects_dependency_order(self, project_env):
         env = project_env
-        t1 = _add_ticket(env, title="First")
-        t2 = _add_ticket(env, title="Second")
+        t1 = add_ticket(env, title="First", criteria=["criterion 1"])
+        t2 = add_ticket(env, title="Second", criteria=["criterion 1"])
 
         # t2 depends on t1
         env["conn"].execute(
@@ -230,8 +167,8 @@ class TestNextRunnableTicket:
 
     def test_skips_unmet_deps(self, project_env):
         env = project_env
-        t1 = _add_ticket(env, title="First")
-        t2 = _add_ticket(env, title="Second")
+        t1 = add_ticket(env, title="First", criteria=["criterion 1"])
+        t2 = add_ticket(env, title="Second", criteria=["criterion 1"])
 
         # t2 depends on t1; mark t1 as implementing
         env["conn"].execute(
@@ -249,8 +186,8 @@ class TestNextRunnableTicket:
 
     def test_dep_satisfied_when_done(self, project_env):
         env = project_env
-        t1 = _add_ticket(env, title="First")
-        t2 = _add_ticket(env, title="Second")
+        t1 = add_ticket(env, title="First", criteria=["criterion 1"])
+        t2 = add_ticket(env, title="Second", criteria=["criterion 1"])
 
         env["conn"].execute(
             "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
@@ -278,8 +215,8 @@ class TestBuildProjectSummary:
 
     def test_with_tickets(self, project_env):
         env = project_env
-        _add_ticket(env, title="Ready One")
-        t2 = _add_ticket(env, title="Gated")
+        add_ticket(env, title="Ready One", criteria=["criterion 1"])
+        t2 = add_ticket(env, title="Gated", criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', gate_reason = 'review_passed' WHERE id = ?",
             (t2,),
@@ -296,7 +233,7 @@ class TestBuildProjectSummary:
 
     def test_shows_blocked(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="Stuck")
+        tid = add_ticket(env, title="Stuck", criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'blocked', blocked_reason = 'adapter crash' WHERE id = ?",
             (tid,),
@@ -309,7 +246,7 @@ class TestBuildProjectSummary:
 
     def test_shows_active_ticket(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="Active One")
+        tid = add_ticket(env, title="Active One", criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE orchestrator_state SET active_ticket_id = ? WHERE project_id = ?",
             (tid, env["project_id"]),
@@ -332,7 +269,7 @@ class TestBuildTicketDetail:
 
     def test_basic_fields(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="My Ticket", criteria=["AC one", "AC two"])
+        tid = add_ticket(env, title="My Ticket", criteria=["AC one", "AC two"])
         output = build_ticket_detail(env["conn"], tid)
 
         assert "My Ticket" in output
@@ -346,7 +283,7 @@ class TestBuildTicketDetail:
 
     def test_shows_findings_grouped_by_severity(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         # Insert a synthetic run
         env["conn"].execute(
@@ -381,7 +318,7 @@ class TestBuildTicketDetail:
 
     def test_shows_last_run(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         env["conn"].execute(
             "INSERT INTO agent_runs (id, ticket_id, role, mode, cycle_number, "
@@ -401,7 +338,7 @@ class TestBuildTicketDetail:
 
     def test_verbose_includes_run_history(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         env["conn"].execute(
             "INSERT INTO agent_runs (id, ticket_id, role, mode, cycle_number, "
@@ -431,7 +368,7 @@ class TestBuildTicketDetail:
 
     def test_verbose_includes_transition_history(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         # The ticket add already inserts a null->ready transition
         output = build_ticket_detail(env["conn"], tid, verbose=True)
@@ -440,7 +377,7 @@ class TestBuildTicketDetail:
 
     def test_gate_reason_shown(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'human-gate', gate_reason = 'cycle_limit' WHERE id = ?",
             (tid,),
@@ -452,7 +389,7 @@ class TestBuildTicketDetail:
 
     def test_blocked_reason_shown(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         env["conn"].execute(
             "UPDATE tickets SET status = 'blocked', blocked_reason = 'adapter timeout' WHERE id = ?",
             (tid,),

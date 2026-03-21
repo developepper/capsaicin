@@ -12,18 +12,12 @@ Covers:
 from __future__ import annotations
 
 import json
-import subprocess
-
-import pytest
 
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_run import run_implementation_pipeline
 from capsaicin.ticket_status import build_ticket_detail
+from tests.conftest import add_ticket, get_ticket
 
 
 # ---------------------------------------------------------------------------
@@ -103,70 +97,6 @@ class EmptyImplAdapter(BaseAdapter):
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test", desc="Do it"):
-    return add_ticket_inline(
-        env["conn"], env["project_id"], title, desc, [], env["log_path"]
-    )
-
-
-def _get_ticket(conn, tid):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (tid,),
-        ).fetchone()
-    )
-
-
-# ---------------------------------------------------------------------------
 # Permission-denied in status output
 # ---------------------------------------------------------------------------
 
@@ -174,8 +104,8 @@ def _get_ticket(conn, tid):
 class TestStatusPermissionDenied:
     def test_default_shows_permission_denied(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -194,8 +124,8 @@ class TestStatusPermissionDenied:
 
     def test_verbose_shows_denial_details_and_agent_text(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -223,8 +153,8 @@ class TestStatusPermissionDenied:
 class TestStatusEmptyImpl:
     def test_default_shows_no_changes(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = EmptyImplAdapter()
 
         run_implementation_pipeline(
@@ -244,8 +174,8 @@ class TestStatusEmptyImpl:
         """The old misleading case: exit=success + gate_reason=empty_implementation
         should now include diagnostic text, not just the raw exit status."""
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = EmptyImplAdapter()
 
         run_implementation_pipeline(
@@ -267,8 +197,8 @@ class TestStatusEmptyImpl:
 
     def test_verbose_shows_agent_text(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = EmptyImplAdapter()
 
         run_implementation_pipeline(
@@ -293,8 +223,8 @@ class TestStatusEmptyImpl:
 class TestStatusCost:
     def test_cost_shown_in_last_run(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -312,8 +242,8 @@ class TestStatusCost:
 
     def test_verbose_run_history_includes_cost(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(

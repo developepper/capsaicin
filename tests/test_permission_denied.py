@@ -20,18 +20,15 @@ import pytest
 
 from capsaicin.adapters.claude_code import ClaudeCodeAdapter
 from capsaicin.adapters.types import RunRequest, RunResult, AcceptanceCriterion
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
 from capsaicin.orchestrator import get_state
 from capsaicin.resume import (
     _handle_finished_impl_run,
     _handle_finished_review_run,
 )
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_run import run_implementation_pipeline
 from capsaicin.ticket_review import run_review_pipeline
-from capsaicin.config import load_config
 from capsaicin.adapters.base import BaseAdapter
+from tests.conftest import add_ticket, get_ticket
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -286,72 +283,11 @@ class TestDenialNormalization:
 # ---------------------------------------------------------------------------
 
 
-@pytest.fixture()
-def project_env(tmp_path):
-    """Set up a project with a git repo, returning context dict."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket", desc="Do something"):
-    return add_ticket_inline(
-        env["conn"], env["project_id"], title, desc, [], env["log_path"]
-    )
-
-
-def _get_ticket(conn, ticket_id):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-    )
-
-
 class TestImplPermissionDeniedPipeline:
     def test_transitions_to_human_gate(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         final = run_implementation_pipeline(
@@ -374,8 +310,8 @@ class TestImplPermissionDeniedPipeline:
 
     def test_does_not_consume_retries(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -398,8 +334,8 @@ class TestImplPermissionDeniedPipeline:
 
     def test_orchestrator_awaiting_human(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -416,8 +352,8 @@ class TestImplPermissionDeniedPipeline:
 
     def test_run_record_persisted_with_permission_denied(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -445,8 +381,8 @@ class TestImplPermissionDeniedPipeline:
 
     def test_activity_log_contains_permission_denied(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -463,8 +399,8 @@ class TestImplPermissionDeniedPipeline:
 
     def test_state_transitions_recorded(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
         adapter = PermissionDeniedAdapter()
 
         run_implementation_pipeline(
@@ -499,7 +435,7 @@ class TestSchemaAcceptsPermissionDenied:
     def test_exit_status_permission_denied_accepted(self, project_env):
         """The agent_runs exit_status CHECK should accept 'permission_denied'."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, title="Test", desc="Do it")
         # Direct insert to verify CHECK constraint
         env["conn"].execute(
             "INSERT INTO agent_runs "
@@ -520,7 +456,7 @@ class TestSchemaAcceptsPermissionDenied:
     def test_gate_reason_permission_denied_accepted(self, project_env):
         """The tickets gate_reason CHECK should accept 'permission_denied'."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, title="Test", desc="Do it")
         env["conn"].execute(
             "UPDATE tickets SET gate_reason = 'permission_denied', "
             "status = 'human-gate' WHERE id = ?",
@@ -662,8 +598,8 @@ class DiffProducingImplAdapter(BaseAdapter):
 def _run_impl_to_in_review(env, ticket_id=None):
     """Run implementation pipeline to get a ticket into in-review status."""
     if ticket_id is None:
-        ticket_id = _add_ticket(env)
-    ticket = _get_ticket(env["conn"], ticket_id)
+        ticket_id = add_ticket(env, title="Test", desc="Do it")
+    ticket = get_ticket(env["conn"], ticket_id)
     adapter = DiffProducingImplAdapter(env["repo"])
     final = run_implementation_pipeline(
         conn=env["conn"],
@@ -812,8 +748,8 @@ class TestResumePermissionDeniedImpl:
         """A finished implementer run with permission_denied should
         route to human-gate on resume, not retry."""
         env = project_env
-        tid = _add_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Test", desc="Do it")
+        ticket = get_ticket(env["conn"], tid)
 
         # Run the pipeline with a permission-denied adapter
         adapter = PermissionDeniedAdapter()

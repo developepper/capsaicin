@@ -9,9 +9,9 @@ import json
 import sqlite3
 
 from capsaicin.diagnostics import (
-    _denial_summary,
-    _extract_result_text_from_raw,
-    _truncate,
+    denial_summary,
+    extract_result_text_from_raw,
+    truncate,
     build_run_outcome_message,
 )
 
@@ -326,13 +326,13 @@ def build_ticket_detail(
 
         # Verbose: richer last-run metadata
         if verbose:
-            denial_sum = _denial_summary(meta)
+            denial_sum = denial_summary(meta)
             if denial_sum:
                 lines.append(f"  Denials: {denial_sum}")
 
-            result_text = _extract_result_text_from_raw(last_run.get("raw_stdout"))
+            result_text = extract_result_text_from_raw(last_run.get("raw_stdout"))
             if result_text:
-                lines.append(f"  Agent Text: {_truncate(result_text)}")
+                lines.append(f"  Agent Text: {truncate(result_text)}")
     else:
         lines.append("Last Run: (none)")
 

@@ -14,7 +14,7 @@ import sqlite3
 _MAX_RESULT_TEXT_LEN = 300
 
 
-def _extract_result_text_from_raw(raw_stdout: str | None) -> str:
+def extract_result_text_from_raw(raw_stdout: str | None) -> str:
     """Extract the ``result`` field from a persisted Claude envelope.
 
     Returns the assistant text, or an empty string if extraction fails.
@@ -31,14 +31,14 @@ def _extract_result_text_from_raw(raw_stdout: str | None) -> str:
     return result if isinstance(result, str) else ""
 
 
-def _truncate(text: str, max_len: int = _MAX_RESULT_TEXT_LEN) -> str:
+def truncate(text: str, max_len: int = _MAX_RESULT_TEXT_LEN) -> str:
     """Truncate *text* to *max_len* characters, appending '…' if trimmed."""
     if len(text) <= max_len:
         return text
     return text[:max_len].rstrip() + "…"
 
 
-def _denial_summary(adapter_metadata: dict) -> str:
+def denial_summary(adapter_metadata: dict) -> str:
     """Build a concise denial summary from adapter_metadata.
 
     Returns a string like ``"3 denied actions (Edit, Bash)"`` or empty
@@ -105,17 +105,17 @@ def build_run_outcome_message(
     except (json.JSONDecodeError, TypeError):
         meta = {}
 
-    result_text = _extract_result_text_from_raw(raw_stdout)
+    result_text = extract_result_text_from_raw(raw_stdout)
 
     # --- Permission denied ---
     if exit_status == "permission_denied":
         lines = ["Run blocked by permission denials."]
-        summary = _denial_summary(meta)
+        summary = denial_summary(meta)
         if summary:
             lines.append(f"  {summary}")
         if result_text:
             lines.append("")
-            lines.append(f"  Agent: {_truncate(result_text)}")
+            lines.append(f"  Agent: {truncate(result_text)}")
         return "\n".join(lines)
 
     # --- Empty implementation (success with gate_reason='empty_implementation') ---
@@ -130,7 +130,7 @@ def build_run_outcome_message(
         lines = ["Implementation produced no changes."]
         if result_text:
             lines.append("")
-            lines.append(f"  Agent: {_truncate(result_text)}")
+            lines.append(f"  Agent: {truncate(result_text)}")
         return "\n".join(lines)
 
     # --- Other outcomes: just return a plain status line ---

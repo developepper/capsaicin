@@ -14,19 +14,14 @@ Covers:
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest, RunResult
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
 from capsaicin.loop import run_loop, select_ticket_for_loop
 from capsaicin.resume import resume_pipeline
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_run import select_ticket
+from tests.conftest import add_ticket
 
 
 # ---------------------------------------------------------------------------
@@ -53,56 +48,8 @@ class MockAdapter(BaseAdapter):
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "t@t.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "T"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test", desc="Do it"):
-    return add_ticket_inline(
-        env["conn"], env["project_id"], title, desc, [], env["log_path"]
-    )
 
 
 def _set_status(conn, tid, status, **extra):
@@ -126,7 +73,7 @@ def _set_status(conn, tid, status, **extra):
 class TestSelectTicketForLoop:
     def test_ready_only(self, project_env):
         env = project_env
-        tid = _add_ticket(env, "Ready ticket")
+        tid = add_ticket(env, "Ready ticket")
         ticket = select_ticket_for_loop(env["conn"])
         assert ticket["id"] == tid
         assert ticket["status"] == "ready"
@@ -134,7 +81,7 @@ class TestSelectTicketForLoop:
     def test_revise_only(self, project_env):
         """Loop should select a revise ticket even when no ready tickets exist."""
         env = project_env
-        tid = _add_ticket(env, "Revise ticket")
+        tid = add_ticket(env, "Revise ticket")
         _set_status(env["conn"], tid, "revise", current_cycle=1)
         ticket = select_ticket_for_loop(env["conn"])
         assert ticket["id"] == tid
@@ -143,8 +90,8 @@ class TestSelectTicketForLoop:
     def test_prefers_revise_over_ready(self, project_env):
         """When both revise and ready exist, loop should prefer revise."""
         env = project_env
-        _add_ticket(env, "Ready ticket")
-        revise_tid = _add_ticket(env, "Revise ticket")
+        add_ticket(env, "Ready ticket")
+        revise_tid = add_ticket(env, "Revise ticket")
         _set_status(env["conn"], revise_tid, "revise", current_cycle=1)
 
         ticket = select_ticket_for_loop(env["conn"])
@@ -153,8 +100,8 @@ class TestSelectTicketForLoop:
     def test_revise_ordered_by_status_changed_at(self, project_env):
         """Multiple revise tickets: pick the one with earliest status_changed_at."""
         env = project_env
-        tid1 = _add_ticket(env, "First revise")
-        tid2 = _add_ticket(env, "Second revise")
+        tid1 = add_ticket(env, "First revise")
+        tid2 = add_ticket(env, "Second revise")
         # Set tid2 with earlier status_changed_at
         _set_status(
             env["conn"],
@@ -177,8 +124,8 @@ class TestSelectTicketForLoop:
     def test_revise_skips_dependency_checks(self, project_env):
         """Revise tickets are in-flight — their deps should not be re-checked."""
         env = project_env
-        dep_tid = _add_ticket(env, "Dep ticket")
-        revise_tid = _add_ticket(env, "Revise ticket")
+        dep_tid = add_ticket(env, "Dep ticket")
+        revise_tid = add_ticket(env, "Revise ticket")
         # Add dependency that is NOT done
         env["conn"].execute(
             "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
@@ -193,7 +140,7 @@ class TestSelectTicketForLoop:
 
     def test_explicit_ticket_id_delegates(self, project_env):
         env = project_env
-        tid = _add_ticket(env, "Explicit")
+        tid = add_ticket(env, "Explicit")
         ticket = select_ticket_for_loop(env["conn"], tid)
         assert ticket["id"] == tid
 
@@ -212,7 +159,7 @@ class TestTicketRunSelectionUnchanged:
     def test_ticket_run_does_not_select_revise(self, project_env):
         """select_ticket (used by ticket run) should NOT auto-select revise."""
         env = project_env
-        tid = _add_ticket(env, "Revise only")
+        tid = add_ticket(env, "Revise only")
         _set_status(env["conn"], tid, "revise", current_cycle=1)
 
         with pytest.raises(ValueError, match="No eligible ticket"):
@@ -230,7 +177,7 @@ class TestResumeIdleUnchanged:
         revise-first selection.  When only a revise ticket exists, resume
         should report no eligible ticket rather than picking it up."""
         env = project_env
-        tid = _add_ticket(env, "Revise only")
+        tid = add_ticket(env, "Revise only")
         _set_status(env["conn"], tid, "revise", current_cycle=1)
 
         adapter = MockAdapter()
@@ -259,7 +206,7 @@ class TestLoopWithRevise:
     def test_loop_selects_revise_ticket(self, project_env):
         """Loop with no ticket_id should select a revise ticket."""
         env = project_env
-        tid = _add_ticket(env, "Revise ticket")
+        tid = add_ticket(env, "Revise ticket")
         _set_status(env["conn"], tid, "revise", current_cycle=1)
 
         adapter = MockAdapter()
@@ -280,7 +227,7 @@ class TestLoopWithRevise:
     def test_loop_revise_at_cycle_limit(self, project_env):
         """Revise ticket at cycle limit should shortcut to human-gate."""
         env = project_env
-        tid = _add_ticket(env, "At limit")
+        tid = add_ticket(env, "At limit")
         _set_status(env["conn"], tid, "revise", current_cycle=3)
 
         adapter = MockAdapter()
@@ -300,8 +247,8 @@ class TestLoopWithRevise:
     def test_loop_mixed_queue_picks_revise(self, project_env):
         """Mixed queue: loop should pick revise, not ready."""
         env = project_env
-        _add_ticket(env, "Ready ticket")
-        revise_tid = _add_ticket(env, "Revise ticket")
+        add_ticket(env, "Ready ticket")
+        revise_tid = add_ticket(env, "Revise ticket")
         _set_status(env["conn"], revise_tid, "revise", current_cycle=1)
 
         adapter = MockAdapter()

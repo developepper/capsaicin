@@ -2,8 +2,6 @@
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
 from capsaicin.adapters.types import (
@@ -13,12 +11,9 @@ from capsaicin.adapters.types import (
     RunResult,
     ScopeReviewed,
 )
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
 from capsaicin.loop import run_loop
 from capsaicin.orchestrator import get_state
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
+from tests.conftest import add_ticket, get_ticket_status
 
 
 # ---------------------------------------------------------------------------
@@ -138,66 +133,6 @@ def _make_impl_failure():
     )
 
 
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket"):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        "Do something",
-        ["criterion 1"],
-        env["log_path"],
-    )
-
-
-def _get_ticket_status(conn, ticket_id):
-    return conn.execute(
-        "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
-    ).fetchone()["status"]
-
-
 def _make_workspace_change(env):
     """Create a tracked file change so the diff is non-empty."""
     (env["repo"] / "impl.txt").write_text("changed\n")
@@ -211,7 +146,7 @@ def _make_workspace_change(env):
 class TestLoopRunReviewPass:
     def test_stops_at_human_gate_on_pass(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="Loop Test")
+        tid = add_ticket(env, title="Loop Test", criteria=["criterion 1"])
         _make_workspace_change(env)
 
         # Sequence: impl success, then review pass
@@ -231,13 +166,13 @@ class TestLoopRunReviewPass:
         assert final_status == "human-gate"
         assert "Awaiting human decision" in detail
         assert "review_passed" in detail
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
         assert len(adapter.calls) == 2
 
     def test_never_auto_approves(self, project_env):
         """Even with a clean pass, ticket must stop at human-gate."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -255,7 +190,7 @@ class TestLoopRunReviewPass:
 
         # Must not be pr-ready or done
         assert final_status == "human-gate"
-        ticket_status = _get_ticket_status(env["conn"], tid)
+        ticket_status = get_ticket_status(env["conn"], tid)
         assert ticket_status not in ("pr-ready", "done")
 
 
@@ -267,7 +202,7 @@ class TestLoopRunReviewPass:
 class TestLoopRevise:
     def test_loops_on_fail_then_passes(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         # Sequence: impl, review fail, impl (revise), review pass
@@ -291,7 +226,7 @@ class TestLoopRevise:
 
         assert final_status == "human-gate"
         assert len(adapter.calls) == 4
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
 
 # ---------------------------------------------------------------------------
@@ -302,7 +237,7 @@ class TestLoopRevise:
 class TestLoopCycleLimit:
     def test_stops_at_cycle_limit(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         # max_cycles=1: after first review fail, the revise->run path
@@ -330,7 +265,7 @@ class TestLoopCycleLimit:
     def test_max_cycles_override(self, project_env):
         """--max-cycles overrides config default."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         # Default max_cycles is 3, override to 2
@@ -365,7 +300,7 @@ class TestLoopCycleLimit:
 class TestLoopBlocked:
     def test_blocks_on_repeated_impl_failure(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
 
         # All impl runs fail — should hit retry limit and block
         adapter = MockAdapter(
@@ -383,12 +318,12 @@ class TestLoopBlocked:
 
         assert final_status == "blocked"
         assert "blocked" in detail.lower()
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
 
     def test_stops_on_empty_implementation(self, project_env):
         """Impl with no changes -> human-gate with empty_implementation."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         # Don't change any files — empty diff
 
         adapter = MockAdapter(results=[_make_impl_success()])
@@ -414,7 +349,7 @@ class TestLoopBlocked:
 class TestLoopAutoSelect:
     def test_auto_selects_ready_ticket(self, project_env):
         env = project_env
-        tid = _add_ticket(env, title="Auto Select")
+        tid = add_ticket(env, title="Auto Select", criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -430,7 +365,7 @@ class TestLoopAutoSelect:
         )
 
         assert final_status == "human-gate"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_no_eligible_ticket(self, project_env):
         env = project_env
@@ -455,7 +390,7 @@ class TestLoopDbState:
     def test_orchestrator_state_consistent(self, project_env):
         """After loop stops, orchestrator state should match."""
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -476,7 +411,7 @@ class TestLoopDbState:
 
     def test_state_transitions_recorded(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -510,7 +445,7 @@ class TestLoopDbState:
 
     def test_agent_runs_recorded(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -541,7 +476,7 @@ class TestLoopDbState:
 
     def test_run_diffs_persisted(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(
@@ -579,7 +514,7 @@ class TestLoopDbState:
 class TestLoopActivityLog:
     def test_loop_events_logged(self, project_env):
         env = project_env
-        _add_ticket(env)
+        add_ticket(env, criteria=["criterion 1"])
         _make_workspace_change(env)
 
         adapter = MockAdapter(

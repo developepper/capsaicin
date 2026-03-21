@@ -127,7 +127,6 @@ def _update_agent_run(
     raw_stdout: str,
     raw_stderr: str,
     adapter_metadata: dict | None,
-    result_text: str = "",
 ) -> None:
     """Update an agent_runs row with terminal status and outputs."""
     conn.execute(
@@ -378,7 +377,6 @@ def _invoke_once(
         raw_stdout=result.raw_stdout,
         raw_stderr=result.raw_stderr,
         adapter_metadata=result.adapter_metadata,
-        result_text=result.result_text,
     )
 
     if log_path:

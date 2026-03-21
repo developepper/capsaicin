@@ -2,9 +2,6 @@
 
 from __future__ import annotations
 
-import json
-import subprocess
-
 import pytest
 
 from capsaicin.adapters.base import BaseAdapter
@@ -16,44 +13,23 @@ from capsaicin.adapters.types import (
     ScopeReviewed,
     CriterionChecked,
 )
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.diff import capture_diff, persist_run_diff
-from capsaicin.init import init_project
 from capsaicin.orchestrator import get_state
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
-from capsaicin.ticket_run import run_implementation_pipeline, select_ticket
 from capsaicin.ticket_review import (
     run_review_pipeline,
     select_review_ticket,
+)
+from tests.adapters import DiffProducingAdapter
+from tests.conftest import (
+    add_ticket,
+    get_ticket,
+    get_ticket_status,
+    run_impl_to_in_review,
 )
 
 
 # ---------------------------------------------------------------------------
 # Mock adapters
 # ---------------------------------------------------------------------------
-
-
-class DiffProducingAdapter(BaseAdapter):
-    """Adapter that modifies a file in the repo before returning success."""
-
-    def __init__(self, repo_path, filename="impl.txt", content="implemented\n"):
-        self.repo_path = repo_path
-        self.filename = filename
-        self.content = content
-        self.calls: list[RunRequest] = []
-
-    def execute(self, request: RunRequest) -> RunResult:
-        self.calls.append(request)
-        (self.repo_path / self.filename).write_text(self.content)
-        return RunResult(
-            run_id=request.run_id,
-            exit_status="success",
-            duration_seconds=1.0,
-            raw_stdout="done",
-            raw_stderr="",
-            adapter_metadata={},
-        )
 
 
 class MockReviewAdapter(BaseAdapter):
@@ -160,112 +136,6 @@ class FileModifyingReviewAdapter(BaseAdapter):
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
-# ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    """Set up a project with a git repo, returning context dict."""
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env, title="Test ticket", desc="Do something", criteria=None):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        desc,
-        criteria or [],
-        env["log_path"],
-    )
-
-
-def _add_ticket_with_criteria(env, title="Test", desc="Do it", criteria=None):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        title,
-        desc,
-        criteria or ["criterion 1"],
-        env["log_path"],
-    )
-
-
-def _get_ticket_status(conn, ticket_id):
-    return conn.execute(
-        "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
-    ).fetchone()["status"]
-
-
-def _get_ticket(conn, ticket_id):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, "
-            "current_cycle, current_impl_attempt, current_review_attempt "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-    )
-
-
-def _run_impl_to_in_review(env, ticket_id=None):
-    """Run implementation pipeline to get a ticket into in-review status."""
-    if ticket_id is None:
-        ticket_id = _add_ticket(env)
-    ticket = _get_ticket(env["conn"], ticket_id)
-    adapter = DiffProducingAdapter(env["repo"])
-    final = run_implementation_pipeline(
-        conn=env["conn"],
-        project_id=env["project_id"],
-        ticket=ticket,
-        config=env["config"],
-        adapter=adapter,
-        log_path=env["log_path"],
-    )
-    assert final == "in-review"
-    return ticket_id
-
-
-# ---------------------------------------------------------------------------
 # select_review_ticket
 # ---------------------------------------------------------------------------
 
@@ -273,20 +143,20 @@ def _run_impl_to_in_review(env, ticket_id=None):
 class TestSelectReviewTicket:
     def test_auto_select_in_review(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         ticket = select_review_ticket(env["conn"])
         assert ticket["id"] == tid
         assert ticket["status"] == "in-review"
 
     def test_explicit_ticket_id(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         ticket = select_review_ticket(env["conn"], tid)
         assert ticket["id"] == tid
 
     def test_explicit_ticket_wrong_status(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env)
         with pytest.raises(ValueError, match="expected 'in-review'"):
             select_review_ticket(env["conn"], tid)
 
@@ -307,8 +177,8 @@ class TestSelectReviewTicket:
 class TestReviewPass:
     def test_pass_transitions_to_human_gate(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         final = run_review_pipeline(
@@ -321,12 +191,12 @@ class TestReviewPass:
         )
 
         assert final == "human-gate"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_pass_gate_reason_review_passed(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -347,8 +217,8 @@ class TestReviewPass:
 
     def test_pass_medium_confidence_gate_reason(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="medium")
 
         run_review_pipeline(
@@ -369,8 +239,8 @@ class TestReviewPass:
 
     def test_orchestrator_awaiting_human(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -387,8 +257,8 @@ class TestReviewPass:
 
     def test_reviewer_run_recorded(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -425,8 +295,8 @@ class TestReviewPass:
 class TestLowConfidencePass:
     def test_low_confidence_gate_reason(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="low")
 
         final = run_review_pipeline(
@@ -455,8 +325,8 @@ class TestLowConfidencePass:
 class TestReviewFail:
     def test_fail_transitions_to_revise(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         findings = [
             Finding(
                 severity="blocking",
@@ -481,12 +351,12 @@ class TestReviewFail:
         )
 
         assert final == "revise"
-        assert _get_ticket_status(env["conn"], tid) == "revise"
+        assert get_ticket_status(env["conn"], tid) == "revise"
 
     def test_findings_persisted(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         findings = [
             Finding(
                 severity="blocking",
@@ -523,8 +393,8 @@ class TestReviewFail:
 
     def test_orchestrator_idle_after_revise(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         findings = [
             Finding(
                 severity="blocking",
@@ -552,9 +422,9 @@ class TestReviewFail:
 
     def test_ac_updated_on_fail(self, project_env):
         env = project_env
-        tid = _add_ticket_with_criteria(env, criteria=["Check null handling"])
-        tid = _run_impl_to_in_review(env, tid)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, criteria=["Check null handling"])
+        tid = run_impl_to_in_review(env, tid)
+        ticket = get_ticket(env["conn"], tid)
 
         # Get the criterion ID
         crit = (
@@ -612,8 +482,8 @@ class TestReviewFail:
 class TestReviewEscalate:
     def test_escalate_transitions_to_human_gate(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="escalate", confidence="low")
 
         final = run_review_pipeline(
@@ -642,8 +512,8 @@ class TestReviewEscalate:
 class TestContractViolation:
     def test_contract_violation_blocked(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         # This adapter modifies files, triggering contract violation
         # Default max_review_retries=2, so 2 violations → blocked
         adapter = FileModifyingReviewAdapter(env["repo"])
@@ -658,12 +528,12 @@ class TestContractViolation:
         )
 
         assert final == "blocked"
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
 
     def test_contract_violation_logged(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = FileModifyingReviewAdapter(env["repo"])
 
         run_review_pipeline(
@@ -687,8 +557,8 @@ class TestContractViolation:
 class TestParseError:
     def test_parse_error_blocked(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(exit_status="parse_error")
 
         final = run_review_pipeline(
@@ -701,12 +571,12 @@ class TestParseError:
         )
 
         assert final == "blocked"
-        assert _get_ticket_status(env["conn"], tid) == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
 
     def test_parse_error_blocked_reason(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(exit_status="parse_error")
 
         run_review_pipeline(
@@ -734,8 +604,8 @@ class TestParseError:
 class TestWorkspaceDrift:
     def test_drift_rejected_without_allow_drift(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
 
         # Modify the workspace to create drift
         (env["repo"] / "impl.txt").write_text("drifted content\n")
@@ -756,8 +626,8 @@ class TestWorkspaceDrift:
 
     def test_drift_accepted_with_allow_drift(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
 
         # Modify the workspace to create drift
         (env["repo"] / "impl.txt").write_text("drifted content\n")
@@ -785,8 +655,8 @@ class TestWorkspaceDrift:
 class TestStateTransitions:
     def test_pass_transitions_recorded(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -812,8 +682,8 @@ class TestStateTransitions:
 
     def test_fail_transitions_recorded(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(
             verdict="fail",
@@ -851,8 +721,8 @@ class TestStateTransitions:
 class TestActivityLog:
     def test_log_events_written(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -877,9 +747,9 @@ class TestActivityLog:
 class TestAdapterRequest:
     def test_adapter_receives_reviewer_request(self, project_env):
         env = project_env
-        tid = _add_ticket_with_criteria(env, title="Auth", desc="Add auth")
-        tid = _run_impl_to_in_review(env, tid)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = add_ticket(env, title="Auth", desc="Add auth")
+        tid = run_impl_to_in_review(env, tid)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -909,8 +779,8 @@ class TestAdapterRequest:
 class TestReviewBaseline:
     def test_baseline_captured(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
         adapter = MockReviewAdapter(verdict="pass", confidence="high")
 
         run_review_pipeline(
@@ -952,8 +822,8 @@ class TestReviewBaseline:
 class TestBulkCloseOnPass:
     def test_prior_findings_closed_on_pass(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
-        ticket = _get_ticket(env["conn"], tid)
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
 
         # First review: fail with findings
         findings = [Finding(severity="blocking", category="bug", description="Error")]
@@ -991,7 +861,7 @@ class TestBulkCloseOnPass:
         env["conn"].commit()
 
         # Second review: pass
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         pass_adapter = MockReviewAdapter(verdict="pass", confidence="high")
         run_review_pipeline(
             env["conn"],
@@ -1032,11 +902,11 @@ class TestBulkCloseOnPass:
 class TestCycleLimitOnFail:
     def test_fail_at_cycle_limit_goes_to_human_gate(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         # Set cycle to max (default max_cycles=3)
         env["conn"].execute("UPDATE tickets SET current_cycle = 3 WHERE id = ?", (tid,))
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(
@@ -1055,14 +925,14 @@ class TestCycleLimitOnFail:
         )
 
         assert final == "human-gate"
-        assert _get_ticket_status(env["conn"], tid) == "human-gate"
+        assert get_ticket_status(env["conn"], tid) == "human-gate"
 
     def test_fail_at_cycle_limit_gate_reason(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         env["conn"].execute("UPDATE tickets SET current_cycle = 3 WHERE id = ?", (tid,))
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(
@@ -1089,10 +959,10 @@ class TestCycleLimitOnFail:
 
     def test_fail_at_cycle_limit_findings_still_reconciled(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         env["conn"].execute("UPDATE tickets SET current_cycle = 3 WHERE id = ?", (tid,))
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(
@@ -1120,9 +990,9 @@ class TestCycleLimitOnFail:
 
     def test_fail_under_cycle_limit_goes_to_revise(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         # cycle 1 is under limit of 3
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(
@@ -1144,10 +1014,10 @@ class TestCycleLimitOnFail:
 
     def test_fail_at_cycle_limit_orchestrator_awaiting_human(self, project_env):
         env = project_env
-        tid = _run_impl_to_in_review(env)
+        tid = run_impl_to_in_review(env)
         env["conn"].execute("UPDATE tickets SET current_cycle = 3 WHERE id = ?", (tid,))
         env["conn"].commit()
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         findings = [Finding(severity="blocking", category="bug", description="Error")]
         adapter = MockReviewAdapter(

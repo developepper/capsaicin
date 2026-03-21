@@ -43,6 +43,6 @@ The intended session-start workflow is:
 
 ## Archive
 
-| Epic | Directory |
-|------|-----------|
+| Epic                         | Directory                                                                             |
+|------------------------------|---------------------------------------------------------------------------------------|
 | Epic 01: Implementation Loop | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |

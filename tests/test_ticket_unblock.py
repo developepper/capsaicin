@@ -2,96 +2,21 @@
 
 from __future__ import annotations
 
-import subprocess
-
 import pytest
 
-from capsaicin.config import load_config
-from capsaicin.db import get_connection
-from capsaicin.init import init_project
 from capsaicin.orchestrator import get_state
-from capsaicin.ticket_add import _get_project_id, add_ticket_inline
 from capsaicin.ticket_unblock import select_unblock_ticket, unblock_ticket
+from tests.conftest import add_ticket, get_ticket, get_ticket_status
 
 
 # ---------------------------------------------------------------------------
-# Fixtures
+# Helpers
 # ---------------------------------------------------------------------------
-
-
-@pytest.fixture()
-def project_env(tmp_path):
-    repo = tmp_path / "repo"
-    repo.mkdir()
-    subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-    (repo / "impl.txt").write_text("original\n")
-    subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=repo,
-        check=True,
-        capture_output=True,
-    )
-
-    project_dir = init_project("test-proj", str(repo))
-    conn = get_connection(project_dir / "capsaicin.db")
-    project_id = _get_project_id(conn)
-    log_path = project_dir / "activity.log"
-    config = load_config(project_dir / "config.toml")
-
-    yield {
-        "repo": repo,
-        "project_dir": project_dir,
-        "conn": conn,
-        "project_id": project_id,
-        "log_path": log_path,
-        "config": config,
-    }
-    conn.close()
-
-
-def _add_ticket(env):
-    return add_ticket_inline(
-        env["conn"],
-        env["project_id"],
-        "Test ticket",
-        "Do something",
-        ["criterion 1"],
-        env["log_path"],
-    )
-
-
-def _get_ticket(conn, ticket_id):
-    return dict(
-        conn.execute(
-            "SELECT id, project_id, title, description, status, blocked_reason "
-            "FROM tickets WHERE id = ?",
-            (ticket_id,),
-        ).fetchone()
-    )
-
-
-def _get_ticket_status(conn, ticket_id):
-    return conn.execute(
-        "SELECT status FROM tickets WHERE id = ?", (ticket_id,)
-    ).fetchone()["status"]
 
 
 def _make_blocked_ticket(env):
     """Create a ticket and manually put it in blocked status."""
-    tid = _add_ticket(env)
+    tid = add_ticket(env, criteria=["criterion 1"])
     env["conn"].execute(
         "UPDATE tickets SET status = 'blocked', blocked_reason = 'test failure', "
         "current_cycle = 2, current_impl_attempt = 2, current_review_attempt = 1 "
@@ -123,7 +48,7 @@ class TestSelectUnblockTicket:
 
     def test_wrong_status(self, project_env):
         env = project_env
-        tid = _add_ticket(env)
+        tid = add_ticket(env, criteria=["criterion 1"])
         with pytest.raises(ValueError, match="expected 'blocked'"):
             select_unblock_ticket(env["conn"], tid)
 
@@ -141,7 +66,7 @@ class TestUnblock:
     def test_transitions_to_ready(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         final = unblock_ticket(
             env["conn"],
@@ -151,12 +76,12 @@ class TestUnblock:
         )
 
         assert final == "ready"
-        assert _get_ticket_status(env["conn"], tid) == "ready"
+        assert get_ticket_status(env["conn"], tid) == "ready"
 
     def test_blocked_reason_cleared(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
         assert ticket["blocked_reason"] == "test failure"
 
         unblock_ticket(
@@ -176,7 +101,7 @@ class TestUnblock:
     def test_decision_recorded(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         unblock_ticket(
             env["conn"],
@@ -196,7 +121,7 @@ class TestUnblock:
     def test_orchestrator_idle(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         unblock_ticket(
             env["conn"],
@@ -211,7 +136,7 @@ class TestUnblock:
     def test_state_transition_recorded(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         unblock_ticket(
             env["conn"],
@@ -242,7 +167,7 @@ class TestResetCycles:
     def test_reset_cycles_resets_counters(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         unblock_ticket(
             env["conn"],
@@ -272,7 +197,7 @@ class TestResetCycles:
         unblock_ticket(
             env["conn"],
             env["project_id"],
-            _get_ticket(env["conn"], tid),
+            get_ticket(env["conn"], tid),
             log_path=env["log_path"],
         )
 
@@ -297,7 +222,7 @@ class TestActivityLog:
     def test_unblock_logged(self, project_env):
         env = project_env
         tid = _make_blocked_ticket(env)
-        ticket = _get_ticket(env["conn"], tid)
+        ticket = get_ticket(env["conn"], tid)
 
         unblock_ticket(
             env["conn"],
