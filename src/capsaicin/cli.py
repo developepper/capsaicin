@@ -239,6 +239,15 @@ def ticket_run_cmd(ticket_id, repo_path, project_slug):
         )
 
         click.echo(f"Ticket {ticket['id']} -> {final_status}")
+
+        # Diagnostic output for human-gate outcomes (T02)
+        if final_status == "human-gate":
+            from capsaicin.diagnostics import build_run_outcome_message
+
+            diagnostic = build_run_outcome_message(conn, ticket["id"])
+            if diagnostic:
+                click.echo()
+                click.echo(diagnostic)
     finally:
         conn.close()
 
