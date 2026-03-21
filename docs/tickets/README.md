@@ -16,6 +16,11 @@ Use this directory for work that changes over time:
   are not yet scoped into an epic
 - [archive/](./archive/): completed epic plans retained for history
 
+## Active Epics
+
+- [epic-02-reliability-and-diagnostics](./epic-02-reliability-and-diagnostics/):
+  planned next epic
+
 ## Archive
 
 | Epic | Directory |

@@ -34,6 +34,9 @@ Multi-ticket orchestration remains later work.
 
 Focus on making the existing loop easier to trust, diagnose, and operate.
 
+This work is now scoped as
+[epic-02-reliability-and-diagnostics](./epic-02-reliability-and-diagnostics/).
+
 Candidate areas:
 
 - detect and surface Claude Code `permission_denials`
