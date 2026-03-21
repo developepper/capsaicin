@@ -25,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 
 from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.dashboard import dashboard
+from capsaicin.web.routes.partials import partial_activity, partial_inbox, partial_queue
 from capsaicin.web.routes.tickets import ticket_detail
 
 _PACKAGE_DIR = Path(__file__).parent
@@ -45,6 +46,9 @@ def create_app(
     routes = [
         Route("/", dashboard, name="dashboard"),
         Route("/tickets/{ticket_id}", ticket_detail, name="ticket_detail"),
+        Route("/partials/inbox", partial_inbox, name="partial_inbox"),
+        Route("/partials/queue", partial_queue, name="partial_queue"),
+        Route("/partials/activity", partial_activity, name="partial_activity"),
         Mount(
             "/static",
             app=StaticFiles(directory=str(_STATIC_DIR)),

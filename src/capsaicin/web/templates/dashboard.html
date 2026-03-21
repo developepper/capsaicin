@@ -2,11 +2,71 @@
 {% block title %}Dashboard — capsaicin{% endblock %}
 {% block content %}
 <h1>Project Dashboard</h1>
-<p>{{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }}</p>
 
-{% if data.counts_by_status %}
-<section>
-  <h2>Status Counts</h2>
+{# --- Orchestrator state --- #}
+{% if data.orchestrator %}
+<section class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}">
+  <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
+  {% if data.orchestrator.active_ticket_id and data.active_ticket %}
+    — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
+    ({{ data.active_ticket.status }})
+  {% endif %}
+</section>
+{% endif %}
+
+{# --- Inbox: human-gate tickets needing decisions --- #}
+<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
+  {% if data.inbox and data.inbox.tickets %}
+  <table>
+    <thead><tr><th>Ticket</th><th>Gate Reason</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for t in data.inbox.tickets %}
+      <tr>
+        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td>{{ t.gate_reason or "unknown" }}</td>
+        <td>{{ t.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No tickets awaiting human action.</p>
+  {% endif %}
+</section>
+
+{# --- Blocked tickets --- #}
+{% if data.blocked_tickets %}
+<section id="blocked">
+  <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
+  <table>
+    <thead><tr><th>Ticket</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for t in data.blocked_tickets %}
+      <tr>
+        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td>{{ t.blocked_reason or "unknown" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+{# --- Next runnable ticket --- #}
+<section id="next-runnable">
+  <h2>Next Runnable</h2>
+  {% if data.next_runnable %}
+  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.title }}</a></p>
+  {% else %}
+  <p class="empty">No runnable tickets.</p>
+  {% endif %}
+</section>
+
+{# --- Queue overview --- #}
+<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
+  {% if data.counts_by_status %}
   <table>
     <thead><tr><th>Status</th><th>Count</th></tr></thead>
     <tbody>
@@ -17,44 +77,31 @@
       {% endfor %}
     </tbody>
   </table>
-</section>
-{% endif %}
-
-{% if data.active_ticket %}
-<section>
-  <h2>Active Ticket</h2>
-  <p><a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.id }}</a>: {{ data.active_ticket.title }} ({{ data.active_ticket.status }})</p>
-</section>
-{% endif %}
-
-{% if data.human_gate_tickets %}
-<section>
-  <h2>Awaiting Human Gate</h2>
-  <ul>
-    {% for t in data.human_gate_tickets %}
-    <li><a href="/tickets/{{ t.id }}">{{ t.id }}</a>: {{ t.title }} ({{ t.gate_reason or "unknown" }})</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-{% if data.blocked_tickets %}
-<section>
-  <h2>Blocked</h2>
-  <ul>
-    {% for t in data.blocked_tickets %}
-    <li><a href="/tickets/{{ t.id }}">{{ t.id }}</a>: {{ t.title }} ({{ t.blocked_reason or "unknown" }})</li>
-    {% endfor %}
-  </ul>
-</section>
-{% endif %}
-
-<section>
-  <h2>Next Runnable</h2>
-  {% if data.next_runnable %}
-  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.id }}</a>: {{ data.next_runnable.title }}</p>
   {% else %}
-  <p>(none)</p>
+  <p class="empty">No tickets yet.</p>
+  {% endif %}
+</section>
+
+{# --- Recent activity --- #}
+<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h2>Recent Activity</h2>
+  {% if data.recent_runs %}
+  <table>
+    <thead><tr><th>Time</th><th>Ticket</th><th>Role</th><th>Result</th><th>Duration</th></tr></thead>
+    <tbody>
+      {% for r in data.recent_runs %}
+      <tr>
+        <td>{{ r.started_at }}</td>
+        <td><a href="/tickets/{{ r.ticket_id }}">{{ r.ticket_title }}</a></td>
+        <td>{{ r.role }}</td>
+        <td>{{ r.exit_status }}{% if r.verdict %} / {{ r.verdict }}{% endif %}</td>
+        <td>{{ "%.1f"|format(r.duration_seconds) if r.duration_seconds is not none else "—" }}s</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No runs yet.</p>
   {% endif %}
 </section>
 {% endblock %}

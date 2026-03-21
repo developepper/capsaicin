@@ -1,0 +1,21 @@
+<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s" hx-swap="outerHTML">
+  <h2>Recent Activity</h2>
+  {% if data.recent_runs %}
+  <table>
+    <thead><tr><th>Time</th><th>Ticket</th><th>Role</th><th>Result</th><th>Duration</th></tr></thead>
+    <tbody>
+      {% for r in data.recent_runs %}
+      <tr>
+        <td>{{ r.started_at }}</td>
+        <td><a href="/tickets/{{ r.ticket_id }}">{{ r.ticket_title }}</a></td>
+        <td>{{ r.role }}</td>
+        <td>{{ r.exit_status }}{% if r.verdict %} / {{ r.verdict }}{% endif %}</td>
+        <td>{{ "%.1f"|format(r.duration_seconds) if r.duration_seconds is not none else "—" }}s</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No runs yet.</p>
+  {% endif %}
+</section>

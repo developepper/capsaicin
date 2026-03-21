@@ -62,7 +62,7 @@ class TestDashboardRoute:
         resp = client.get("/")
         assert resp.status_code == 200
         assert "Gate Ticket" in resp.text
-        assert "Awaiting Human Gate" in resp.text
+        assert "Inbox" in resp.text
 
     def test_dashboard_shows_blocked(self, web_client):
         client, env = web_client
