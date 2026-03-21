@@ -18,3 +18,25 @@ section{margin-bottom:1.5rem}
 .orchestrator-running{background:#e8f5e9;border-color:#4caf50}
 .orchestrator-awaiting_human{background:#fff3e0;border-color:#ff9800}
 .orchestrator-suspended{background:#fce4ec;border-color:#e91e63}
+.status-badge{padding:.1rem .4rem;border-radius:3px;font-size:.9em}
+.status-ready{background:#e3f2fd}
+.status-implementing,.status-in-review{background:#e8f5e9}
+.status-revise{background:#fff3e0}
+.status-human-gate{background:#fff9c4}
+.status-pr-ready{background:#e8f5e9;font-weight:bold}
+.status-blocked{background:#ffebee}
+.status-done{background:#e0e0e0}
+.criteria-met{color:#2e7d32}
+.criteria-unmet{color:#c62828}
+.criteria-pending{color:#666}
+.criteria-disputed{color:#e65100}
+.finding-blocking{color:#c62828}
+.finding-warning{color:#e65100}
+.finding-info{color:#1565c0}
+.diagnostic-banner{background:#fff3e0;border:1px solid #ff9800;padding:.5rem .8rem;border-radius:4px}
+.diagnostic-banner pre{margin:0;white-space:pre-wrap}
+pre.diff-block{background:#f5f5f5;border:1px solid #ddd;padding:.5rem;overflow-x:auto;font-size:.85em;max-height:40rem}
+pre.agent-text{background:#f5f5f5;border:1px solid #ddd;padding:.5rem;white-space:pre-wrap;font-size:.85em}
+.file-list{list-style:none;padding:0}
+.file-list li{padding:.15rem 0}
+details summary{cursor:pointer;color:#0366d6;margin-bottom:.3rem}
