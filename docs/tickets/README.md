@@ -34,7 +34,7 @@ The intended session-start workflow is:
 
 - [roadmap.md](./roadmap.md): future work, sequencing, and open directions that
   are not yet scoped into an epic
-- [epic-03-ui-for-implementation-loop](./epic-03-ui-for-implementation-loop/):
+- [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/):
   completed UI epic for the local implementation-loop operator experience
 - [archive/](./archive/): completed epic plans retained for history
 

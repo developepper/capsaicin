@@ -51,7 +51,7 @@ Candidate areas:
 ## UI For The Existing Implementation Loop
 
 A local operator UI is now implemented as part of
-[epic-03-ui-for-implementation-loop](epic-03-ui-for-implementation-loop/).
+[epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/).
 
 The UI launches from `capsaicin ui`, runs a built-in HTTP server on
 `127.0.0.1`, and ships inside the Python package with no separate app install
