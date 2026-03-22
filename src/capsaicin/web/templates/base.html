@@ -6,13 +6,41 @@
   <title>{% block title %}capsaicin{% endblock %}</title>
   <link rel="stylesheet" href="/static/style.css">
   <script src="/static/htmx.min.js"></script>
+  <script>
+  (function() {
+    var saved = localStorage.getItem('capsaicin-theme');
+    if (saved) document.documentElement.setAttribute('data-theme', saved);
+  })();
+  </script>
 </head>
 <body>
   <header>
     <nav><a href="/">capsaicin</a></nav>
+    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+      <span id="theme-icon"></span>
+    </button>
   </header>
   <main>
     {% block content %}{% endblock %}
   </main>
+  <script>
+  function toggleTheme() {
+    var html = document.documentElement;
+    var current = html.getAttribute('data-theme');
+    var next = current === 'dark' ? 'light' : 'dark';
+    html.setAttribute('data-theme', next);
+    localStorage.setItem('capsaicin-theme', next);
+    updateThemeIcon();
+  }
+  function updateThemeIcon() {
+    var el = document.getElementById('theme-icon');
+    if (!el) return;
+    var isDark = document.documentElement.getAttribute('data-theme') === 'dark'
+      || (!document.documentElement.getAttribute('data-theme')
+          && window.matchMedia('(prefers-color-scheme: dark)').matches);
+    el.textContent = isDark ? 'Light' : 'Dark';
+  }
+  updateThemeIcon();
+  </script>
 </body>
 </html>
