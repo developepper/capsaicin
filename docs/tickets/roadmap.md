@@ -106,6 +106,29 @@ Candidate areas:
 - `gh` integration for PR creation
 - explicit completion flow from `pr-ready` to `done`
 
+## Codex Adapter Support
+
+Broaden adapter support beyond the current Claude Code-only runtime wiring.
+
+Current direction:
+
+- support the intended implementation-loop pairing: `Claude Code` implementer
+  and `Codex` reviewer
+- support the intended planning-loop pairing: `Codex` planner and `Claude Code`
+  planning reviewer
+- replace direct `ClaudeCodeAdapter` instantiation in command services with
+  backend-driven adapter selection from config
+
+Candidate areas:
+
+- implement a `CodexAdapter` against the existing `BaseAdapter` contract
+- add adapter-factory selection based on `[adapters.<role>].backend`
+- normalize Codex-specific run metadata and failure modes into the existing
+  `RunResult` shape
+- add tests for backend selection and Codex reviewer execution
+- evaluate whether Codex planner support needs contract extensions for
+  planning-loop use
+
 ## Later Directions
 
 Ideas that remain intentionally later:

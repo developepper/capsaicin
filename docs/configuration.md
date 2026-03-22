@@ -64,6 +64,16 @@ Semantics:
 - prompt assembly is handled by the adapter; template customization is
   deferred
 
+Intended role split once Codex adapter support lands:
+
+- implementation loop: `Claude Code` implementer, `Codex` reviewer
+- planning loop: `Codex` planner, `Claude Code` planning reviewer
+
+Current implementation note:
+
+- the shipped default config still points both implementer and reviewer at
+  `claude` because Codex adapter support is not implemented yet
+
 ## Project Resolution
 
 - if `.capsaicin/projects/` contains exactly one project, use it automatically

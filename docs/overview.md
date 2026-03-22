@@ -114,8 +114,8 @@ state, handoff, persistence, and escalation.
 
 Recommended dual-agent mode:
 
-- `Codex` for planning or implementation
-- `Claude Code` for review
+- implementation loop: `Claude Code` for implementation, `Codex` for review
+- planning loop: `Codex` for planning, `Claude Code` for review
 
 Single-agent mode should still be supported, but review must happen in a
 separate fresh session. The same session should not certify its own completion.
