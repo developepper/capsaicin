@@ -50,7 +50,7 @@
       <h3>Approve</h3>
       <p class="action-description">Move ticket to PR-ready.</p>
       <label for="approve-rationale">Rationale{% if rationale_required %} <strong>(required)</strong>{% endif %}</label>
-      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if rationale_required %}Explain why this is acceptable despite {{ gate }}{% endif %}">{{ "" }}</textarea>
+      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if rationale_required %}Explain why this is acceptable despite {{ gate }}{% endif %}"{% if rationale_required %} required{% endif %}>{{ "" }}</textarea>
       <div class="action-options">
         <label><input type="checkbox" name="force"> Force (skip workspace match check)</label>
       </div>

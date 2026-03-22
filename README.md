@@ -57,6 +57,9 @@ Not in scope yet:
 - a git repository to run against
 - the `Claude Code` CLI installed and available on `PATH` as `claude`
 
+The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`,
+and `python-multipart` — all installed automatically via `pip install`.
+
 `capsaicin` captures tracked-file diffs using `git diff HEAD`, so the target
 repository should be a normal git worktree.
 

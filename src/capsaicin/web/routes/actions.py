@@ -238,8 +238,10 @@ async def action_resume(request: Request) -> RedirectResponse:
             config=config,
             log_path=log_path,
         )
-    except (ValueError, Exception):
-        return RedirectResponse("/", status_code=303)
+    except (ValueError, CapsaicinError) as exc:
+        from urllib.parse import quote
+
+        return RedirectResponse(f"/?error={quote(str(exc))}", status_code=303)
 
     if result.ticket_id:
         return RedirectResponse(f"/tickets/{result.ticket_id}", status_code=303)
