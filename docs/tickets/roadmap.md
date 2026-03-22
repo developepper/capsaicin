@@ -25,7 +25,8 @@ The current intended order for the next major work streams is:
 
 1. ~~reliability and diagnostics for the implementation loop~~ (done — Epic 02)
 2. ~~a UI for the existing implementation loop~~ (done — Epic 03)
-3. planning-loop automation
+3. planning-loop automation (scoped as
+   [epic-04-planning-loop-automation](./epic-04-planning-loop-automation/))
 4. GitHub handoff and PR automation
 
 Multi-ticket orchestration remains later work.
@@ -83,7 +84,10 @@ What is intentionally not included:
 Extend the product upstream from manual ticket entry to structured planning and
 review.
 
-Candidate areas:
+This work is now scoped as
+[epic-04-planning-loop-automation](./epic-04-planning-loop-automation/).
+
+Key areas:
 
 - problem statement intake
 - planner and reviewer runs for plan creation
