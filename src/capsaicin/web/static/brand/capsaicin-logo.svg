@@ -1,0 +1,29 @@
+<svg width="680" height="140" viewBox="0 0 680 140" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="logo-title logo-desc">
+  <title id="logo-title">capsaicin logo</title>
+  <desc id="logo-desc">Capsaicin wordmark with a flipped pepper mark derived from the reference Pepper.svg and a subtle ai highlight.</desc>
+  <defs>
+    <linearGradient id="pepper-main" gradientUnits="userSpaceOnUse" x1="-12.1796" y1="793.6464" x2="21.8034" y2="741.7201" gradientTransform="matrix(5.7146 0 0 -5.7146 199.447 4877.3008)">
+      <stop offset="0" stop-color="#FFA02F"/>
+      <stop offset="1" stop-color="#E00034"/>
+    </linearGradient>
+    <linearGradient id="pepper-accent" gradientUnits="userSpaceOnUse" x1="-3.3952" y1="759.0568" x2="-16.9366" y2="793.5596" gradientTransform="matrix(5.7146 0 0 -5.7146 199.447 4877.3008)">
+      <stop offset="0" stop-color="#FFA02F"/>
+      <stop offset="1" stop-color="#E00034"/>
+    </linearGradient>
+    <linearGradient id="wordmark-fill" x1="164" y1="42" x2="424" y2="97" gradientUnits="userSpaceOnUse">
+      <stop offset="0" stop-color="#FFA02F"/>
+      <stop offset="1" stop-color="#E00034"/>
+    </linearGradient>
+  </defs>
+  <g transform="translate(88 14) scale(-0.26 0.26) translate(-321 -272)">
+    <path fill-rule="evenodd" clip-rule="evenodd" d="M209.1,284.2c0-4.2,0.9-8,2.1-11.8c-18.4,10.9-56.6,38.6-56.6,80.9c0,69.3,53.7,73.8,53.7,114.3
+	c0,17.1-12.4,26.3-28.7,26.3c-26.9,0-59.3-40.8-39.4-93.1c0,0-46.6,21.4-46.6,67.7c0,58.7,51,101,113.9,101s113.9-47.6,113.9-106.3
+	c0-89.7-84.7-126.6-105-157.3C211.6,299.5,209.1,292,209.1,284.2z" fill="url(#pepper-main)"/>
+    <path fill-rule="evenodd" clip-rule="evenodd" d="
+	M99.2,501.4c20.8,46,83.8,59.8,114.5,30c25.3-24.4,9.5-60.7-14.7-90.4c5.6,7.6,9.3,15.7,9.3,26.4c0,17.1-12.4,26.4-28.7,26.4
+	c-26.9,0-59.4-40.9-39.5-93.5c0,0-36.5,16.7-44.9,52.7c-0.4,5.7-1,12.6-1.6,20.5C94,483.4,96,492.7,99.2,501.4z" fill="url(#pepper-accent)"/>
+  </g>
+  <text x="164" y="83" fill="url(#wordmark-fill)" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', 'Segoe UI', Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="-1.6">caps</text>
+  <text x="284" y="83" fill="#C2410C" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', 'Segoe UI', Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="-1.3">ai</text>
+  <text x="328" y="83" fill="url(#wordmark-fill)" font-family="'Arial Rounded MT Bold', 'Trebuchet MS', 'Segoe UI', Arial, sans-serif" font-size="54" font-weight="700" letter-spacing="-1.6">cin</text>
+</svg>

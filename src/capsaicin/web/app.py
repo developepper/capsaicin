@@ -32,6 +32,7 @@ from capsaicin.web.routes.actions import (
     action_review,
     action_revise,
     action_run,
+    action_shutdown,
     action_unblock,
 )
 from capsaicin.web.routes.dashboard import dashboard
@@ -113,6 +114,12 @@ def create_app(
             action_resume,
             methods=["POST"],
             name="action_resume",
+        ),
+        Route(
+            "/actions/shutdown",
+            action_shutdown,
+            methods=["POST"],
+            name="action_shutdown",
         ),
         # Partials
         Route("/partials/inbox", partial_inbox, name="partial_inbox"),

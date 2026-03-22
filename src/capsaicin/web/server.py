@@ -5,6 +5,8 @@ Handles port selection, browser auto-open, and uvicorn startup.
 
 from __future__ import annotations
 
+import os
+import signal
 import socket
 import threading
 import webbrowser
@@ -32,6 +34,16 @@ def _open_browser(url: str, delay: float = 1.0) -> None:
 
     t = threading.Thread(target=_open, daemon=True)
     t.start()
+
+
+def shutdown_server() -> None:
+    """Terminate the server process.
+
+    Called from the /actions/shutdown endpoint so the operator can stop
+    the server from the browser.  Also ensures Ctrl+C works reliably by
+    sending SIGTERM to our own process, which uvicorn handles cleanly.
+    """
+    os.kill(os.getpid(), signal.SIGTERM)
 
 
 def run_server(
@@ -66,4 +78,12 @@ def run_server(
     print(f"Capsaicin UI running at {url}")
     print("Press Ctrl+C to stop.")
 
-    uvicorn.run(app, host=host, port=port, log_level="warning")
+    # Use timeout_graceful_shutdown so uvicorn doesn't hang waiting
+    # for SSE streams or background threads to finish on Ctrl+C.
+    uvicorn.run(
+        app,
+        host=host,
+        port=port,
+        log_level="warning",
+        timeout_graceful_shutdown=3,
+    )

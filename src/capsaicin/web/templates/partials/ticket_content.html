@@ -107,10 +107,10 @@
   <h2>Actions</h2>
   <div class="action-forms action-forms-inline">
     <form method="post" action="/tickets/{{ data.ticket.id }}/run" class="action-form">
-      <button type="submit" class="btn btn-action">Run Implementation</button>
+      <button type="submit" class="btn btn-action">Run Implementation <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
     <form method="post" action="/tickets/{{ data.ticket.id }}/loop" class="action-form">
-      <button type="submit" class="btn btn-action">Run Loop</button>
+      <button type="submit" class="btn btn-action">Run Loop <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
   </div>
 </section>
@@ -123,7 +123,7 @@
     <div class="action-options">
       <label><input type="checkbox" name="allow_drift"> Allow workspace drift</label>
     </div>
-    <button type="submit" class="btn btn-action">Run Review</button>
+    <button type="submit" class="btn btn-action">Run Review <span class="htmx-indicator spinner spinner-sm"></span></button>
   </form>
 </section>
 {% endif %}
