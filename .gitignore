@@ -10,3 +10,6 @@ build/
 # Testing / Linting
 .pytest_cache/
 .ruff_cache/
+
+# project
+.capsaicin/

@@ -147,41 +147,44 @@ async def dashboard_events(request: Request) -> StreamingResponse:
         prev: dict = {}
         ticks_since_keepalive = 0
 
-        while True:
-            if await request.is_disconnected():
-                break
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
 
-            conn = get_connection(db_path)
-            try:
-                snap = _dashboard_snapshot(conn, project_id)
-            finally:
-                conn.close()
+                conn = get_connection(db_path)
+                try:
+                    snap = _dashboard_snapshot(conn, project_id)
+                finally:
+                    conn.close()
 
-            # Emit events for each changed section
-            changed = False
-            for key in (
-                "orchestrator",
-                "inbox",
-                "queue",
-                "blocked",
-                "next_runnable",
-                "activity",
-            ):
-                if snap[key] != prev.get(key):
-                    yield _sse_event(key, json.dumps({"ts": str(snap[key])}))
-                    changed = True
+                # Emit events for each changed section
+                changed = False
+                for key in (
+                    "orchestrator",
+                    "inbox",
+                    "queue",
+                    "blocked",
+                    "next_runnable",
+                    "activity",
+                ):
+                    if snap[key] != prev.get(key):
+                        yield _sse_event(key, json.dumps({"ts": str(snap[key])}))
+                        changed = True
 
-            prev = snap
+                prev = snap
 
-            if changed:
-                ticks_since_keepalive = 0
-            else:
-                ticks_since_keepalive += _POLL_INTERVAL
-                if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
-                    yield _sse_comment()
+                if changed:
                     ticks_since_keepalive = 0
+                else:
+                    ticks_since_keepalive += _POLL_INTERVAL
+                    if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
+                        yield _sse_comment()
+                        ticks_since_keepalive = 0
 
-            await asyncio.sleep(_POLL_INTERVAL)
+                await asyncio.sleep(_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            return
 
     return StreamingResponse(
         event_generator(),
@@ -259,35 +262,38 @@ async def ticket_events(request: Request) -> StreamingResponse:
         prev: dict | None = None
         ticks_since_keepalive = 0
 
-        while True:
-            if await request.is_disconnected():
-                break
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
 
-            conn = get_connection(db_path)
-            try:
-                snap = _ticket_snapshot(conn, ticket_id)
-            finally:
-                conn.close()
+                conn = get_connection(db_path)
+                try:
+                    snap = _ticket_snapshot(conn, ticket_id)
+                finally:
+                    conn.close()
 
-            if snap is None:
-                # Ticket deleted or never existed — close the stream
-                yield _sse_event("ticket-gone", json.dumps({"ticket_id": ticket_id}))
-                break
+                if snap is None:
+                    # Ticket deleted or never existed — close the stream
+                    yield _sse_event("ticket-gone", json.dumps({"ticket_id": ticket_id}))
+                    break
 
-            if snap != prev:
-                yield _sse_event(
-                    "ticket-updated",
-                    json.dumps({"ticket_id": ticket_id, "status": snap["ticket"][0]}),
-                )
-                prev = snap
-                ticks_since_keepalive = 0
-            else:
-                ticks_since_keepalive += _POLL_INTERVAL
-                if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
-                    yield _sse_comment()
+                if snap != prev:
+                    yield _sse_event(
+                        "ticket-updated",
+                        json.dumps({"ticket_id": ticket_id, "status": snap["ticket"][0]}),
+                    )
+                    prev = snap
                     ticks_since_keepalive = 0
+                else:
+                    ticks_since_keepalive += _POLL_INTERVAL
+                    if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
+                        yield _sse_comment()
+                        ticks_since_keepalive = 0
 
-            await asyncio.sleep(_POLL_INTERVAL)
+                await asyncio.sleep(_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            return
 
     return StreamingResponse(
         event_generator(),

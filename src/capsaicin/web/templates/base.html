@@ -16,9 +16,15 @@
 <body>
   <header>
     <nav><a href="/">capsaicin</a></nav>
-    <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
-      <span id="theme-icon"></span>
-    </button>
+    <div style="display:flex;align-items:center;gap:.5rem">
+      <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
+        <span id="theme-icon"></span>
+      </button>
+      <form method="post" action="/actions/shutdown" style="margin:0"
+            onsubmit="return confirm('Stop the capsaicin UI server?')">
+        <button type="submit" class="theme-toggle" title="Stop server">Stop</button>
+      </form>
+    </div>
   </header>
   <main>
     {% block content %}{% endblock %}

@@ -215,6 +215,30 @@ async def action_resume(request: Request) -> RedirectResponse:
 
 
 # ---------------------------------------------------------------------------
+# Server shutdown
+# ---------------------------------------------------------------------------
+
+
+async def action_shutdown(request: Request) -> HTMLResponse:
+    """POST /actions/shutdown — stop the server from the browser."""
+    from capsaicin.web.server import shutdown_server
+
+    # Schedule the shutdown slightly after the response is sent so the
+    # browser gets a confirmation page before the process exits.
+    import threading
+
+    threading.Timer(0.5, shutdown_server).start()
+
+    return HTMLResponse(
+        "<html><body style='font-family:system-ui;text-align:center;padding:4rem'>"
+        "<h1>Server stopped</h1>"
+        "<p>The capsaicin UI server has been shut down.</p>"
+        "<p style='color:#6c757d'>You can close this tab.</p>"
+        "</body></html>"
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 
