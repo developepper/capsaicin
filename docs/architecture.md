@@ -138,15 +138,19 @@ Primary targets:
 
 Initial backend priority:
 
-1. `Claude Code` reviewer adapter
-2. `Claude Code` implementer adapter
-3. `Codex` implementer adapter
+1. `Claude Code` implementer adapter
+2. `Codex` reviewer adapter
+3. planning-loop role support: `Codex` planner and `Claude Code` planning
+   reviewer
 
-`Claude Code` is the strongest first reviewer target because structured output,
-session isolation, and read-only execution are easier to enforce there.
+The intended steady-state pairing is:
 
-`Codex` is still a good implementation target, but its current output model is
-much weaker for machine-consumable review findings.
+- implementation loop: `Claude Code` implementer, `Codex` reviewer
+- planning loop: `Codex` planner, `Claude Code` reviewer
+
+The current shipped runtime is still Claude-only. Until Codex adapter support
+lands, these pairings remain product direction rather than implemented runtime
+defaults.
 
 ## Application Layer
 

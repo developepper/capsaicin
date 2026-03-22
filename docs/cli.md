@@ -31,6 +31,16 @@ Command set:
 5. `capsaicin status` to render current workflow state
 6. planning-loop support and GitHub export as separate work streams
 
+Intended role split once multi-backend adapter selection exists:
+
+- implementation loop: `Claude Code` implementer, `Codex` reviewer
+- planning loop: `Codex` planner, `Claude Code` reviewer
+
+Current implementation note:
+
+- the shipped command layer still instantiates the Claude adapter for both
+  implementer and reviewer roles
+
 ## Command Contract
 
 ### `capsaicin init`

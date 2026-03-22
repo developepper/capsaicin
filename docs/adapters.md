@@ -17,19 +17,29 @@ Likely options:
 
 Current direction:
 
-- `Codex` is likely a natural subprocess fit, but `capsaicin` should not trust
-  stdout as the source of truth for what changed
-- `Claude Code` offers a cleaner structured-output path for non-interactive
-  execution and is the strongest initial target for reviewer runs
+- `Claude Code` is the intended implementation backend for the implementation
+  loop
+- `Codex` is the intended reviewer backend for the implementation loop
+- `Codex` is the intended planner backend for the planning loop
+- `Claude Code` is the intended reviewer backend for planning artifacts
+- `capsaicin` should not trust agent stdout as the source of truth for what
+  changed
 - the orchestrator should capture workspace change evidence itself, especially
   post-run diffs, instead of relying on the agent to describe edits faithfully
 
 Practical implication:
 
-- prefer `Claude Code` as the first reviewer backend
-- treat `Codex` as an implementer-first backend
-- avoid relying on natural-language parsing for review verdicts when a
-  structured-output path exists
+- for implementation work, target `Claude Code` as implementer and `Codex` as
+  reviewer
+- for planning work, target `Codex` as planner and `Claude Code` as reviewer
+- keep adapter contracts strict enough that each role pairing can be swapped by
+  config once the adapter exists
+
+Current implementation note:
+
+- the shipped runtime is still wired to `Claude Code` only
+- Codex role support remains roadmap work and these pairings are the intended
+  destination, not the current adapter matrix
 
 Practical caveats for `Claude Code` reviewer runs:
 

@@ -6,7 +6,12 @@
 
 `capsaicin` is a local-first ticket orchestrator for AI-assisted software development. It runs an implementation loop around one ticket at a time: implement, review, revise, stop for human approval, then move on.
 
-The current MVP is built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the wired implementer/reviewer backend.
+The intended workflow split is:
+
+- implementation loop: `Claude Code` as implementer, `Codex` as reviewer
+- planning loop: `Codex` as planner, `Claude Code` as planning reviewer
+
+The current MVP runtime is still built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the only implemented adapter backend today.
 
 ## What It Does
 
@@ -56,6 +61,10 @@ Not in scope yet:
 - `git`
 - a git repository to run against
 - the `Claude Code` CLI installed and available on `PATH` as `claude`
+
+Today that is the only implemented adapter backend. The intended long-term role
+split is `Claude Code` for implementation and plan review, with `Codex` for
+ticket review and planning once Codex adapter support lands.
 
 The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`, and `python-multipart` — all installed automatically via `pip install`.
 
@@ -464,7 +473,11 @@ Important points:
 
 - `config.toml` is the source of truth
 - repo paths are stored as absolute paths
-- current shipped defaults assume the `claude` CLI
+- current shipped defaults still assume the `claude` CLI for both roles
+- the intended implementation-loop pairing is `Claude Code` implementer plus
+  `Codex` reviewer
+- the intended planning-loop pairing is `Codex` planner plus `Claude Code`
+  reviewer
 - reviewer runs are intended to be read-only
 
 ## Multi-Project Usage
