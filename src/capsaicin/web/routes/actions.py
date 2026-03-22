@@ -4,16 +4,28 @@ Each handler delegates to the shared command services from ``app.commands``
 and redirects back to the ticket detail or dashboard view.  This keeps
 action semantics identical to the CLI — the web UI does not reinterpret
 state-machine rules.
+
+Long-running commands (run, review, loop, resume) are dispatched to a
+background thread so the HTTP response returns immediately.  Each
+background task opens its own short-lived DB connection — the request
+connection is already closed by the time the task executes.
 """
 
 from __future__ import annotations
+
+import asyncio
+import logging
+import threading
 
 from starlette.requests import Request
 from starlette.responses import RedirectResponse, HTMLResponse
 
 from capsaicin.config import load_config
+from capsaicin.db import get_connection
 from capsaicin.errors import CapsaicinError
 from capsaicin.web.templating import templates
+
+_log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
@@ -148,31 +160,20 @@ async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
 
 async def action_run(request: Request) -> RedirectResponse:
     """POST /tickets/{ticket_id}/run — trigger an implementation run."""
-    conn = request.state.conn
+    db_path = request.app.state.db_path
     project_id = request.app.state.project_id
     config = load_config(request.app.state.config_path)
     log_path = request.app.state.log_path
     ticket_id = request.path_params["ticket_id"]
 
-    from capsaicin.app.commands.run_ticket import run
-
-    try:
-        run(
-            conn=conn,
-            project_id=project_id,
-            config=config,
-            ticket_id=ticket_id,
-            log_path=log_path,
-        )
-    except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(request, ticket_id, str(exc))
+    _run_in_background(_bg_run, db_path, project_id, config, ticket_id, log_path)
 
     return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
 
 async def action_review(request: Request) -> RedirectResponse:
     """POST /tickets/{ticket_id}/review — trigger a review run."""
-    conn = request.state.conn
+    db_path = request.app.state.db_path
     project_id = request.app.state.project_id
     config = load_config(request.app.state.config_path)
     log_path = request.app.state.log_path
@@ -181,70 +182,35 @@ async def action_review(request: Request) -> RedirectResponse:
     form = await request.form()
     allow_drift = form.get("allow_drift") == "on"
 
-    from capsaicin.app.commands.review_ticket import review
-
-    try:
-        review(
-            conn=conn,
-            project_id=project_id,
-            config=config,
-            ticket_id=ticket_id,
-            allow_drift=allow_drift,
-            log_path=log_path,
-        )
-    except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(request, ticket_id, str(exc))
+    _run_in_background(
+        _bg_review, db_path, project_id, config, ticket_id, allow_drift, log_path
+    )
 
     return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
 
 async def action_loop(request: Request) -> RedirectResponse:
     """POST /tickets/{ticket_id}/loop — trigger the implement-review loop."""
-    conn = request.state.conn
+    db_path = request.app.state.db_path
     project_id = request.app.state.project_id
     config = load_config(request.app.state.config_path)
     log_path = request.app.state.log_path
     ticket_id = request.path_params["ticket_id"]
 
-    from capsaicin.app.commands.loop import loop
-
-    try:
-        loop(
-            conn=conn,
-            project_id=project_id,
-            config=config,
-            ticket_id=ticket_id,
-            log_path=log_path,
-        )
-    except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(request, ticket_id, str(exc))
+    _run_in_background(_bg_loop, db_path, project_id, config, ticket_id, log_path)
 
     return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
 
 async def action_resume(request: Request) -> RedirectResponse:
     """POST /actions/resume — resume from the current orchestrator state."""
-    conn = request.state.conn
+    db_path = request.app.state.db_path
     project_id = request.app.state.project_id
     config = load_config(request.app.state.config_path)
     log_path = request.app.state.log_path
 
-    from capsaicin.app.commands.resume import resume
+    _run_in_background(_bg_resume, db_path, project_id, config, log_path)
 
-    try:
-        result = resume(
-            conn=conn,
-            project_id=project_id,
-            config=config,
-            log_path=log_path,
-        )
-    except (ValueError, CapsaicinError) as exc:
-        from urllib.parse import quote
-
-        return RedirectResponse(f"/?error={quote(str(exc))}", status_code=303)
-
-    if result.ticket_id:
-        return RedirectResponse(f"/tickets/{result.ticket_id}", status_code=303)
     return RedirectResponse("/", status_code=303)
 
 
@@ -260,3 +226,90 @@ def _error_redirect(request: Request, ticket_id: str, message: str) -> RedirectR
     return RedirectResponse(
         f"/tickets/{ticket_id}?error={quote(message)}", status_code=303
     )
+
+
+# ---------------------------------------------------------------------------
+# Background execution helpers
+# ---------------------------------------------------------------------------
+
+
+def _run_in_background(fn, *args) -> None:
+    """Fire a long-running command in a daemon thread.
+
+    Each background function opens its own DB connection so it is
+    independent of the request lifecycle.
+    """
+    t = threading.Thread(target=fn, args=args, daemon=True)
+    t.start()
+
+
+def _bg_run(db_path, project_id, config, ticket_id, log_path) -> None:
+    from capsaicin.app.commands.run_ticket import run
+
+    conn = get_connection(db_path)
+    try:
+        run(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            ticket_id=ticket_id,
+            log_path=log_path,
+        )
+    except Exception:
+        _log.exception("Background run failed for ticket %s", ticket_id)
+    finally:
+        conn.close()
+
+
+def _bg_review(db_path, project_id, config, ticket_id, allow_drift, log_path) -> None:
+    from capsaicin.app.commands.review_ticket import review
+
+    conn = get_connection(db_path)
+    try:
+        review(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            ticket_id=ticket_id,
+            allow_drift=allow_drift,
+            log_path=log_path,
+        )
+    except Exception:
+        _log.exception("Background review failed for ticket %s", ticket_id)
+    finally:
+        conn.close()
+
+
+def _bg_loop(db_path, project_id, config, ticket_id, log_path) -> None:
+    from capsaicin.app.commands.loop import loop
+
+    conn = get_connection(db_path)
+    try:
+        loop(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            ticket_id=ticket_id,
+            log_path=log_path,
+        )
+    except Exception:
+        _log.exception("Background loop failed for ticket %s", ticket_id)
+    finally:
+        conn.close()
+
+
+def _bg_resume(db_path, project_id, config, log_path) -> None:
+    from capsaicin.app.commands.resume import resume
+
+    conn = get_connection(db_path)
+    try:
+        resume(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            log_path=log_path,
+        )
+    except Exception:
+        _log.exception("Background resume failed")
+    finally:
+        conn.close()
