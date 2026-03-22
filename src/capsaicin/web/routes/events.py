@@ -275,13 +275,17 @@ async def ticket_events(request: Request) -> StreamingResponse:
 
                 if snap is None:
                     # Ticket deleted or never existed — close the stream
-                    yield _sse_event("ticket-gone", json.dumps({"ticket_id": ticket_id}))
+                    yield _sse_event(
+                        "ticket-gone", json.dumps({"ticket_id": ticket_id})
+                    )
                     break
 
                 if snap != prev:
                     yield _sse_event(
                         "ticket-updated",
-                        json.dumps({"ticket_id": ticket_id, "status": snap["ticket"][0]}),
+                        json.dumps(
+                            {"ticket_id": ticket_id, "status": snap["ticket"][0]}
+                        ),
                     )
                     prev = snap
                     ticks_since_keepalive = 0
