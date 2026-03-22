@@ -41,6 +41,7 @@ Included:
 - `capsaicin status`
 - `capsaicin resume`
 - `capsaicin loop`
+- `capsaicin ui`
 
 Not in scope yet:
 
@@ -55,6 +56,9 @@ Not in scope yet:
 - `git`
 - a git repository to run against
 - the `Claude Code` CLI installed and available on `PATH` as `claude`
+
+The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`,
+and `python-multipart` — all installed automatically via `pip install`.
 
 `capsaicin` captures tracked-file diffs using `git diff HEAD`, so the target
 repository should be a normal git worktree.
@@ -382,6 +386,32 @@ capsaicin loop TICKET_ID --max-cycles 2
 
 This is the fastest way to operate once your project is configured and you want
 the tool to keep driving until a human decision is required.
+
+### `capsaicin ui`
+
+Launch the local operator web UI:
+
+```bash
+capsaicin ui
+capsaicin ui --port 8080
+capsaicin ui --no-open
+```
+
+Behavior:
+
+- starts a local HTTP server bound to `127.0.0.1`
+- picks an available port automatically unless `--port` is provided
+- opens the browser by default; `--no-open` suppresses this
+- serves a dashboard with queue state, inbox, and activity
+- shows ticket detail with acceptance criteria, findings, diff, and run history
+- provides action forms for approve, revise, defer, unblock, run, review, and
+  loop directly in the browser
+- live updates via server-sent events when ticket or orchestrator state changes
+- no authentication, remote access, or multi-user support — this is a
+  single-operator local tool
+
+The UI uses the same shared services as the CLI. Actions taken in the browser
+produce identical state transitions and persist through the same database.
 
 ## Statuses You Will See
 

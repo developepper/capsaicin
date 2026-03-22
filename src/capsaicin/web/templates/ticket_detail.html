@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block title %}{{ data.ticket.title }} — capsaicin{% endblock %}
+{% block content %}
+<h1>{{ data.ticket.title }}</h1>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+{% include "partials/ticket_content.html" %}
+
+<p><a href="/">Back to dashboard</a></p>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var ticketId = '{{ data.ticket.id }}';
+  var src = new EventSource('/events/tickets/' + ticketId);
+  src.addEventListener('ticket-updated', function() {
+    document.body.dispatchEvent(new CustomEvent('sse-ticket'));
+  });
+  src.addEventListener('ticket-gone', function() {
+    src.close();
+  });
+  src.onerror = function() {
+    // SSE disconnected — the page remains usable as a static view.
+    // The browser's EventSource will attempt reconnection automatically.
+  };
+})();
+</script>
+{% endblock %}

@@ -1,0 +1,133 @@
+{% extends "base.html" %}
+{% block title %}Dashboard — capsaicin{% endblock %}
+{% block content %}
+<h1>Project Dashboard</h1>
+
+{# --- Orchestrator state --- #}
+{% if data.orchestrator %}
+<section id="orchestrator" class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}"
+         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+  <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
+  {% if data.orchestrator.active_ticket_id and data.active_ticket %}
+    — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
+    ({{ data.active_ticket.status }})
+  {% endif %}
+  {% if data.orchestrator.status in ("running", "awaiting_human", "suspended") %}
+  <form method="post" action="/actions/resume" class="orchestrator-resume">
+    <button type="submit" class="btn btn-action btn-sm">Resume</button>
+  </form>
+  {% endif %}
+</section>
+{% endif %}
+
+{# --- Inbox: human-gate tickets needing decisions --- #}
+<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
+  <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
+  {% if data.inbox and data.inbox.tickets %}
+  <table>
+    <thead><tr><th>Ticket</th><th>Gate Reason</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for t in data.inbox.tickets %}
+      <tr>
+        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td>{{ t.gate_reason or "unknown" }}</td>
+        <td>{{ t.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No tickets awaiting human action.</p>
+  {% endif %}
+</section>
+
+{# --- Blocked tickets --- #}
+<section id="blocked" hx-get="/partials/blocked" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
+  {% if data.blocked_tickets %}
+  <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
+  <table>
+    <thead><tr><th>Ticket</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for t in data.blocked_tickets %}
+      <tr>
+        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td>{{ t.blocked_reason or "unknown" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <h2>Blocked</h2>
+  <p class="empty">No blocked tickets.</p>
+  {% endif %}
+</section>
+
+{# --- Next runnable ticket --- #}
+<section id="next-runnable" hx-get="/partials/next-runnable" hx-trigger="every 30s, sse-next_runnable from:body" hx-swap="outerHTML">
+  <h2>Next Runnable</h2>
+  {% if data.next_runnable %}
+  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.title }}</a></p>
+  {% else %}
+  <p class="empty">No runnable tickets.</p>
+  {% endif %}
+</section>
+
+{# --- Queue overview --- #}
+<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
+  <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
+  {% if data.counts_by_status %}
+  <table>
+    <thead><tr><th>Status</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for status in ["ready","implementing","in-review","revise","human-gate","pr-ready","blocked","done"] %}
+        {% if status in data.counts_by_status %}
+        <tr><td>{{ status }}</td><td>{{ data.counts_by_status[status] }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No tickets yet.</p>
+  {% endif %}
+</section>
+
+{# --- Recent activity --- #}
+<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
+  <h2>Recent Activity</h2>
+  {% if data.recent_runs %}
+  <table>
+    <thead><tr><th>Time</th><th>Ticket</th><th>Role</th><th>Result</th><th>Duration</th></tr></thead>
+    <tbody>
+      {% for r in data.recent_runs %}
+      <tr>
+        <td>{{ r.started_at }}</td>
+        <td><a href="/tickets/{{ r.ticket_id }}">{{ r.ticket_title }}</a></td>
+        <td>{{ r.role }}</td>
+        <td>{{ r.exit_status }}{% if r.verdict %} / {{ r.verdict }}{% endif %}</td>
+        <td>{{ "%.1f"|format(r.duration_seconds) if r.duration_seconds is not none else "—" }}s</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No runs yet.</p>
+  {% endif %}
+</section>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var src = new EventSource('/events/dashboard');
+  var events = ['orchestrator', 'inbox', 'queue', 'blocked', 'next_runnable', 'activity'];
+  events.forEach(function(name) {
+    src.addEventListener(name, function() {
+      document.body.dispatchEvent(new CustomEvent('sse-' + name));
+    });
+  });
+  src.onerror = function() {
+    // SSE disconnected — polling fallback remains active via hx-trigger.
+    // Attempt reconnect is handled by the browser's EventSource spec.
+  };
+})();
+</script>
+{% endblock %}

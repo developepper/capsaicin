@@ -1,0 +1,8 @@
+<section id="next-runnable" hx-get="/partials/next-runnable" hx-trigger="every 30s, sse-next_runnable from:body" hx-swap="outerHTML">
+  <h2>Next Runnable</h2>
+  {% if data.next_runnable %}
+  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.title }}</a></p>
+  {% else %}
+  <p class="empty">No runnable tickets.</p>
+  {% endif %}
+</section>

@@ -24,5 +24,6 @@ Document roles:
 - `adapters.md`: agent invocation model, adapter contract, run envelopes, and
   reviewer isolation rules
 - `configuration.md`: configuration surface and defaults
-- `cli.md`: command contract and operator-facing behavior
+- `cli.md`: command contract and operator-facing behavior, including the
+  `capsaicin ui` web interface
 - `tickets/`: roadmap, planning, and archived epics

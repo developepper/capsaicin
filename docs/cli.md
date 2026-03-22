@@ -376,3 +376,48 @@ Loop and resume have different entry paths:
 
 - `loop` advances work by ticket state
 - `resume` recovers work by `orchestrator_state`
+
+### `capsaicin ui`
+
+Usage:
+
+```text
+capsaicin ui [--port PORT] [--no-open] [--repo PATH] [--project SLUG]
+```
+
+Behavior:
+
+- resolve the project context the same way other commands do
+- start a local HTTP server bound to `127.0.0.1` only
+- pick an available port automatically unless `--port` is provided
+- open the default browser unless `--no-open` is passed
+- close the project-resolution database connection before starting the server;
+  the web layer opens its own per-request connections
+- serve a Starlette ASGI application with Jinja2 templates and HTMX
+
+The UI exposes these operator surfaces:
+
+- project dashboard with orchestrator state, inbox, queue, blocked tickets,
+  next runnable ticket, and recent activity
+- ticket detail with metadata, acceptance criteria, open findings, diagnostic
+  messages, last run details, implementation diff, run history, and transition
+  history
+- human-gate action forms: approve (with rationale and force options), revise
+  (with optional finding and cycle reset), defer (with rationale and abandon),
+  and unblock (with optional cycle reset)
+- workflow trigger buttons: run implementation, run review (with allow-drift),
+  run loop, and resume
+- server-sent events for narrow live updates of dashboard sections and ticket
+  detail when state changes
+
+All actions delegate to the same shared command services used by the CLI.
+The UI does not reinterpret state-machine rules or add new workflow logic.
+
+Runtime model:
+
+- no authentication, remote access, or multi-user support
+- per-request SQLite connections opened and closed within each request
+- WAL mode is not enabled by default
+- SSE endpoints poll the database on a short interval rather than using
+  filesystem or database notifications
+- the server runs until the operator presses Ctrl+C
