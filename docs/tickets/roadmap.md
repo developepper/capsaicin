@@ -66,65 +66,25 @@ If the project evolves well, it should remain centered on:
 
 Adapters and models can change over time. The workflow engine is the product.
 
-## Priority Order
+## Short-Term Priorities
 
-The current intended order for the next major work streams is:
+This section is the near-term sequencing view. `Evolution` above is the
+long-term arc; this section is just the next set of work streams to keep in
+focus.
 
-1. ~~reliability and diagnostics for the implementation loop~~ (done — Epic 02)
-2. ~~a UI for the existing implementation loop~~ (done — Epic 03)
-3. planning-loop automation (scoped as
+1. planning-loop automation (scoped as
    [epic-04-planning-loop-automation](./epic-04-planning-loop-automation/))
-4. GitHub handoff and PR automation
+2. planning-to-implementation continuity after materialization
+3. GitHub handoff and PR automation
+4. workflow policy and capability modeling to support cleaner backend
+   diversification
+
+Completed foundations:
+
+- reliability and diagnostics: [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)
+- local operator UI: [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)
 
 Multi-ticket orchestration remains later work.
-
-## Reliability And Diagnostics
-
-Focus on making the existing loop easier to trust, diagnose, and operate.
-
-This work is now scoped as
-[epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/).
-
-Candidate areas:
-
-- detect and surface Claude Code `permission_denials`
-- distinguish permission-blocked runs from true empty implementations
-- surface agent result text when implementation produces no diff
-- improve human-gate diagnostics and `status --verbose` output
-- add a `capsaicin doctor` or `capsaicin check` command
-- validate local adapter setup and repository preconditions
-- log run cost and other high-signal adapter metadata in `activity.log`
-- improve automatic ticket selection in `loop`, including `revise` tickets
-
-## UI For The Existing Implementation Loop
-
-A local operator UI is now implemented as part of
-[epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/).
-
-The UI launches from `capsaicin ui`, runs a built-in HTTP server on
-`127.0.0.1`, and ships inside the Python package with no separate app install
-or build step.
-
-What was delivered:
-
-- shared service and query boundaries between CLI and web (`app/commands/`,
-  `app/queries/`)
-- Starlette ASGI runtime with Jinja2 templates and vendored HTMX
-- project dashboard with orchestrator state, inbox, queue, blocked tickets,
-  next runnable ticket, and recent activity
-- ticket detail with acceptance criteria, findings, diagnostics, diff, run
-  history, and transition history
-- human-gate action forms for approve, revise, defer, and unblock
-- workflow triggers for run, review, loop, and resume
-- SSE live updates for dashboard and ticket detail
-- `python-multipart` dependency for form parsing
-
-What is intentionally not included:
-
-- ticket-creation UI
-- auth, remote access, or multi-user support
-- SPA or frontend build pipeline
-- GitHub integration UI
 
 ## Planning Loop
 
@@ -153,33 +113,27 @@ Candidate areas:
 - `gh` integration for PR creation
 - explicit completion flow from `pr-ready` to `done`
 
-## Codex Adapter Support
+## Planning-To-Implementation Continuity
 
-Broaden adapter support beyond the current Claude Code-only runtime wiring.
+Close the operator gap between approved plans and active implementation work.
 
-Current direction:
-
-- support the intended implementation-loop pairing: `Claude Code` implementer
-  and `Codex` reviewer
-- support the intended planning-loop pairing: `Codex` planner and `Claude Code`
-  planning reviewer
-- replace direct `ClaudeCodeAdapter` instantiation in command services with
-  backend-driven adapter selection from config
+This becomes relevant after planning-loop automation exists.
 
 Candidate areas:
 
-- implement a `CodexAdapter` against the existing `BaseAdapter` contract
-- add adapter-factory selection based on `[adapters.<role>].backend`
-- normalize Codex-specific run metadata and failure modes into the existing
-  `RunResult` shape
-- add tests for backend selection and Codex reviewer execution
-- evaluate whether Codex planner support needs contract extensions for
-  planning-loop use
+- one command or UI action that materializes an approved plan and immediately
+  starts the implementation loop on the first ready ticket
+- better handoff summaries from approved plan to active implementation queue
+- explicit operator controls for when materialization should stop versus
+  continue into execution
+- clearer status views connecting planning approval to implementation kickoff
 
 ## Workflow Policy And Capability Modeling
 
 Make agent/runtime capabilities and workflow policy explicit instead of
 hard-coding them into adapter assumptions.
+
+This becomes more important before or alongside adapter diversification.
 
 Candidate areas:
 
@@ -189,10 +143,39 @@ Candidate areas:
 - support policy profiles for different repo types or risk levels
 - make reviewer, verifier, and human-gate requirements more configurable
 
+## Adapter Diversification And Role Pairings
+
+Broaden adapter support beyond the current Claude Code-only runtime wiring.
+
+Current direction:
+
+- validate the adapter abstraction with at least one strong non-Claude backend
+- preserve role-specialized pairings rather than assuming one backend should do
+  everything
+- likely target pairings today are:
+  - implementation loop: `Claude Code` implementer and `Codex` reviewer
+  - planning loop: `Codex` planner and `Claude Code` planning reviewer
+- replace direct `ClaudeCodeAdapter` instantiation in command services with
+  backend-driven adapter selection from config
+
+Candidate areas:
+
+- implement a second adapter backend against the existing `BaseAdapter`
+  contract, with Codex as the current likely target
+- add adapter-factory selection based on `[adapters.<role>].backend`
+- normalize non-Claude-specific run metadata and failure modes into the
+  existing `RunResult` shape
+- add tests for backend selection and role-specific execution paths
+- evaluate whether planning roles need contract extensions beyond the current
+  implementation-loop assumptions
+
 ## Prompt Versioning And Reproducibility
 
 Treat prompt evolution and run reproducibility as first-class operational
 concerns.
+
+This becomes more important once planning and multi-backend execution are both
+real.
 
 Candidate areas:
 
@@ -207,6 +190,9 @@ Candidate areas:
 Strengthen the system's ability to explain how planning and implementation
 artifacts were produced.
 
+This becomes more important once planning artifacts, exports, and GitHub
+handoff all exist.
+
 Candidate areas:
 
 - track lineage from problem statement to plan to implementation ticket to
@@ -218,6 +204,9 @@ Candidate areas:
 ## Verification And Quality Gates
 
 Extend the loop from AI review alone to explicit verification policies.
+
+This becomes more important once the implementation loop and GitHub handoff are
+stable enough to support stricter delivery policy.
 
 Candidate areas:
 
@@ -233,6 +222,9 @@ Candidate areas:
 Reduce the risk of workflow interference from unrelated local changes and
 prepare the system for stronger automation.
 
+This becomes more important once automation expands beyond a single local loop
+and into handoff or parallel work.
+
 Candidate areas:
 
 - branch or worktree management per ticket
@@ -244,6 +236,9 @@ Candidate areas:
 
 Make it easier to move work into and out of `capsaicin` without losing
 structure or lineage.
+
+This becomes more important once planning export and GitHub handoff are active
+surfaces.
 
 Candidate areas:
 
@@ -257,6 +252,9 @@ Candidate areas:
 
 Improve trust, diagnosability, and operational feedback as usage scales.
 
+This becomes more important as loop usage, model diversity, and operational
+cost all increase.
+
 Candidate areas:
 
 - richer run timelines and failure taxonomy
@@ -265,10 +263,26 @@ Candidate areas:
 - operator-facing diagnostics explaining stuck or inefficient workflows
 - budget policies and spend-aware workflow controls
 
+## Post-Materialization Plan Evolution
+
+Handle the case where implementation work reveals that an already materialized
+plan needs to change.
+
+This remains intentionally later because it introduces hard questions about
+lineage, partial progress, and regeneration safety.
+
+Candidate areas:
+
+- revising a plan after some generated implementation tickets already exist
+- reconciling changed plans with in-progress or completed implementation work
+- preserving auditability when plan structure changes mid-execution
+- guiding operators through safe regeneration, follow-up tickets, or manual
+  divergence
+
 ## Later Directions
 
 Ideas that remain intentionally later:
 
-- adapter diversification beyond current backends
+- adapters beyond Codex and Claude Code
 - smarter ticket decomposition
 - multi-ticket orchestration with dependency-aware parallel work
