@@ -222,6 +222,17 @@ header nav { display: flex; align-items: center; gap: .75rem; }
 header a { color: var(--text-header); text-decoration: none; font-weight: 700; font-size: 1.05em; }
 header a:hover { opacity: .85; }
 
+.brand {
+  display: inline-flex;
+  align-items: center;
+}
+
+.brand img {
+  display: block;
+  width: clamp(168px, 22vw, 236px);
+  height: auto;
+}
+
 /* Theme toggle */
 .theme-toggle {
   background: none;

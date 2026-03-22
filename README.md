@@ -1,3 +1,7 @@
+<p align="center">
+  <img src="src/capsaicin/web/static/brand/capsaicin-logo.svg" alt="capsaicin logo" width="420">
+</p>
+
 # capsaicin
 
 `capsaicin` is a local-first ticket orchestrator for AI-assisted software
