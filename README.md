@@ -4,13 +4,9 @@
 
 # capsaicin
 
-`capsaicin` is a local-first ticket orchestrator for AI-assisted software
-development. It runs an implementation loop around one ticket at a time:
-implement, review, revise, stop for human approval, then move on.
+`capsaicin` is a local-first ticket orchestrator for AI-assisted software development. It runs an implementation loop around one ticket at a time: implement, review, revise, stop for human approval, then move on.
 
-The current MVP is built around a local SQLite database, a `.capsaicin/`
-project directory inside your repo, and the `Claude Code` CLI as the wired
-implementer/reviewer backend.
+The current MVP is built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the wired implementer/reviewer backend.
 
 ## What It Does
 
@@ -61,11 +57,9 @@ Not in scope yet:
 - a git repository to run against
 - the `Claude Code` CLI installed and available on `PATH` as `claude`
 
-The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`,
-and `python-multipart` — all installed automatically via `pip install`.
+The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`, and `python-multipart` — all installed automatically via `pip install`.
 
-`capsaicin` captures tracked-file diffs using `git diff HEAD`, so the target
-repository should be a normal git worktree.
+`capsaicin` captures tracked-file diffs using `git diff HEAD`, so the target repository should be a normal git worktree.
 
 ## Installation
 
@@ -163,11 +157,9 @@ The normal operator workflow is:
 1. Initialize a project in the repo.
 2. Add one or more tickets.
 3. Optionally add dependencies.
-4. Run `capsaicin ticket run` for a specific ticket or let it auto-select the
-   next runnable `ready` ticket.
+4. Run `capsaicin ticket run` for a specific ticket or let it auto-select the next runnable `ready` ticket.
 5. Run `capsaicin ticket review`.
-6. If review fails, the ticket moves to `revise`; run `capsaicin ticket run`
-   again.
+6. If review fails, the ticket moves to `revise`; run `capsaicin ticket run` again.
 7. If review passes or escalates, the ticket moves to `human-gate`.
 8. Make a human decision with `approve`, `revise`, or `defer`.
 9. Repeat for the next ticket.
@@ -290,8 +282,7 @@ Behavior:
   - `human-gate` on pass, escalation, low-confidence pass, or cycle limit
   - `blocked` when review retries are exhausted
 
-Use `--allow-drift` only when you intentionally changed the workspace after the
-implementation run and want review to proceed against the new current diff.
+Use `--allow-drift` only when you intentionally changed the workspace after the implementation run and want review to proceed against the new current diff.
 
 ### `capsaicin ticket approve`
 
@@ -308,8 +299,7 @@ Notes:
 
 - approval normally verifies that the workspace still matches what was reviewed
 - `--force` overrides the workspace match check
-- `--rationale` is required for some gate reasons such as cycle-limit or
-  reviewer escalation
+- `--rationale` is required for some gate reasons such as cycle-limit or reviewer escalation
 
 ### `capsaicin ticket revise`
 
@@ -375,8 +365,7 @@ Use this after:
 - a killed agent process
 - an interrupted machine/session
 
-`capsaicin` uses the persisted orchestrator state and prior run records to
-decide whether to continue, retry, mark failure, or stop for human action.
+`capsaicin` uses the persisted orchestrator state and prior run records to decide whether to continue, retry, mark failure, or stop for human action.
 
 ### `capsaicin loop`
 
@@ -388,8 +377,7 @@ capsaicin loop TICKET_ID
 capsaicin loop TICKET_ID --max-cycles 2
 ```
 
-This is the fastest way to operate once your project is configured and you want
-the tool to keep driving until a human decision is required.
+This is the fastest way to operate once your project is configured and you want the tool to keep driving until a human decision is required.
 
 ### `capsaicin ui`
 
@@ -414,8 +402,7 @@ Behavior:
 - no authentication, remote access, or multi-user support — this is a
   single-operator local tool
 
-The UI uses the same shared services as the CLI. Actions taken in the browser
-produce identical state transitions and persist through the same database.
+The UI uses the same shared services as the CLI. Actions taken in the browser produce identical state transitions and persist through the same database.
 
 ## Statuses You Will See
 
@@ -482,8 +469,7 @@ Important points:
 
 ## Multi-Project Usage
 
-If `.capsaicin/projects/` contains exactly one project, commands auto-resolve
-it.
+If `.capsaicin/projects/` contains exactly one project, commands auto-resolve it.
 
 If there are multiple projects, pass `--project`:
 
@@ -502,12 +488,9 @@ capsaicin status --repo /path/to/repo
 
 - Commit or stash unrelated work before running a ticket when possible.
 - Review `capsaicin status` before approving.
-- Use `ticket review --allow-drift` only when you intentionally want to review
-  the modified workspace, not the original implementation output.
-- Use `resume` after interruption instead of guessing what state the tool was
-  in.
-- Treat `pr-ready` as the end of the MVP automation. PR creation and merge are
-  still manual.
+- Use `ticket review --allow-drift` only when you intentionally want to review the modified workspace, not the original implementation output.
+- Use `resume` after interruption instead of guessing what state the tool was in.
+- Treat `pr-ready` as the end of the MVP automation. PR creation and merge are still manual.
 
 ## Troubleshooting
 

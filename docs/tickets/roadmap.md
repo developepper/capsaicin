@@ -25,7 +25,8 @@ The current intended order for the next major work streams is:
 
 1. ~~reliability and diagnostics for the implementation loop~~ (done — Epic 02)
 2. ~~a UI for the existing implementation loop~~ (done — Epic 03)
-3. planning-loop automation
+3. planning-loop automation (scoped as
+   [epic-04-planning-loop-automation](./epic-04-planning-loop-automation/))
 4. GitHub handoff and PR automation
 
 Multi-ticket orchestration remains later work.
@@ -51,7 +52,7 @@ Candidate areas:
 ## UI For The Existing Implementation Loop
 
 A local operator UI is now implemented as part of
-[epic-03-ui-for-implementation-loop](epic-03-ui-for-implementation-loop/).
+[epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/).
 
 The UI launches from `capsaicin ui`, runs a built-in HTTP server on
 `127.0.0.1`, and ships inside the Python package with no separate app install
@@ -83,7 +84,10 @@ What is intentionally not included:
 Extend the product upstream from manual ticket entry to structured planning and
 review.
 
-Candidate areas:
+This work is now scoped as
+[epic-04-planning-loop-automation](./epic-04-planning-loop-automation/).
+
+Key areas:
 
 - problem statement intake
 - planner and reviewer runs for plan creation
