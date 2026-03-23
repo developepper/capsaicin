@@ -3,9 +3,7 @@
 {% block content %}
 <h1>Planning Dashboard</h1>
 
-{% if error %}
-<div class="error-banner">{{ error }}</div>
-{% endif %}
+{% include "partials/error_banner.html" %}
 
 {# --- Create new epic --- #}
 <section id="create-epic">

@@ -4,9 +4,7 @@
 <h1>Health Check</h1>
 <p class="back-link"><a href="{{ request.url_for('dashboard') }}">Back to dashboard</a></p>
 
-{% if error %}
-<div class="error-banner">{{ error }}</div>
-{% endif %}
+{% include "partials/error_banner.html" %}
 
 {% if report %}
 <div class="table-wrap"><table>

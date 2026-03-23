@@ -4,9 +4,7 @@
 <h1>Project Dashboard</h1>
 <p><a href="{{ request.url_for('planning_dashboard') }}">Planning Dashboard</a> | <a href="{{ request.url_for('doctor') }}">Health Check</a></p>
 
-{% if error %}
-<div class="error-banner">{{ error }}</div>
-{% endif %}
+{% include "partials/error_banner.html" %}
 
 {# --- Create new ticket --- #}
 <section id="create-ticket">
