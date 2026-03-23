@@ -180,6 +180,10 @@ tickets:
 capsaicin plan approve --rationale "Scope and sequencing look right"
 ```
 
+After approval, the UI can continue directly into implementation from the
+approved epic by showing the materialized ticket queue, readiness state, and a
+`Continue Implementation` action for the next eligible ticket.
+
 If the ticket reaches `human-gate`, choose one:
 
 ```bash
@@ -194,7 +198,7 @@ The normal operator workflow is:
 
 1. Initialize a project in the repo.
 2. Either create a planning epic with `capsaicin plan new` or add tickets manually with `capsaicin ticket add`.
-3. If you started in planning, run `capsaicin plan loop` until the epic reaches `human-gate`, then approve it to materialize tickets.
+3. If you started in planning, run `capsaicin plan loop` until the epic reaches `human-gate`, then approve it to materialize tickets and continue into implementation from the approved epic UI when ready.
 4. Optionally add or inspect ticket dependencies.
 5. Run `capsaicin ticket run` for a specific ticket or let it auto-select the next runnable `ready` ticket.
 6. Run `capsaicin ticket review`.
@@ -312,6 +316,10 @@ capsaicin plan approve EPIC_ID --force
 
 `--force` is for overwriting previously materialized docs that were edited
 manually.
+
+In the UI, approved epics also expose the materialized implementation tickets,
+their readiness/dependency state, and a `Continue Implementation` action for
+starting the implementation loop on the next eligible ticket in that epic.
 
 ### `capsaicin plan status`
 
@@ -477,9 +485,12 @@ Behavior:
 - picks an available port automatically unless `--port` is provided
 - opens the browser by default; `--no-open` suppresses this
 - serves a dashboard with queue state, inbox, and activity
+- serves a planning dashboard with approved epic detail, materialized
+  implementation tickets, readiness state, and continuity actions
 - shows ticket detail with acceptance criteria, findings, diff, and run history
-- provides action forms for approve, revise, defer, unblock, run, review, and
-  loop directly in the browser
+- provides action forms for planning approval, re-materialization, continue
+  implementation, approve, revise, defer, unblock, run, review, and loop
+  directly in the browser
 - live updates via server-sent events when ticket or orchestrator state changes
 - no authentication, remote access, or multi-user support — this is a
   single-operator local tool

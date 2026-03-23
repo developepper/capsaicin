@@ -185,6 +185,8 @@ Behavior:
 - record a human approval decision
 - move the epic to `approved`
 - materialize implementation tickets and ticket docs under `docs/tickets/`
+- make the approved epic ready for UI-driven continuation into the
+  implementation loop via the materialized ticket queue
 - respect `--force` when existing materialized docs were edited manually
 
 ### `capsaicin plan materialize`
@@ -247,6 +249,8 @@ Behavior with `EPIC_ID`:
 
 - show the planning brief, status, cycle counters, and materialization state
 - show planned tickets and dependencies
+- show materialized implementation tickets with readiness/dependency state when
+  the epic is approved
 - show open planning findings
 - with `--verbose`, include run and transition history
 
@@ -582,9 +586,14 @@ The UI exposes these operator surfaces:
 
 - project dashboard with orchestrator state, inbox, queue, blocked tickets,
   next runnable ticket, and recent activity
+- planning dashboard with epic queues, approved epic detail, planned tickets,
+  materialized implementation tickets, and planning findings
 - ticket detail with metadata, acceptance criteria, open findings, diagnostic
   messages, last run details, implementation diff, run history, and transition
   history
+- approved-epic continuity actions: re-materialize docs, inspect implementation
+  ticket readiness, and continue implementation on the next eligible ticket or
+  a selected ticket within the epic
 - human-gate action forms: approve (with rationale and force options), revise
   (with optional finding and cycle reset), defer (with rationale and abandon),
   and unblock (with optional cycle reset)

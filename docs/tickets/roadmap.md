@@ -50,10 +50,11 @@ The expected evolution of the product is:
 1. implementation loop foundation
 2. reliability, diagnostics, and local UI
 3. planning-loop automation
-4. adapter diversification and role-specialized agent pairings
-5. GitHub issue and PR handoff
-6. stronger verification, isolation, lineage, and policy controls
-7. later, multi-ticket orchestration and higher-level operational tooling
+4. planning-to-implementation continuity
+5. adapter diversification and role-specialized agent pairings
+6. GitHub issue and PR handoff
+7. stronger verification, isolation, lineage, and policy controls
+8. later, multi-ticket orchestration and higher-level operational tooling
 
 If the project evolves well, it should remain centered on:
 
@@ -75,6 +76,7 @@ Completed foundations:
   [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)
 - planning-loop automation:
   [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)
+- planning-to-implementation continuity
 
 ## Short-Term Priorities
 
@@ -82,10 +84,10 @@ This section is the near-term sequencing view. `Evolution` above is the
 long-term arc; this section is just the next set of work streams to keep in
 focus.
 
-1. planning-to-implementation continuity after materialization
-2. GitHub handoff and PR automation
-3. workflow policy and capability modeling to support cleaner backend
+1. GitHub handoff and PR automation
+2. workflow policy and capability modeling to support cleaner backend
    diversification
+3. adapter diversification and role pairings
 
 Multi-ticket orchestration remains later work.
 
@@ -98,7 +100,6 @@ Key areas:
 
 - better issue-body and export generation from approved plans
 - richer operator views around plan history and materialization state
-- cleaner transitions from approved plan to active implementation execution
 - stronger auditability and policy controls around planning decisions
 
 ## GitHub Handoff And PR Automation
@@ -111,19 +112,6 @@ Candidate areas:
 - branch and commit preparation
 - `gh` integration for PR creation
 - explicit completion flow from `pr-ready` to `done`
-
-## Planning-To-Implementation Continuity
-
-Close the operator gap between approved plans and active implementation work.
-
-Candidate areas:
-
-- one command or UI action that materializes an approved plan and immediately
-  starts the implementation loop on the first ready ticket
-- better handoff summaries from approved plan to active implementation queue
-- explicit operator controls for when materialization should stop versus
-  continue into execution
-- clearer status views connecting planning approval to implementation kickoff
 
 ## Workflow Policy And Capability Modeling
 
