@@ -127,6 +127,32 @@ async def action_defer(request: Request) -> RedirectResponse | HTMLResponse:
     return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
 
 
+async def action_complete(request: Request) -> RedirectResponse | HTMLResponse:
+    """POST /tickets/{ticket_id}/complete — mark a pr-ready ticket as done."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+    log_path = request.app.state.log_path
+    ticket_id = request.path_params["ticket_id"]
+
+    form = await request.form()
+    rationale = form.get("rationale", "").strip() or None
+
+    from capsaicin.app.commands.complete_ticket import complete
+
+    try:
+        complete(
+            conn=conn,
+            project_id=project_id,
+            ticket_id=ticket_id,
+            rationale=rationale,
+            log_path=log_path,
+        )
+    except (ValueError, CapsaicinError) as exc:
+        return _error_redirect(request, ticket_id, str(exc))
+
+    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+
+
 async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
     """POST /tickets/{ticket_id}/unblock — return a blocked ticket to ready."""
     conn = request.state.conn

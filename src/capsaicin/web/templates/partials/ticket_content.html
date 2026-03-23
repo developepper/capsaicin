@@ -87,6 +87,19 @@
 </section>
 {% endif %}
 
+{# --- PR-ready ticket: complete action --- #}
+{% if data.ticket.status == "pr-ready" %}
+<section class="action-panel">
+  <h2>Implementation Complete</h2>
+  <p class="gate-context">This ticket is approved and ready. Mark it as done to unblock dependent tickets.</p>
+  <form method="post" action="/tickets/{{ data.ticket.id }}/complete" class="action-form action-approve">
+    <label for="complete-rationale">Rationale (optional)</label>
+    <textarea id="complete-rationale" name="rationale" rows="2" placeholder="e.g. PR merged, committed locally, etc."></textarea>
+    <button type="submit" class="btn btn-approve">Mark Done</button>
+  </form>
+</section>
+{% endif %}
+
 {# --- Blocked ticket: unblock action --- #}
 {% if data.ticket.status == "blocked" %}
 <section class="action-panel">

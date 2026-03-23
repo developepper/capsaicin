@@ -26,6 +26,7 @@ from starlette.staticfiles import StaticFiles
 from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.actions import (
     action_approve,
+    action_complete,
     action_defer,
     action_loop,
     action_resume,
@@ -84,6 +85,12 @@ def create_app(
             action_defer,
             methods=["POST"],
             name="action_defer",
+        ),
+        Route(
+            "/tickets/{ticket_id}/complete",
+            action_complete,
+            methods=["POST"],
+            name="action_complete",
         ),
         Route(
             "/tickets/{ticket_id}/unblock",

@@ -284,6 +284,32 @@ def ticket_revise_cmd(ticket_id, add_findings, reset_cycles, repo_path, project_
             click.echo("  Cycle counters reset")
 
 
+@ticket.command("complete")
+@click.argument("ticket_id", required=False, default=None)
+@click.option("--rationale", default=None, help="Rationale for completion.")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def ticket_complete_cmd(ticket_id, rationale, repo_path, project_slug):
+    """Mark a pr-ready ticket as done."""
+    from capsaicin.app.commands.complete_ticket import complete
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        try:
+            result = complete(
+                conn=app.conn,
+                project_id=app.project_id,
+                ticket_id=ticket_id,
+                rationale=rationale,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Ticket {result.ticket_id} -> {result.final_status}")
+
+
 @ticket.command("defer")
 @click.argument("ticket_id", required=False, default=None)
 @click.option("--rationale", default=None, help="Rationale for deferral.")
