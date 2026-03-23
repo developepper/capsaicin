@@ -20,6 +20,53 @@
   {% endif %}
 </dl>
 
+{# --- Handoff Context (from planned ticket) --- #}
+{% if data.planned_ticket %}
+<details>
+  <summary><h2 style="display:inline">Handoff Context</h2></summary>
+  <section class="handoff-context">
+    <dl>
+      <dt>Goal</dt><dd>{{ data.planned_ticket.goal }}</dd>
+
+      <dt>Scope</dt>
+      <dd>
+        {% if data.planned_ticket.scope %}
+        <ul>{% for item in data.planned_ticket.scope %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}(none){% endif %}
+      </dd>
+
+      <dt>Non-goals</dt>
+      <dd>
+        {% if data.planned_ticket.non_goals %}
+        <ul>{% for item in data.planned_ticket.non_goals %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}(none){% endif %}
+      </dd>
+
+      <dt>Implementation Notes</dt>
+      <dd>
+        {% if data.planned_ticket.implementation_notes %}
+        <ul>{% for item in data.planned_ticket.implementation_notes %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}(none){% endif %}
+      </dd>
+
+      <dt>References</dt>
+      <dd>
+        {% if data.planned_ticket.references_ %}
+        <ul>{% for item in data.planned_ticket.references_ %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}(none){% endif %}
+      </dd>
+
+      <dt>Acceptance Criteria</dt>
+      <dd>
+        {% if data.planned_ticket.acceptance_criteria %}
+        <ul>{% for item in data.planned_ticket.acceptance_criteria %}<li>{{ item }}</li>{% endfor %}</ul>
+        {% else %}(none){% endif %}
+      </dd>
+    </dl>
+  </section>
+</details>
+{% endif %}
+
 {# --- Human-gate action forms --- #}
 {% if data.ticket.status == "human-gate" %}
 <section class="action-panel">

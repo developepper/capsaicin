@@ -38,6 +38,7 @@ class TicketDetailData:
     transition_history: list[dict] | None = None
     diagnostic: str | None = None
     diff_summary: DiffSummary | None = None
+    planned_ticket: dict | None = None
 
 
 def _parse_adapter_metadata(raw: str | None) -> dict:
@@ -101,6 +102,37 @@ def _get_diff_summary(conn: sqlite3.Connection, ticket_id: str) -> DiffSummary |
     )
 
 
+def _load_planned_ticket(
+    conn: sqlite3.Connection, planned_ticket_id: str
+) -> dict | None:
+    """Load planned ticket with its criteria for handoff context display."""
+    row = conn.execute(
+        "SELECT id, title, goal, scope, non_goals, implementation_notes, "
+        "references_ "
+        "FROM planned_tickets WHERE id = ?",
+        (planned_ticket_id,),
+    ).fetchone()
+    if row is None:
+        return None
+
+    pt = dict(row)
+    # Parse JSON list fields into Python lists.
+    for key in ("scope", "non_goals", "implementation_notes", "references_"):
+        try:
+            pt[key] = json.loads(pt[key]) if pt[key] else []
+        except (json.JSONDecodeError, TypeError):
+            pt[key] = []
+
+    criteria_rows = conn.execute(
+        "SELECT description FROM planned_ticket_criteria "
+        "WHERE planned_ticket_id = ? ORDER BY id",
+        (planned_ticket_id,),
+    ).fetchall()
+    pt["acceptance_criteria"] = [r["description"] for r in criteria_rows]
+
+    return pt
+
+
 def get_ticket_detail(
     conn: sqlite3.Connection,
     ticket_id: str,
@@ -156,5 +188,10 @@ def get_ticket_detail(
     if verbose:
         data.run_history = get_run_history(conn, ticket_id)
         data.transition_history = get_transition_history(conn, ticket_id)
+
+    # Load planned ticket handoff context if linked.
+    planned_id = ticket.get("planned_ticket_id")
+    if planned_id:
+        data.planned_ticket = _load_planned_ticket(conn, planned_id)
 
     return data
