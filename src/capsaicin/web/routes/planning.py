@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.planning_detail import get_planning_detail
 from capsaicin.app.queries.planning_summary import get_planning_summary
@@ -36,7 +36,12 @@ async def epic_detail(request: Request) -> HTMLResponse:
     try:
         data = get_planning_detail(conn, epic_id, verbose=True)
     except (ValueError, LookupError, PlannedEpicNotFoundError):
-        return PlainTextResponse(f"Epic '{epic_id}' not found.", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "404.html",
+            {"message": f"Epic '{epic_id}' not found."},
+            status_code=404,
+        )
 
     error = request.query_params.get("error")
     gate_display = get_epic_gate_display(data.epic.get("gate_reason"))

@@ -1,0 +1,9 @@
+{% extends "base.html" %}
+{% block title %}Not found — capsaicin{% endblock %}
+{% block content %}
+<div class="page-message">
+  <h1>Not found</h1>
+  <p>{{ message }}</p>
+  <a href="{{ request.url_for('dashboard') }}" class="btn btn-action">Back to dashboard</a>
+</div>
+{% endblock %}

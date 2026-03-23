@@ -7,7 +7,7 @@ its template needs, so partial refreshes don't pay for a full query.
 from __future__ import annotations
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.dashboard import (
     DashboardData,
@@ -139,7 +139,12 @@ async def partial_ticket_content(request: Request) -> HTMLResponse:
     try:
         data = get_ticket_detail(conn, ticket_id, verbose=True)
     except ValueError:
-        return PlainTextResponse(f"Ticket '{ticket_id}' not found.", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "404.html",
+            {"message": f"Ticket '{ticket_id}' not found."},
+            status_code=404,
+        )
 
     gate_display = get_ticket_gate_display(data.ticket.get("gate_reason"))
 
