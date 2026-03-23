@@ -25,6 +25,7 @@ from starlette.staticfiles import StaticFiles
 
 from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.actions import (
+    action_add_dependency,
     action_approve,
     action_complete,
     action_create_ticket,
@@ -98,6 +99,12 @@ def create_app(
             name="action_create_ticket",
         ),
         Route("/tickets/{ticket_id}", ticket_detail, name="ticket_detail"),
+        Route(
+            "/tickets/{ticket_id}/dep",
+            action_add_dependency,
+            methods=["POST"],
+            name="action_add_dependency",
+        ),
         # Ticket action routes — POST only
         Route(
             "/tickets/{ticket_id}/approve",

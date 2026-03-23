@@ -76,6 +76,34 @@ async def action_create_ticket(request: Request) -> RedirectResponse:
 
 
 # ---------------------------------------------------------------------------
+# Ticket dependencies
+# ---------------------------------------------------------------------------
+
+
+async def action_add_dependency(request: Request) -> RedirectResponse:
+    """POST /tickets/{ticket_id}/dep — add a dependency on another ticket."""
+    conn = request.state.conn
+    ticket_id = request.path_params["ticket_id"]
+
+    form = await request.form()
+    depends_on_id = form.get("depends_on_id", "").strip()
+
+    if not depends_on_id:
+        return _error_redirect(request, ticket_id, "Dependency ticket ID is required.")
+
+    from capsaicin.ticket_dep import add_dependency
+
+    try:
+        add_dependency(conn, ticket_id, depends_on_id)
+    except ValueError as exc:
+        return _error_redirect(request, ticket_id, str(exc))
+
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
+
+
+# ---------------------------------------------------------------------------
 # Human-gate actions
 # ---------------------------------------------------------------------------
 

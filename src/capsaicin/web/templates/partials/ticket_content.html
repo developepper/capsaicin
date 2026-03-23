@@ -161,6 +161,36 @@
   {% endif %}
 </section>
 
+{# --- Dependencies --- #}
+<section>
+  <h2>Dependencies</h2>
+  {% if data.dependencies %}
+  <table>
+    <thead><tr><th>Ticket ID</th><th>Title</th><th>Status</th></tr></thead>
+    <tbody>
+      {% for dep in data.dependencies %}
+      <tr>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=dep.depends_on_id) }}">{{ dep.depends_on_id }}</a></td>
+        <td>{{ dep.title }}</td>
+        <td><span class="status-badge status-{{ dep.status }}">{{ dep.status }}</span></td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">(none)</p>
+  {% endif %}
+
+  <details class="action-detail">
+    <summary>Add dependency</summary>
+    <form method="post" action="{{ request.url_for('action_add_dependency', ticket_id=data.ticket.id) }}" class="action-form">
+      <label for="depends-on-id">Depends on ticket ID</label>
+      <input type="text" id="depends-on-id" name="depends_on_id" required placeholder="e.g. 01JEXAMPLE...">
+      <button type="submit" class="btn btn-action">Add Dependency</button>
+    </form>
+  </details>
+</section>
+
 {# --- Open findings --- #}
 <section>
   <h2>Open Findings</h2>
