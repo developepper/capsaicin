@@ -17,11 +17,12 @@ async def planning_dashboard(request: Request) -> HTMLResponse:
     project_id = request.app.state.project_id
 
     data = get_planning_summary(conn, project_id)
+    error = request.query_params.get("error")
 
     return templates.TemplateResponse(
         request,
         "planning_dashboard.html",
-        {"data": data},
+        {"data": data, "error": error},
     )
 
 

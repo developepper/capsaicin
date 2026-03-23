@@ -14,7 +14,6 @@ from __future__ import annotations
 import logging
 import threading
 from pathlib import Path
-from urllib.parse import quote
 
 from starlette.requests import Request
 from starlette.responses import RedirectResponse
@@ -25,6 +24,45 @@ from capsaicin.errors import CapsaicinError
 from capsaicin.state_machine import IllegalPlanningTransitionError
 
 _log = logging.getLogger(__name__)
+
+
+# ---------------------------------------------------------------------------
+# Epic creation
+# ---------------------------------------------------------------------------
+
+
+async def action_create_epic(request: Request) -> RedirectResponse:
+    """POST /epics/new — create a new planned epic from a problem statement."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+    log_path = request.app.state.log_path
+
+    form = await request.form()
+    problem_statement = form.get("problem_statement", "").strip()
+
+    if not problem_statement:
+        url = request.url_for("planning_dashboard").include_query_params(
+            error="Problem statement is required"
+        )
+        return RedirectResponse(str(url), status_code=303)
+
+    from capsaicin.app.commands.new_epic import new_epic
+
+    try:
+        result = new_epic(
+            conn=conn,
+            project_id=project_id,
+            problem_statement=problem_statement,
+            log_path=log_path,
+        )
+    except (ValueError, CapsaicinError) as exc:
+        url = request.url_for("planning_dashboard").include_query_params(error=str(exc))
+        return RedirectResponse(str(url), status_code=303)
+
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=result.epic_id)),
+        status_code=303,
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -62,9 +100,11 @@ async def action_approve_epic(request: Request) -> RedirectResponse:
             force=force,
         )
     except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(epic_id, str(exc))
+        return _error_redirect(request, epic_id, str(exc))
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_revise_epic(request: Request) -> RedirectResponse:
@@ -89,9 +129,11 @@ async def action_revise_epic(request: Request) -> RedirectResponse:
             log_path=log_path,
         )
     except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(epic_id, str(exc))
+        return _error_redirect(request, epic_id, str(exc))
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_defer_epic(request: Request) -> RedirectResponse:
@@ -115,9 +157,11 @@ async def action_defer_epic(request: Request) -> RedirectResponse:
             log_path=log_path,
         )
     except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(epic_id, str(exc))
+        return _error_redirect(request, epic_id, str(exc))
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_unblock_epic(request: Request) -> RedirectResponse:
@@ -137,9 +181,11 @@ async def action_unblock_epic(request: Request) -> RedirectResponse:
             log_path=log_path,
         )
     except (ValueError, CapsaicinError, IllegalPlanningTransitionError) as exc:
-        return _error_redirect(epic_id, str(exc))
+        return _error_redirect(request, epic_id, str(exc))
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -156,7 +202,9 @@ async def action_draft_epic(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_draft, db_path, project_id, epic_id, log_path)
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_review_epic(request: Request) -> RedirectResponse:
@@ -168,7 +216,9 @@ async def action_review_epic(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_review_epic, db_path, project_id, epic_id, log_path)
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_plan_loop(request: Request) -> RedirectResponse:
@@ -183,7 +233,9 @@ async def action_plan_loop(request: Request) -> RedirectResponse:
         _bg_plan_loop, db_path, project_id, config_path, epic_id, log_path
     )
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 async def action_materialize_epic(request: Request) -> RedirectResponse:
@@ -215,9 +267,11 @@ async def action_materialize_epic(request: Request) -> RedirectResponse:
             log_path=log_path,
         )
     except (ValueError, CapsaicinError) as exc:
-        return _error_redirect(epic_id, str(exc))
+        return _error_redirect(request, epic_id, str(exc))
 
-    return RedirectResponse(f"/epics/{epic_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -225,9 +279,12 @@ async def action_materialize_epic(request: Request) -> RedirectResponse:
 # ---------------------------------------------------------------------------
 
 
-def _error_redirect(epic_id: str, message: str) -> RedirectResponse:
+def _error_redirect(request: Request, epic_id: str, message: str) -> RedirectResponse:
     """Redirect back to the epic with an error query parameter."""
-    return RedirectResponse(f"/epics/{epic_id}?error={quote(message)}", status_code=303)
+    url = request.url_for("epic_detail", epic_id=epic_id).include_query_params(
+        error=message
+    )
+    return RedirectResponse(str(url), status_code=303)
 
 
 def _run_in_background(fn, *args) -> None:

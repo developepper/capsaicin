@@ -686,7 +686,8 @@ class TestResumeUI:
 
         resp = client.post("/actions/resume", follow_redirects=False)
         assert resp.status_code == 303
-        assert resp.headers["location"] in ("/", "/tickets/")
+        location = resp.headers["location"]
+        assert location.endswith("/") or "/tickets/" in location
 
     def test_resume_action_redirects_to_ticket(self, web_client):
         """Resume with awaiting_human redirects to the active ticket."""
@@ -699,7 +700,7 @@ class TestResumeUI:
         assert resp.status_code == 303
         location = resp.headers["location"]
         # Should redirect to the ticket or dashboard
-        assert f"/tickets/{tid}" in location or location == "/"
+        assert f"/tickets/{tid}" in location or location.endswith("/")
 
     def test_orchestrator_partial_shows_resume(self, web_client):
         """The orchestrator partial endpoint also renders the resume button."""

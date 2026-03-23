@@ -524,6 +524,9 @@ def build_planner_draft_prompt(
             "```json",
             json.dumps(PLANNER_RESULT_SCHEMA, indent=2),
             "```",
+            "",
+            "Return JSON only. Do not include prose before or after the JSON. "
+            "Do not wrap the response in markdown fences.",
         ]
     )
 
@@ -613,6 +616,9 @@ def build_planner_revise_prompt(
             "```json",
             json.dumps(PLANNER_RESULT_SCHEMA, indent=2),
             "```",
+            "",
+            "Return JSON only. Do not include prose before or after the JSON. "
+            "Do not wrap the response in markdown fences.",
         ]
     )
 
@@ -680,6 +686,9 @@ def build_planning_reviewer_prompt(
             "```json",
             json.dumps(PLANNING_REVIEW_RESULT_SCHEMA, indent=2),
             "```",
+            "",
+            "Return JSON only. Do not include prose before or after the JSON. "
+            "Do not wrap the response in markdown fences.",
             "",
             "Rules:",
             "- `verdict: fail` must include at least one finding with "

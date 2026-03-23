@@ -1,21 +1,21 @@
 {% if data.orchestrator %}
 <section id="orchestrator" class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}"
-         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+         hx-get="{{ request.url_for('partial_orchestrator') }}" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
   {% if data.orchestrator.status == "running" %}<span class="spinner spinner-sm"></span>{% endif %}
   <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
   {% if data.orchestrator.active_ticket_id and data.active_ticket %}
-    — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
+    — working on <a href="{{ request.url_for('ticket_detail', ticket_id=data.active_ticket.id) }}">{{ data.active_ticket.title }}</a>
     ({{ data.active_ticket.status }})
   {% endif %}
   {% if data.orchestrator.status in ("running", "awaiting_human", "suspended") %}
-  <form method="post" action="/actions/resume" class="orchestrator-resume">
+  <form method="post" action="{{ request.url_for('action_resume') }}" class="orchestrator-resume">
     <button type="submit" class="btn btn-action btn-sm">Resume</button>
   </form>
   {% endif %}
 </section>
 {% else %}
 <section id="orchestrator" class="orchestrator-bar orchestrator-idle"
-         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+         hx-get="{{ request.url_for('partial_orchestrator') }}" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
   <strong>Orchestrator:</strong> idle
 </section>
 {% endif %}

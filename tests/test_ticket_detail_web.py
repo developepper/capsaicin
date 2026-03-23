@@ -302,7 +302,6 @@ class TestTicketDetailRoute:
 
         resp = client.get(f"/tickets/{tid}")
         assert resp.status_code == 200
-        assert 'href="/"' in resp.text
         assert "Back to dashboard" in resp.text
 
 

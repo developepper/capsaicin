@@ -1,4 +1,4 @@
-<section id="blocked" hx-get="/partials/blocked" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
+<section id="blocked" hx-get="{{ request.url_for('partial_blocked') }}" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
   {% if data.blocked_tickets %}
   <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
   <table>
@@ -6,7 +6,7 @@
     <tbody>
       {% for t in data.blocked_tickets %}
       <tr>
-        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.blocked_reason or "unknown" }}</td>
       </tr>
       {% endfor %}

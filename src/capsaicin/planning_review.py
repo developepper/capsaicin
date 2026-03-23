@@ -324,6 +324,7 @@ def _planning_review_invoke_once(
     from capsaicin.planning_run import _build_plan_draft_dict
 
     plan_draft = _build_plan_draft_dict(conn, epic)
+    valid_sequences = [ticket["sequence"] for ticket in plan_draft.get("tickets", [])]
 
     # Convert prior findings to PlanningFinding objects for the prompt
     from capsaicin.adapters.types import PlanningFinding as PF
@@ -360,6 +361,8 @@ def _planning_review_invoke_once(
             "backend": config.reviewer.backend,
             "command": config.reviewer.command,
             "allowed_tools": config.reviewer.allowed_tools,
+            "structured_output": "planning_review",
+            "valid_sequences": valid_sequences,
         },
     )
 

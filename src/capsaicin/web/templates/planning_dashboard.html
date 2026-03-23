@@ -3,8 +3,22 @@
 {% block content %}
 <h1>Planning Dashboard</h1>
 
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+{# --- Create new epic --- #}
+<section id="create-epic">
+  <h2>Create New Epic</h2>
+  <form action="{{ request.url_for('action_create_epic') }}" method="post">
+    <label for="problem_statement">Problem Statement</label>
+    <textarea id="problem_statement" name="problem_statement" rows="3" placeholder="Describe the problem to solve..." required></textarea>
+    <button type="submit">Create Epic</button>
+  </form>
+</section>
+
 {# --- Human-gate epics needing decisions --- #}
-<section id="planning-gate" hx-get="/partials/planning/gate" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
+<section id="planning-gate" hx-get="{{ request.url_for('partial_planning_gate') }}" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
   <h2>Planning Inbox{% if data.human_gate_epics %} ({{ data.human_gate_epics|length }}){% endif %}</h2>
   {% if data.human_gate_epics %}
   <table>
@@ -12,7 +26,7 @@
     <tbody>
       {% for e in data.human_gate_epics %}
       <tr>
-        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
         <td>{{ e.gate_reason or "unknown" }}</td>
         <td>{{ e.status_changed_at or "" }}</td>
       </tr>
@@ -25,7 +39,7 @@
 </section>
 
 {# --- Active epics (new, drafting, in-review, revise) --- #}
-<section id="planning-active" hx-get="/partials/planning/active" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
+<section id="planning-active" hx-get="{{ request.url_for('partial_planning_active') }}" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
   <h2>Active Epics{% if data.active_epics %} ({{ data.active_epics|length }}){% endif %}</h2>
   {% if data.active_epics %}
   <table>
@@ -33,7 +47,7 @@
     <tbody>
       {% for e in data.active_epics %}
       <tr>
-        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
         <td><span class="status-badge planning-status-{{ e.status }}">{{ e.status }}</span></td>
         <td>{{ e.status_changed_at or "" }}</td>
       </tr>
@@ -46,7 +60,7 @@
 </section>
 
 {# --- Blocked epics --- #}
-<section id="planning-blocked" hx-get="/partials/planning/blocked" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
+<section id="planning-blocked" hx-get="{{ request.url_for('partial_planning_blocked') }}" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
   {% if data.blocked_epics %}
   <h2>Blocked ({{ data.blocked_epics|length }})</h2>
   <table>
@@ -54,7 +68,7 @@
     <tbody>
       {% for e in data.blocked_epics %}
       <tr>
-        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
         <td>{{ e.blocked_reason or "unknown" }}</td>
       </tr>
       {% endfor %}
@@ -67,7 +81,7 @@
 </section>
 
 {# --- Queue overview --- #}
-<section id="planning-queue" hx-get="/partials/planning/queue" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
+<section id="planning-queue" hx-get="{{ request.url_for('partial_planning_queue') }}" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
   <h2>Planning Queue ({{ data.total_epics }} epic{{ "s" if data.total_epics != 1 else "" }})</h2>
   {% if data.counts_by_status %}
   <table>
@@ -85,12 +99,12 @@
   {% endif %}
 </section>
 
-<p class="back-link"><a href="/">Back to implementation dashboard</a></p>
+<p class="back-link"><a href="{{ request.url_for('dashboard') }}">Back to implementation dashboard</a></p>
 
 <script>
 (function() {
   if (typeof EventSource === 'undefined') return;
-  var src = new EventSource('/events/planning');
+  var src = new EventSource('{{ request.url_for("planning_events") }}');
   var events = ['planning-gate', 'planning-active', 'planning-blocked', 'planning-queue'];
   events.forEach(function(name) {
     src.addEventListener(name, function() {

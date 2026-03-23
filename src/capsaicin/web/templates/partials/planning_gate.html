@@ -1,4 +1,4 @@
-<section id="planning-gate" hx-get="/partials/planning/gate" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
+<section id="planning-gate" hx-get="{{ request.url_for('partial_planning_gate') }}" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
   <h2>Planning Inbox{% if data.human_gate_epics %} ({{ data.human_gate_epics|length }}){% endif %}</h2>
   {% if data.human_gate_epics %}
   <table>
@@ -6,7 +6,7 @@
     <tbody>
       {% for e in data.human_gate_epics %}
       <tr>
-        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
         <td>{{ e.gate_reason or "unknown" }}</td>
         <td>{{ e.status_changed_at or "" }}</td>
       </tr>

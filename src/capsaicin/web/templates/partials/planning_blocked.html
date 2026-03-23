@@ -1,4 +1,4 @@
-<section id="planning-blocked" hx-get="/partials/planning/blocked" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
+<section id="planning-blocked" hx-get="{{ request.url_for('partial_planning_blocked') }}" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
   {% if data.blocked_epics %}
   <h2>Blocked ({{ data.blocked_epics|length }})</h2>
   <table>
@@ -6,7 +6,7 @@
     <tbody>
       {% for e in data.blocked_epics %}
       <tr>
-        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
         <td>{{ e.blocked_reason or "unknown" }}</td>
       </tr>
       {% endfor %}

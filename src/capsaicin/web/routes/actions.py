@@ -67,7 +67,9 @@ async def action_approve(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_revise(request: Request) -> RedirectResponse | HTMLResponse:
@@ -96,7 +98,9 @@ async def action_revise(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_defer(request: Request) -> RedirectResponse | HTMLResponse:
@@ -124,7 +128,9 @@ async def action_defer(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_complete(request: Request) -> RedirectResponse | HTMLResponse:
@@ -150,7 +156,9 @@ async def action_complete(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
@@ -176,7 +184,9 @@ async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +204,9 @@ async def action_run(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_run, db_path, project_id, config, ticket_id, log_path)
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_review(request: Request) -> RedirectResponse:
@@ -212,7 +224,9 @@ async def action_review(request: Request) -> RedirectResponse:
         _bg_review, db_path, project_id, config, ticket_id, allow_drift, log_path
     )
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_loop(request: Request) -> RedirectResponse:
@@ -225,7 +239,9 @@ async def action_loop(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_loop, db_path, project_id, config, ticket_id, log_path)
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_resume(request: Request) -> RedirectResponse:
@@ -237,7 +253,7 @@ async def action_resume(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_resume, db_path, project_id, config, log_path)
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(str(request.url_for("dashboard")), status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -271,11 +287,10 @@ async def action_shutdown(request: Request) -> HTMLResponse:
 
 def _error_redirect(request: Request, ticket_id: str, message: str) -> RedirectResponse:
     """Redirect back to the ticket with an error query parameter."""
-    from urllib.parse import quote
-
-    return RedirectResponse(
-        f"/tickets/{ticket_id}?error={quote(message)}", status_code=303
+    url = request.url_for("ticket_detail", ticket_id=ticket_id).include_query_params(
+        error=message
     )
+    return RedirectResponse(str(url), status_code=303)
 
 
 # ---------------------------------------------------------------------------

@@ -2,33 +2,33 @@
 {% block title %}Dashboard — capsaicin{% endblock %}
 {% block content %}
 <h1>Project Dashboard</h1>
-<p><a href="/planning">Planning Dashboard</a></p>
+<p><a href="{{ request.url_for('planning_dashboard') }}">Planning Dashboard</a></p>
 
 {# --- Orchestrator state --- #}
 {% if data.orchestrator %}
 <section id="orchestrator" class="orchestrator-bar orchestrator-{{ data.orchestrator.status }}"
-         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+         hx-get="{{ request.url_for('partial_orchestrator') }}" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
   {% if data.orchestrator.status == "running" %}<span class="spinner spinner-sm"></span>{% endif %}
   <strong>Orchestrator:</strong> {{ data.orchestrator.status }}
   {% if data.orchestrator.active_ticket_id and data.active_ticket %}
-    — working on <a href="/tickets/{{ data.active_ticket.id }}">{{ data.active_ticket.title }}</a>
+    — working on <a href="{{ request.url_for('ticket_detail', ticket_id=data.active_ticket.id) }}">{{ data.active_ticket.title }}</a>
     ({{ data.active_ticket.status }})
   {% endif %}
   {% if data.orchestrator.status in ("running", "awaiting_human", "suspended") %}
-  <form method="post" action="/actions/resume" class="orchestrator-resume">
+  <form method="post" action="{{ request.url_for('action_resume') }}" class="orchestrator-resume">
     <button type="submit" class="btn btn-action btn-sm">Resume</button>
   </form>
   {% endif %}
 </section>
 {% else %}
 <section id="orchestrator" class="orchestrator-bar orchestrator-idle"
-         hx-get="/partials/orchestrator" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
+         hx-get="{{ request.url_for('partial_orchestrator') }}" hx-trigger="every 30s, sse-orchestrator from:body" hx-swap="outerHTML">
   <strong>Orchestrator:</strong> idle
 </section>
 {% endif %}
 
 {# --- Inbox: human-gate tickets needing decisions --- #}
-<section id="inbox" hx-get="/partials/inbox" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
+<section id="inbox" hx-get="{{ request.url_for('partial_inbox') }}" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
   <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
   {% if data.inbox and data.inbox.tickets %}
   <table>
@@ -36,7 +36,7 @@
     <tbody>
       {% for t in data.inbox.tickets %}
       <tr>
-        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.gate_reason or "unknown" }}</td>
         <td>{{ t.status_changed_at or "" }}</td>
       </tr>
@@ -49,7 +49,7 @@
 </section>
 
 {# --- Blocked tickets --- #}
-<section id="blocked" hx-get="/partials/blocked" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
+<section id="blocked" hx-get="{{ request.url_for('partial_blocked') }}" hx-trigger="every 30s, sse-blocked from:body" hx-swap="outerHTML">
   {% if data.blocked_tickets %}
   <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
   <table>
@@ -57,7 +57,7 @@
     <tbody>
       {% for t in data.blocked_tickets %}
       <tr>
-        <td><a href="/tickets/{{ t.id }}">{{ t.title }}</a></td>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.blocked_reason or "unknown" }}</td>
       </tr>
       {% endfor %}
@@ -70,17 +70,17 @@
 </section>
 
 {# --- Next runnable ticket --- #}
-<section id="next-runnable" hx-get="/partials/next-runnable" hx-trigger="every 30s, sse-next_runnable from:body" hx-swap="outerHTML">
+<section id="next-runnable" hx-get="{{ request.url_for('partial_next_runnable') }}" hx-trigger="every 30s, sse-next_runnable from:body" hx-swap="outerHTML">
   <h2>Next Runnable</h2>
   {% if data.next_runnable %}
-  <p><a href="/tickets/{{ data.next_runnable.id }}">{{ data.next_runnable.title }}</a></p>
+  <p><a href="{{ request.url_for('ticket_detail', ticket_id=data.next_runnable.id) }}">{{ data.next_runnable.title }}</a></p>
   {% else %}
   <p class="empty">No runnable tickets.</p>
   {% endif %}
 </section>
 
 {# --- Queue overview --- #}
-<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
+<section id="queue" hx-get="{{ request.url_for('partial_queue') }}" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
   <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
   {% if data.counts_by_status %}
   <table>
@@ -99,7 +99,7 @@
 </section>
 
 {# --- Recent activity --- #}
-<section id="recent-activity" hx-get="/partials/activity" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
+<section id="recent-activity" hx-get="{{ request.url_for('partial_activity') }}" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
   <h2>Recent Activity</h2>
   {% if data.recent_runs %}
   <table>
@@ -108,7 +108,7 @@
       {% for r in data.recent_runs %}
       <tr>
         <td>{{ r.started_at }}</td>
-        <td><a href="/tickets/{{ r.ticket_id }}">{{ r.ticket_title }}</a></td>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=r.ticket_id) }}">{{ r.ticket_title }}</a></td>
         <td>{{ r.role }}</td>
         <td>{{ r.exit_status }}{% if r.verdict %} / {{ r.verdict }}{% endif %}</td>
         <td>{{ "%.1f"|format(r.duration_seconds) if r.duration_seconds is not none else "—" }}s</td>
@@ -124,7 +124,7 @@
 <script>
 (function() {
   if (typeof EventSource === 'undefined') return;
-  var src = new EventSource('/events/dashboard');
+  var src = new EventSource('{{ request.url_for("dashboard_events") }}');
   var events = ['orchestrator', 'inbox', 'queue', 'blocked', 'next_runnable', 'activity'];
   events.forEach(function(name) {
     src.addEventListener(name, function() {

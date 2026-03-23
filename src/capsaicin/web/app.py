@@ -55,6 +55,7 @@ from capsaicin.web.routes.partials import (
 from capsaicin.web.routes.planning import epic_detail, planning_dashboard
 from capsaicin.web.routes.planning_actions import (
     action_approve_epic,
+    action_create_epic,
     action_defer_epic,
     action_draft_epic,
     action_materialize_epic,
@@ -171,6 +172,12 @@ def create_app(
         ),
         # Planning views
         Route("/planning", planning_dashboard, name="planning_dashboard"),
+        Route(
+            "/epics/new",
+            action_create_epic,
+            methods=["POST"],
+            name="action_create_epic",
+        ),
         Route("/epics/{epic_id}", epic_detail, name="epic_detail"),
         # Planning action routes — POST only
         Route(

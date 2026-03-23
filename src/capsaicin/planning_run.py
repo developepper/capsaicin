@@ -500,6 +500,7 @@ def _draft_invoke_once(
         adapter_config={
             "backend": config.implementer.backend,
             "command": config.implementer.command,
+            "structured_output": "planner",
         },
     )
 

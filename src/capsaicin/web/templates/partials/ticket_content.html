@@ -1,5 +1,5 @@
 <div id="ticket-content"
-     hx-get="/partials/tickets/{{ data.ticket.id }}"
+     hx-get="{{ request.url_for('partial_ticket_content', ticket_id=data.ticket.id) }}"
      hx-trigger="sse-ticket from:body"
      hx-swap="outerHTML">
 
@@ -46,7 +46,7 @@
 
   <div class="action-forms">
     {# --- Approve form --- #}
-    <form method="post" action="/tickets/{{ data.ticket.id }}/approve" class="action-form action-approve">
+    <form method="post" action="{{ request.url_for('action_approve', ticket_id=data.ticket.id) }}" class="action-form action-approve">
       <h3>Approve</h3>
       <p class="action-description">Move ticket to PR-ready.</p>
       <label for="approve-rationale">Rationale{% if rationale_required %} <strong>(required)</strong>{% endif %}</label>
@@ -58,7 +58,7 @@
     </form>
 
     {# --- Revise form --- #}
-    <form method="post" action="/tickets/{{ data.ticket.id }}/revise" class="action-form action-revise">
+    <form method="post" action="{{ request.url_for('action_revise', ticket_id=data.ticket.id) }}" class="action-form action-revise">
       <h3>Revise</h3>
       <p class="action-description">Send back for another implementation pass.</p>
       <label for="revise-finding">Finding (optional)</label>
@@ -72,7 +72,7 @@
     {# --- Defer form --- #}
     <details class="action-detail">
       <summary>Defer or abandon</summary>
-      <form method="post" action="/tickets/{{ data.ticket.id }}/defer" class="action-form action-defer">
+      <form method="post" action="{{ request.url_for('action_defer', ticket_id=data.ticket.id) }}" class="action-form action-defer">
         <h3>Defer</h3>
         <p class="action-description">Move ticket to blocked. Optionally abandon it entirely.</p>
         <label for="defer-rationale">Rationale</label>
@@ -92,7 +92,7 @@
 <section class="action-panel">
   <h2>Implementation Complete</h2>
   <p class="gate-context">This ticket is approved and ready. Mark it as done to unblock dependent tickets.</p>
-  <form method="post" action="/tickets/{{ data.ticket.id }}/complete" class="action-form action-approve">
+  <form method="post" action="{{ request.url_for('action_complete', ticket_id=data.ticket.id) }}" class="action-form action-approve">
     <label for="complete-rationale">Rationale (optional)</label>
     <textarea id="complete-rationale" name="rationale" rows="2" placeholder="e.g. PR merged, committed locally, etc."></textarea>
     <button type="submit" class="btn btn-approve">Mark Done</button>
@@ -105,7 +105,7 @@
 <section class="action-panel">
   <h2>Ticket Blocked</h2>
   <p class="gate-context">This ticket is blocked{% if data.ticket.blocked_reason %}: {{ data.ticket.blocked_reason }}{% endif %}.</p>
-  <form method="post" action="/tickets/{{ data.ticket.id }}/unblock" class="action-form">
+  <form method="post" action="{{ request.url_for('action_unblock', ticket_id=data.ticket.id) }}" class="action-form">
     <div class="action-options">
       <label><input type="checkbox" name="reset_cycles"> Reset cycle counters</label>
     </div>
@@ -119,10 +119,10 @@
 <section class="action-panel">
   <h2>Actions</h2>
   <div class="action-forms action-forms-inline">
-    <form method="post" action="/tickets/{{ data.ticket.id }}/run" class="action-form">
+    <form method="post" action="{{ request.url_for('action_run', ticket_id=data.ticket.id) }}" class="action-form">
       <button type="submit" class="btn btn-action">Run Implementation <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
-    <form method="post" action="/tickets/{{ data.ticket.id }}/loop" class="action-form">
+    <form method="post" action="{{ request.url_for('action_loop', ticket_id=data.ticket.id) }}" class="action-form">
       <button type="submit" class="btn btn-action">Run Loop <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
   </div>
@@ -132,7 +132,7 @@
 {% if data.ticket.status == "in-review" %}
 <section class="action-panel">
   <h2>Actions</h2>
-  <form method="post" action="/tickets/{{ data.ticket.id }}/review" class="action-form">
+  <form method="post" action="{{ request.url_for('action_review', ticket_id=data.ticket.id) }}" class="action-form">
     <div class="action-options">
       <label><input type="checkbox" name="allow_drift"> Allow workspace drift</label>
     </div>

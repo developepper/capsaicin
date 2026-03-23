@@ -7,13 +7,28 @@ Detects permission denials and classifies them as a distinct run outcome.
 from __future__ import annotations
 
 import json
+import re
 import subprocess
 import time
 
 from capsaicin.adapters.base import BaseAdapter
-from capsaicin.adapters.types import RunRequest, RunResult
-from capsaicin.prompts import REVIEW_RESULT_SCHEMA
-from capsaicin.validation import validate_review_result
+from capsaicin.adapters.types import (
+    PlannerResult,
+    PlanningReviewResult,
+    ReviewResult,
+    RunRequest,
+    RunResult,
+)
+from capsaicin.prompts import (
+    PLANNER_RESULT_SCHEMA,
+    PLANNING_REVIEW_RESULT_SCHEMA,
+    REVIEW_RESULT_SCHEMA,
+)
+from capsaicin.validation import (
+    validate_planner_result,
+    validate_planning_review_result,
+    validate_review_result,
+)
 
 # Envelope fields to extract into adapter_metadata.
 _METADATA_KEYS = (
@@ -41,14 +56,17 @@ class ClaudeCodeAdapter(BaseAdapter):
             "json",
         ]
 
-        # Reviewer mode: add --json-schema and --allowed-tools
-        if request.role == "reviewer":
+        schema = self._structured_output_schema(request)
+        if schema is not None:
             cmd.extend(
                 [
                     "--json-schema",
-                    json.dumps(REVIEW_RESULT_SCHEMA, separators=(",", ":")),
+                    json.dumps(schema, separators=(",", ":")),
                 ]
             )
+
+        # Reviewer mode: add --allowed-tools
+        if request.role == "reviewer":
             allowed_tools = request.adapter_config.get("allowed_tools", [])
             if allowed_tools:
                 cmd.append("--allowed-tools")
@@ -58,6 +76,27 @@ class ClaudeCodeAdapter(BaseAdapter):
         cmd.append("--")
         cmd.append(request.prompt)
         return cmd
+
+    @staticmethod
+    def _structured_output_kind(request: RunRequest) -> str | None:
+        """Return the structured output kind requested for this run."""
+        kind = request.adapter_config.get("structured_output")
+        if isinstance(kind, str):
+            return kind
+        if request.role == "reviewer":
+            return "review"
+        return None
+
+    def _structured_output_schema(self, request: RunRequest) -> dict | None:
+        """Return the JSON schema for the given run request, if any."""
+        kind = self._structured_output_kind(request)
+        if kind == "planner":
+            return PLANNER_RESULT_SCHEMA
+        if kind == "planning_review":
+            return PLANNING_REVIEW_RESULT_SCHEMA
+        if kind == "review":
+            return REVIEW_RESULT_SCHEMA
+        return None
 
     @staticmethod
     def _extract_metadata(envelope: dict) -> dict:
@@ -87,6 +126,45 @@ class ClaudeCodeAdapter(BaseAdapter):
         """Extract the normalized assistant text from the envelope."""
         result = envelope.get("result")
         return result if isinstance(result, str) else ""
+
+    @staticmethod
+    def _extract_json_from_text(text: str) -> dict | None:
+        """Best-effort JSON extraction from raw result text."""
+        if not text:
+            return None
+        try:
+            parsed = json.loads(text)
+            if isinstance(parsed, dict):
+                return parsed
+        except (json.JSONDecodeError, TypeError):
+            pass
+
+        fenced = re.search(r"```json\s*(\{.*?\})\s*```", text, re.DOTALL)
+        if fenced:
+            try:
+                parsed = json.loads(fenced.group(1))
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+
+        bare = re.search(r"(\{.*\})", text, re.DOTALL)
+        if bare:
+            candidate = bare.group(1)
+            try:
+                parsed = json.loads(candidate)
+                if isinstance(parsed, dict):
+                    return parsed
+            except (json.JSONDecodeError, TypeError):
+                pass
+        return None
+
+    def _extract_structured_output(self, envelope: dict) -> dict | None:
+        """Extract structured output from a Claude envelope."""
+        structured_raw = envelope.get("structured_output")
+        if isinstance(structured_raw, dict):
+            return structured_raw
+        return self._extract_json_from_text(self._extract_result_text(envelope))
 
     @staticmethod
     def _has_permission_denials(envelope: dict) -> bool:
@@ -128,7 +206,42 @@ class ClaudeCodeAdapter(BaseAdapter):
             normalized.append(entry)
         return normalized
 
-    def _handle_reviewer_result(
+    def _parse_review_result(
+        self,
+        request: RunRequest,
+        structured_raw: dict,
+    ) -> ReviewResult | None:
+        """Validate and materialize a code review result."""
+        criteria_ids = [c.id for c in request.acceptance_criteria]
+        validation = validate_review_result(structured_raw, criteria_ids)
+        if not validation.is_valid:
+            return None
+        result = validation.result
+        return result if isinstance(result, ReviewResult) else None
+
+    @staticmethod
+    def _parse_planner_result(structured_raw: dict) -> PlannerResult | None:
+        """Validate and materialize a planner result."""
+        validation = validate_planner_result(structured_raw)
+        if not validation.is_valid:
+            return None
+        result = validation.result
+        return result if isinstance(result, PlannerResult) else None
+
+    @staticmethod
+    def _parse_planning_review_result(
+        request: RunRequest,
+        structured_raw: dict,
+    ) -> PlanningReviewResult | None:
+        """Validate and materialize a planning review result."""
+        valid_sequences = request.adapter_config.get("valid_sequences", [])
+        validation = validate_planning_review_result(structured_raw, valid_sequences)
+        if not validation.is_valid:
+            return None
+        result = validation.result
+        return result if isinstance(result, PlanningReviewResult) else None
+
+    def _handle_structured_result(
         self,
         request: RunRequest,
         envelope: dict,
@@ -136,21 +249,10 @@ class ClaudeCodeAdapter(BaseAdapter):
         raw_stdout: str,
         raw_stderr: str,
     ) -> RunResult:
-        """Extract and validate structured reviewer output."""
+        """Extract and validate structured output for review/planning runs."""
         metadata = self._extract_metadata(envelope)
         result_text = self._extract_result_text(envelope)
-
-        # Extract structured_output (primary) or fall back to result
-        structured_raw = envelope.get("structured_output")
-        if structured_raw is None:
-            # Fall back: try parsing `result` as JSON
-            result_field = envelope.get("result")
-            if isinstance(result_field, str):
-                try:
-                    structured_raw = json.loads(result_field)
-                except (json.JSONDecodeError, TypeError):
-                    pass
-
+        structured_raw = self._extract_structured_output(envelope)
         if not isinstance(structured_raw, dict):
             return RunResult(
                 run_id=request.run_id,
@@ -162,11 +264,17 @@ class ClaudeCodeAdapter(BaseAdapter):
                 adapter_metadata=metadata,
             )
 
-        # Semantic validation via T17
-        criteria_ids = [c.id for c in request.acceptance_criteria]
-        validation = validate_review_result(structured_raw, criteria_ids)
+        kind = self._structured_output_kind(request)
+        if kind == "planner":
+            structured_result = self._parse_planner_result(structured_raw)
+        elif kind == "planning_review":
+            structured_result = self._parse_planning_review_result(
+                request, structured_raw
+            )
+        else:
+            structured_result = self._parse_review_result(request, structured_raw)
 
-        if not validation.is_valid:
+        if structured_result is None:
             return RunResult(
                 run_id=request.run_id,
                 exit_status="parse_error",
@@ -184,7 +292,7 @@ class ClaudeCodeAdapter(BaseAdapter):
             result_text=result_text,
             raw_stdout=raw_stdout,
             raw_stderr=raw_stderr,
-            structured_result=validation.result,
+            structured_result=structured_result,
             adapter_metadata=metadata,
         )
 
@@ -272,9 +380,9 @@ class ClaudeCodeAdapter(BaseAdapter):
                 adapter_metadata=self._extract_metadata(envelope),
             )
 
-        # Reviewer mode: extract and validate structured output
-        if request.role == "reviewer":
-            return self._handle_reviewer_result(
+        # Structured-output modes: extract and validate structured output
+        if self._structured_output_kind(request) is not None:
+            return self._handle_structured_result(
                 request,
                 envelope,
                 duration,
