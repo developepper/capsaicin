@@ -503,7 +503,22 @@ def resume_pipeline(
 
     # --- running: check active run ---
     if orch_status == "running":
+        loop_type = state.get("loop_type")
         run_id = state["active_run_id"]
+
+        # Planning loop resume
+        if loop_type == "planning":
+            epic_id = state.get("active_plan_id")
+            if run_id is None or epic_id is None:
+                from capsaicin.orchestrator import set_planning_idle
+
+                set_planning_idle(conn, project_id)
+                return ("reset", "Orphaned planning running state reset to idle.")
+            return _handle_interrupted_planning_run(
+                conn, project_id, run_id, epic_id, config, log_path
+            )
+
+        # Implementation loop resume
         ticket_id = state["active_ticket_id"]
 
         if run_id is None or ticket_id is None:
@@ -560,6 +575,22 @@ def resume_pipeline(
 
     # --- awaiting_human: render context ---
     if orch_status == "awaiting_human":
+        loop_type = state.get("loop_type")
+        if loop_type == "planning":
+            epic_id = state.get("active_plan_id")
+            if epic_id is None:
+                from capsaicin.orchestrator import set_planning_idle
+
+                set_planning_idle(conn, project_id)
+                return (
+                    "reset",
+                    "Awaiting human but no active plan. Reset to idle.",
+                )
+            from capsaicin.planning_loop import build_planning_human_gate_context
+
+            context = build_planning_human_gate_context(conn, epic_id)
+            return ("awaiting_human", context)
+
         ticket_id = state["active_ticket_id"]
         if ticket_id is None:
             set_idle(conn, project_id)
@@ -589,3 +620,108 @@ def resume_pipeline(
         )
 
     return ("unknown", f"Unknown orchestrator status: {orch_status}")
+
+
+def _handle_interrupted_planning_run(
+    conn: sqlite3.Connection,
+    project_id: str,
+    run_id: str,
+    epic_id: str,
+    config: Config,
+    log_path: str | Path | None = None,
+) -> tuple[str, str]:
+    """Handle an interrupted planning run (planner or planning reviewer).
+
+    Marks the run as failed, increments the appropriate retry counter,
+    and blocks if the retry limit is exceeded.
+    """
+    from capsaicin.orchestrator import (
+        check_draft_retry_limit,
+        check_planning_review_retry_limit,
+        finish_planning_run,
+        increment_draft_attempt,
+        increment_planning_review_attempt,
+        set_planning_idle,
+    )
+    from capsaicin.state_machine import transition_planned_epic
+
+    run = get_active_run(conn, run_id)
+    if run is None:
+        set_planning_idle(conn, project_id)
+        return ("reset", f"Active planning run '{run_id}' not found. Reset to idle.")
+
+    role = run["role"]
+
+    # Mark run as failed
+    _mark_run_failed(conn, run_id)
+    finish_planning_run(conn, project_id)
+
+    if log_path:
+        log_event(
+            log_path,
+            "RUN_INTERRUPTED",
+            project_id=project_id,
+            run_id=run_id,
+            payload={
+                "epic_id": epic_id,
+                "role": role,
+                "loop_type": "planning",
+                "action": "marked_failure",
+            },
+        )
+
+    if role == "planner":
+        increment_draft_attempt(conn, epic_id)
+        if check_draft_retry_limit(conn, epic_id, config.limits.max_impl_retries):
+            transition_planned_epic(
+                conn,
+                epic_id,
+                "blocked",
+                "system",
+                reason="Draft retry limit exceeded after interrupted run.",
+                blocked_reason="draft_failure",
+                log_path=log_path,
+            )
+            set_planning_idle(conn, project_id)
+            return (
+                "interrupted",
+                f"Interrupted planner run {run_id} marked as failure. "
+                f"Epic {epic_id} -> blocked",
+            )
+        set_planning_idle(conn, project_id)
+        return (
+            "interrupted",
+            f"Interrupted planner run {run_id} marked as failure. "
+            f"Epic {epic_id} retry available.",
+        )
+
+    if role == "reviewer":
+        increment_planning_review_attempt(conn, epic_id)
+        if check_planning_review_retry_limit(
+            conn, epic_id, config.limits.max_review_retries
+        ):
+            transition_planned_epic(
+                conn,
+                epic_id,
+                "blocked",
+                "system",
+                reason="Planning review retry limit exceeded after interrupted run.",
+                blocked_reason="reviewer_failure",
+                log_path=log_path,
+            )
+            set_planning_idle(conn, project_id)
+            return (
+                "interrupted",
+                f"Interrupted planning reviewer run {run_id} marked as failure. "
+                f"Epic {epic_id} -> blocked",
+            )
+        set_planning_idle(conn, project_id)
+        return (
+            "interrupted",
+            f"Interrupted planning reviewer run {run_id} marked as failure. "
+            f"Epic {epic_id} retry available.",
+        )
+
+    # Unknown role
+    set_planning_idle(conn, project_id)
+    return ("reset", f"Unknown planning role '{role}'. Reset to idle.")

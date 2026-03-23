@@ -545,6 +545,40 @@ def plan_defer_cmd(epic_id, rationale, repo_path, project_slug):
         click.echo(f"Epic {result.epic_id} -> {result.final_status}")
 
 
+@plan.command("loop")
+@click.argument("epic_id", required=False, default=None)
+@click.option(
+    "--max-cycles",
+    "max_cycles",
+    type=int,
+    default=None,
+    help="Override max cycles (default from config).",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_loop_cmd(epic_id, max_cycles, repo_path, project_slug):
+    """Run the planning draft-review-revise loop automatically."""
+    from capsaicin.app.commands.plan_loop import plan_loop
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = plan_loop(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
+                epic_id=epic_id,
+                max_cycles=max_cycles,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(result.detail)
+
+
 @plan.command("status")
 @click.argument("epic_id", required=False, default=None)
 @click.option(

@@ -74,7 +74,8 @@ def set_idle(conn: sqlite3.Connection, project_id: str) -> None:
 def get_state(conn: sqlite3.Connection, project_id: str) -> dict:
     """Return the current orchestrator state as a dict."""
     row = conn.execute(
-        "SELECT status, active_ticket_id, active_run_id, suspended_at, resume_context "
+        "SELECT status, active_ticket_id, active_run_id, "
+        "active_plan_id, loop_type, suspended_at, resume_context "
         "FROM orchestrator_state WHERE project_id = ?",
         (project_id,),
     ).fetchone()
@@ -84,9 +85,68 @@ def get_state(conn: sqlite3.Connection, project_id: str) -> dict:
         "status": row[0],
         "active_ticket_id": row[1],
         "active_run_id": row[2],
-        "suspended_at": row[3],
-        "resume_context": row[4],
+        "active_plan_id": row[3],
+        "loop_type": row[4],
+        "suspended_at": row[5],
+        "resume_context": row[6],
     }
+
+
+# ---------------------------------------------------------------------------
+# Planning orchestrator helpers
+# ---------------------------------------------------------------------------
+
+
+def start_planning_run(
+    conn: sqlite3.Connection, project_id: str, epic_id: str, run_id: str
+) -> None:
+    """Set active plan/run and status='running', loop_type='planning'."""
+    cur = conn.execute(
+        "UPDATE orchestrator_state "
+        "SET active_plan_id = ?, active_run_id = ?, "
+        "loop_type = 'planning', status = 'running', updated_at = ? "
+        "WHERE project_id = ?",
+        (epic_id, run_id, now_utc(), project_id),
+    )
+    _assert_updated(cur, "Project", project_id)
+    conn.commit()
+
+
+def finish_planning_run(conn: sqlite3.Connection, project_id: str) -> None:
+    """Clear active run (keep active plan)."""
+    cur = conn.execute(
+        "UPDATE orchestrator_state "
+        "SET active_run_id = NULL, updated_at = ? "
+        "WHERE project_id = ?",
+        (now_utc(), project_id),
+    )
+    _assert_updated(cur, "Project", project_id)
+    conn.commit()
+
+
+def set_planning_idle(conn: sqlite3.Connection, project_id: str) -> None:
+    """Set status='idle' and clear active plan/run/loop_type."""
+    cur = conn.execute(
+        "UPDATE orchestrator_state "
+        "SET status = 'idle', active_plan_id = NULL, active_run_id = NULL, "
+        "loop_type = NULL, updated_at = ? "
+        "WHERE project_id = ?",
+        (now_utc(), project_id),
+    )
+    _assert_updated(cur, "Project", project_id)
+    conn.commit()
+
+
+def await_planning_human(conn: sqlite3.Connection, project_id: str) -> None:
+    """Set status='awaiting_human' for a planning loop."""
+    cur = conn.execute(
+        "UPDATE orchestrator_state "
+        "SET status = 'awaiting_human', updated_at = ? "
+        "WHERE project_id = ?",
+        (now_utc(), project_id),
+    )
+    _assert_updated(cur, "Project", project_id)
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -107,11 +167,11 @@ def init_cycle(conn: sqlite3.Connection, ticket_id: str) -> None:
 
 
 def increment_cycle(conn: sqlite3.Connection, ticket_id: str) -> None:
-    """Increment cycle, reset impl_attempt=1."""
+    """Increment cycle, reset impl_attempt=1, review_attempt=1."""
     cur = conn.execute(
         "UPDATE tickets "
         "SET current_cycle = current_cycle + 1, current_impl_attempt = 1, "
-        "updated_at = ? WHERE id = ?",
+        "current_review_attempt = 1, updated_at = ? WHERE id = ?",
         (now_utc(), ticket_id),
     )
     _assert_updated(cur, "Ticket", ticket_id)
@@ -187,4 +247,93 @@ def check_review_retry_limit(
     ).fetchone()
     if row is None:
         raise ValueError(f"Ticket '{ticket_id}' not found.")
+    return row[0] >= max_retries
+
+
+# ---------------------------------------------------------------------------
+# Planning cycle/retry counter helpers (operate on planned_epics table)
+# ---------------------------------------------------------------------------
+
+
+def init_planning_cycle(conn: sqlite3.Connection, epic_id: str) -> None:
+    """Set cycle=1, draft_attempt=1, review_attempt=1 on a planned epic."""
+    cur = conn.execute(
+        "UPDATE planned_epics "
+        "SET current_cycle = 1, current_draft_attempt = 1, current_review_attempt = 1, "
+        "updated_at = ? WHERE id = ?",
+        (now_utc(), epic_id),
+    )
+    _assert_updated(cur, "Epic", epic_id)
+    conn.commit()
+
+
+def increment_planning_cycle(conn: sqlite3.Connection, epic_id: str) -> None:
+    """Increment cycle, reset draft_attempt=1, review_attempt=1 on a planned epic."""
+    cur = conn.execute(
+        "UPDATE planned_epics "
+        "SET current_cycle = current_cycle + 1, current_draft_attempt = 1, "
+        "current_review_attempt = 1, updated_at = ? WHERE id = ?",
+        (now_utc(), epic_id),
+    )
+    _assert_updated(cur, "Epic", epic_id)
+    conn.commit()
+
+
+def increment_draft_attempt(conn: sqlite3.Connection, epic_id: str) -> None:
+    """Increment draft attempt counter on a planned epic."""
+    cur = conn.execute(
+        "UPDATE planned_epics "
+        "SET current_draft_attempt = current_draft_attempt + 1, updated_at = ? "
+        "WHERE id = ?",
+        (now_utc(), epic_id),
+    )
+    _assert_updated(cur, "Epic", epic_id)
+    conn.commit()
+
+
+def increment_planning_review_attempt(conn: sqlite3.Connection, epic_id: str) -> None:
+    """Increment review attempt counter on a planned epic."""
+    cur = conn.execute(
+        "UPDATE planned_epics "
+        "SET current_review_attempt = current_review_attempt + 1, updated_at = ? "
+        "WHERE id = ?",
+        (now_utc(), epic_id),
+    )
+    _assert_updated(cur, "Epic", epic_id)
+    conn.commit()
+
+
+def check_planning_cycle_limit(
+    conn: sqlite3.Connection, epic_id: str, max_cycles: int
+) -> bool:
+    """Return True if the epic has reached or exceeded the cycle limit."""
+    row = conn.execute(
+        "SELECT current_cycle FROM planned_epics WHERE id = ?", (epic_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Epic '{epic_id}' not found.")
+    return row[0] >= max_cycles
+
+
+def check_draft_retry_limit(
+    conn: sqlite3.Connection, epic_id: str, max_retries: int
+) -> bool:
+    """Return True if the epic has reached or exceeded the draft retry limit."""
+    row = conn.execute(
+        "SELECT current_draft_attempt FROM planned_epics WHERE id = ?", (epic_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Epic '{epic_id}' not found.")
+    return row[0] >= max_retries
+
+
+def check_planning_review_retry_limit(
+    conn: sqlite3.Connection, epic_id: str, max_retries: int
+) -> bool:
+    """Return True if the epic has reached or exceeded the planning review retry limit."""
+    row = conn.execute(
+        "SELECT current_review_attempt FROM planned_epics WHERE id = ?", (epic_id,)
+    ).fetchone()
+    if row is None:
+        raise ValueError(f"Epic '{epic_id}' not found.")
     return row[0] >= max_retries

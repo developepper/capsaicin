@@ -219,8 +219,8 @@ class TestCycleCounters:
         assert impl == 3
         assert review == 2
 
-    def test_cycle_increment_resets_impl_attempt(self, project):
-        """Incrementing cycle resets impl_attempt but not review_attempt."""
+    def test_cycle_increment_resets_impl_and_review_attempts(self, project):
+        """Incrementing cycle resets both impl_attempt and review_attempt."""
         project_dir, conn, project_id = project
         log = project_dir / "activity.log"
         t = _add(conn, project_id, log)
@@ -232,7 +232,7 @@ class TestCycleCounters:
         cycle, impl, review = _counters(conn, t)
         assert cycle == 2
         assert impl == 1  # reset
-        assert review == 2  # preserved
+        assert review == 1  # reset
 
     def test_reset_counters(self, project):
         project_dir, conn, project_id = project
