@@ -1,7 +1,7 @@
 <section id="planning-active" hx-get="{{ request.url_for('partial_planning_active') }}" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
   <h2>Active Epics{% if data.active_epics %} ({{ data.active_epics|length }}){% endif %}</h2>
   {% if data.active_epics %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Epic</th><th>Status</th><th>Since</th></tr></thead>
     <tbody>
       {% for e in data.active_epics %}
@@ -12,7 +12,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No active epics.</p>
   {% endif %}

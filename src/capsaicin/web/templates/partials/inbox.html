@@ -1,7 +1,7 @@
 <section id="inbox" hx-get="{{ request.url_for('partial_inbox') }}" hx-trigger="every 30s, sse-inbox from:body" hx-swap="outerHTML">
   <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
   {% if data.inbox and data.inbox.tickets %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Ticket</th><th>Gate Reason</th><th>Since</th></tr></thead>
     <tbody>
       {% for t in data.inbox.tickets %}
@@ -12,7 +12,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No tickets awaiting human action.</p>
   {% endif %}

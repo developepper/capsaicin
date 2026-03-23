@@ -128,7 +128,7 @@
 <section>
   <h2>Acceptance Criteria</h2>
   {% if data.criteria %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Status</th><th>Criterion</th></tr></thead>
     <tbody>
       {% for c in data.criteria %}
@@ -138,7 +138,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">(none)</p>
   {% endif %}
@@ -148,7 +148,7 @@
 <section>
   <h2>Dependencies</h2>
   {% if data.dependencies %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Ticket ID</th><th>Title</th><th>Status</th></tr></thead>
     <tbody>
       {% for dep in data.dependencies %}
@@ -159,7 +159,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">(none)</p>
   {% endif %}
@@ -181,7 +181,7 @@
     {% for severity in ["blocking","warning","info"] %}
       {% if severity in data.open_findings %}
       <h3 class="finding-{{ severity }}">{{ severity }}</h3>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Category</th><th>Location</th><th>Description</th></tr></thead>
         <tbody>
           {% for f in data.open_findings[severity] %}
@@ -192,7 +192,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% endif %}
     {% endfor %}
   {% else %}
@@ -258,7 +258,7 @@
 {% if data.run_history %}
 <section>
   <h2>Run History</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Started</th><th>Role</th><th>Cycle</th><th>Attempt</th><th>Exit</th><th>Verdict</th><th>Duration</th></tr></thead>
     <tbody>
       {% for r in data.run_history %}
@@ -273,7 +273,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endif %}
 
@@ -281,7 +281,7 @@
 {% if data.transition_history %}
 <section>
   <h2>Transition History</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Time</th><th>From</th><th>To</th><th>By</th><th>Reason</th></tr></thead>
     <tbody>
       {% for t in data.transition_history %}
@@ -294,7 +294,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endif %}
 

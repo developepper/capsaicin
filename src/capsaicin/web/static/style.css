@@ -662,3 +662,26 @@ textarea { resize: vertical; }
    Full-page message (shutdown, 404, etc.)
    ================================================================ */
 .page-message { text-align: center; padding: 4rem 1rem; }
+
+
+/* ================================================================
+   Responsive — narrow viewports (≤ 768px)
+   ================================================================ */
+@media (max-width: 768px) {
+  /* Header: wrap so nav and controls don't overlap */
+  header { flex-wrap: wrap; gap: .4rem; }
+
+  /* Action form panels stack vertically */
+  .action-forms { flex-direction: column; }
+  .action-form  { min-width: 0; }
+
+  /* Tables: horizontally scrollable via wrapper div */
+  .table-wrap { overflow-x: auto; }
+
+  /* Definition lists: labels above values */
+  dl {
+    grid-template-columns: 1fr;
+    gap: .15rem;
+  }
+  dt { margin-top: .4rem; }
+}

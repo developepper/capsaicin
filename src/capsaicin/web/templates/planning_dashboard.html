@@ -21,7 +21,7 @@
 <section id="planning-gate" hx-get="{{ request.url_for('partial_planning_gate') }}" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
   <h2>Planning Inbox{% if data.human_gate_epics %} ({{ data.human_gate_epics|length }}){% endif %}</h2>
   {% if data.human_gate_epics %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Epic</th><th>Gate Reason</th><th>Since</th></tr></thead>
     <tbody>
       {% for e in data.human_gate_epics %}
@@ -32,7 +32,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No epics awaiting human action.</p>
   {% endif %}
@@ -42,7 +42,7 @@
 <section id="planning-active" hx-get="{{ request.url_for('partial_planning_active') }}" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
   <h2>Active Epics{% if data.active_epics %} ({{ data.active_epics|length }}){% endif %}</h2>
   {% if data.active_epics %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Epic</th><th>Status</th><th>Since</th></tr></thead>
     <tbody>
       {% for e in data.active_epics %}
@@ -53,7 +53,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No active epics.</p>
   {% endif %}
@@ -63,7 +63,7 @@
 <section id="planning-blocked" hx-get="{{ request.url_for('partial_planning_blocked') }}" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
   {% if data.blocked_epics %}
   <h2>Blocked ({{ data.blocked_epics|length }})</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Epic</th><th>Reason</th></tr></thead>
     <tbody>
       {% for e in data.blocked_epics %}
@@ -73,7 +73,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <h2>Blocked</h2>
   <p class="empty">No blocked epics.</p>
@@ -84,7 +84,7 @@
 <section id="planning-queue" hx-get="{{ request.url_for('partial_planning_queue') }}" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
   <h2>Planning Queue ({{ data.total_epics }} epic{{ "s" if data.total_epics != 1 else "" }})</h2>
   {% if data.counts_by_status %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Status</th><th>Count</th></tr></thead>
     <tbody>
       {% for status in status_order %}
@@ -93,7 +93,7 @@
         {% endif %}
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No epics yet.</p>
   {% endif %}

@@ -1,7 +1,7 @@
 <section id="planning-queue" hx-get="{{ request.url_for('partial_planning_queue') }}" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
   <h2>Planning Queue ({{ data.total_epics }} epic{{ "s" if data.total_epics != 1 else "" }})</h2>
   {% if data.counts_by_status %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Status</th><th>Count</th></tr></thead>
     <tbody>
       {% for status in status_order %}
@@ -10,7 +10,7 @@
         {% endif %}
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No epics yet.</p>
   {% endif %}

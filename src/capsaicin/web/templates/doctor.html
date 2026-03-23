@@ -9,7 +9,7 @@
 {% endif %}
 
 {% if report %}
-<table>
+<div class="table-wrap"><table>
   <thead>
     <tr><th>Status</th><th>Check</th><th>Details</th></tr>
   </thead>
@@ -30,7 +30,7 @@
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
 
 <section class="doctor-summary">
   {% if report.passed and not report.has_warnings %}
