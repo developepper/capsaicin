@@ -252,7 +252,7 @@ async def action_materialize_epic(request: Request) -> RedirectResponse:
     repo_root = Path(config_path).parent if config_path else None
     if repo_root is None:
         return _error_redirect(
-            epic_id, "Cannot determine repo root for materialization."
+            request, epic_id, "Cannot determine repo root for materialization."
         )
 
     from capsaicin.app.commands.materialize_epic import materialize
