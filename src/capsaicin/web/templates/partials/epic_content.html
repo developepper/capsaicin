@@ -1,0 +1,243 @@
+<div id="epic-content"
+     hx-get="/partials/epics/{{ data.epic.id }}"
+     hx-trigger="sse-epic from:body"
+     hx-swap="outerHTML">
+
+{# --- Epic metadata --- #}
+<dl>
+  <dt>ID</dt><dd>{{ data.epic.id }}</dd>
+  <dt>Status</dt><dd><span class="status-badge planning-status-{{ data.epic.status }}">{{ data.epic.status }}</span></dd>
+  <dt>Status Changed</dt><dd>{{ data.epic.status_changed_at }}</dd>
+  <dt>Cycle</dt><dd>{{ data.epic.current_cycle }} (draft attempt: {{ data.epic.current_draft_attempt }}, review attempt: {{ data.epic.current_review_attempt }})</dd>
+  {% if data.epic.gate_reason %}
+  <dt>Gate Reason</dt><dd>{{ data.epic.gate_reason }}</dd>
+  {% endif %}
+  {% if data.epic.blocked_reason %}
+  <dt>Blocked Reason</dt><dd>{{ data.epic.blocked_reason }}</dd>
+  {% endif %}
+  {% if data.epic.materialized_path %}
+  <dt>Materialized</dt><dd><code>{{ data.epic.materialized_path }}</code></dd>
+  {% endif %}
+</dl>
+
+{# --- Problem statement --- #}
+{% if data.epic.problem_statement %}
+<section>
+  <h2>Problem Statement</h2>
+  <pre class="agent-text">{{ data.epic.problem_statement }}</pre>
+</section>
+{% endif %}
+
+{# --- Summary and success outcome (from plan draft) --- #}
+{% if data.epic.summary %}
+<section>
+  <h2>Summary</h2>
+  <pre class="agent-text">{{ data.epic.summary }}</pre>
+</section>
+{% endif %}
+
+{% if data.epic.success_outcome %}
+<section>
+  <h2>Success Outcome</h2>
+  <pre class="agent-text">{{ data.epic.success_outcome }}</pre>
+</section>
+{% endif %}
+
+{# --- Human-gate action forms --- #}
+{% if data.epic.status == "human-gate" %}
+<section class="action-panel planning-action-panel">
+  <h2>Human Decision Required</h2>
+
+  {% set gate = data.epic.gate_reason %}
+  {% if gate == "review_passed" %}
+  <p class="gate-context">Plan review passed. Approve to materialize implementation tickets, or revise to send it back for another planning pass.</p>
+  {% elif gate == "low_confidence_pass" %}
+  <p class="gate-context gate-warning">Plan review passed with low confidence.</p>
+  {% elif gate == "reviewer_escalated" %}
+  <p class="gate-context gate-warning">The planning reviewer escalated this epic.</p>
+  {% elif gate == "cycle_limit" %}
+  <p class="gate-context gate-warning">The planning cycle limit was reached.</p>
+  {% elif gate == "draft_failure" %}
+  <p class="gate-context gate-warning">The draft step failed.</p>
+  {% elif gate == "human_requested" %}
+  <p class="gate-context">Human review was explicitly requested.</p>
+  {% else %}
+  <p class="gate-context">This epic is waiting for a human decision.</p>
+  {% endif %}
+
+  <div class="action-forms">
+    {# --- Approve form --- #}
+    <form method="post" action="/epics/{{ data.epic.id }}/approve" class="action-form action-approve">
+      <h3>Approve</h3>
+      <p class="action-description">Approve the plan and materialize implementation tickets.</p>
+      <label for="approve-rationale">Rationale</label>
+      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="Why is this plan ready?"></textarea>
+      <div class="action-options">
+        <label><input type="checkbox" name="force"> Force (overwrite existing materialized docs)</label>
+      </div>
+      <button type="submit" class="btn btn-approve">Approve</button>
+    </form>
+
+    {# --- Revise form --- #}
+    <form method="post" action="/epics/{{ data.epic.id }}/revise" class="action-form action-revise">
+      <h3>Revise</h3>
+      <p class="action-description">Send back for another planning pass.</p>
+      <label for="revise-finding">Finding (optional)</label>
+      <textarea id="revise-finding" name="finding" rows="2" placeholder="Describe what needs to change in the plan"></textarea>
+      <button type="submit" class="btn btn-revise">Revise</button>
+    </form>
+
+    {# --- Defer form --- #}
+    <details class="action-detail">
+      <summary>Defer</summary>
+      <form method="post" action="/epics/{{ data.epic.id }}/defer" class="action-form action-defer">
+        <h3>Defer</h3>
+        <p class="action-description">Block this epic for later consideration.</p>
+        <label for="defer-rationale">Rationale</label>
+        <textarea id="defer-rationale" name="rationale" rows="2" placeholder="Why is this being deferred?"></textarea>
+        <button type="submit" class="btn btn-defer">Defer</button>
+      </form>
+    </details>
+  </div>
+</section>
+{% endif %}
+
+{# --- Approved epic: materialize action --- #}
+{% if data.epic.status == "approved" %}
+<section class="action-panel planning-action-panel">
+  <h2>Plan Approved</h2>
+  <p class="gate-context">This plan is approved.{% if data.epic.materialized_path %} Implementation tickets have been materialized.{% endif %}</p>
+  <form method="post" action="/epics/{{ data.epic.id }}/materialize" class="action-form action-approve">
+    <div class="action-options">
+      <label><input type="checkbox" name="force"> Force (overwrite existing docs)</label>
+    </div>
+    <button type="submit" class="btn btn-action">Re-materialize</button>
+  </form>
+</section>
+{% endif %}
+
+{# --- Blocked epic: unblock action --- #}
+{% if data.epic.status == "blocked" %}
+<section class="action-panel planning-action-panel">
+  <h2>Epic Blocked</h2>
+  <p class="gate-context">This epic is blocked{% if data.epic.blocked_reason %}: {{ data.epic.blocked_reason }}{% endif %}.</p>
+  <form method="post" action="/epics/{{ data.epic.id }}/unblock" class="action-form">
+    <button type="submit" class="btn btn-approve">Unblock</button>
+  </form>
+</section>
+{% endif %}
+
+{# --- Workflow trigger actions (draft, review, loop) --- #}
+{% if data.epic.status in ("new", "revise") %}
+<section class="action-panel planning-action-panel">
+  <h2>Actions</h2>
+  <div class="action-forms action-forms-inline">
+    <form method="post" action="/epics/{{ data.epic.id }}/draft" class="action-form">
+      <button type="submit" class="btn btn-action">Run Draft <span class="htmx-indicator spinner spinner-sm"></span></button>
+    </form>
+    <form method="post" action="/epics/{{ data.epic.id }}/loop" class="action-form">
+      <button type="submit" class="btn btn-action">Run Plan Loop <span class="htmx-indicator spinner spinner-sm"></span></button>
+    </form>
+  </div>
+</section>
+{% endif %}
+
+{% if data.epic.status == "drafting" %}
+<section class="action-panel planning-action-panel">
+  <h2>Actions</h2>
+  <form method="post" action="/epics/{{ data.epic.id }}/review" class="action-form">
+    <button type="submit" class="btn btn-action">Run Review <span class="htmx-indicator spinner spinner-sm"></span></button>
+  </form>
+</section>
+{% endif %}
+
+{# --- Planned tickets --- #}
+<section>
+  <h2>Planned Tickets{% if data.planned_tickets %} ({{ data.planned_tickets|length }}){% endif %}</h2>
+  {% if data.planned_tickets %}
+  <table>
+    <thead><tr><th>#</th><th>Title</th><th>Goal</th><th>Criteria</th></tr></thead>
+    <tbody>
+      {% for pt in data.planned_tickets %}
+      <tr>
+        <td>{{ pt.sequence }}</td>
+        <td>{{ pt.title }}</td>
+        <td>{{ pt.goal[:120] if pt.goal else "\u2014" }}</td>
+        <td>{{ data.ticket_criteria.get(pt.id, [])|length }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No planned tickets yet.</p>
+  {% endif %}
+</section>
+
+{# --- Open findings --- #}
+<section>
+  <h2>Open Findings</h2>
+  {% if data.open_findings %}
+    {% set findings_by_severity = {} %}
+    {% for f in data.open_findings %}
+      {% if f.severity not in findings_by_severity %}
+        {% set _ = findings_by_severity.__setitem__(f.severity, []) %}
+      {% endif %}
+      {% set _ = findings_by_severity[f.severity].append(f) %}
+    {% endfor %}
+    {% for severity in ["blocking","warning","info"] %}
+      {% if severity in findings_by_severity %}
+      <h3 class="finding-{{ severity }}">{{ severity }}</h3>
+      <table>
+        <thead><tr><th>Category</th><th>Description</th></tr></thead>
+        <tbody>
+          {% for f in findings_by_severity[severity] %}
+          <tr>
+            <td>{{ f.category }}</td>
+            <td>{{ f.description }}</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+      {% endif %}
+    {% endfor %}
+  {% else %}
+  <p class="empty">(none)</p>
+  {% endif %}
+</section>
+
+{# --- Last run --- #}
+{% if data.last_run %}
+<section>
+  <h2>Last Run</h2>
+  <dl>
+    <dt>Role</dt><dd>{{ data.last_run.role }}</dd>
+    <dt>Exit Status</dt><dd>{{ data.last_run.exit_status }}</dd>
+    <dt>Duration</dt><dd>{{ "%.1f"|format(data.last_run.duration_seconds) if data.last_run.duration_seconds is not none else "n/a" }}s</dd>
+    <dt>Verdict</dt><dd>{{ data.last_run.verdict or "n/a" }}</dd>
+    <dt>Cycle</dt><dd>{{ data.last_run.cycle_number }}.{{ data.last_run.attempt_number }}</dd>
+  </dl>
+</section>
+{% endif %}
+
+{# --- Transition history --- #}
+{% if data.transition_history %}
+<section>
+  <h2>Transition History</h2>
+  <table>
+    <thead><tr><th>Time</th><th>From</th><th>To</th><th>By</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for t in data.transition_history %}
+      <tr>
+        <td>{{ t.created_at }}</td>
+        <td>{{ t.from_status }}</td>
+        <td>{{ t.to_status }}</td>
+        <td>{{ t.triggered_by }}</td>
+        <td>{{ t.reason or "\u2014" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+</section>
+{% endif %}
+
+</div>

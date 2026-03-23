@@ -1,0 +1,103 @@
+{% extends "base.html" %}
+{% block title %}Planning — capsaicin{% endblock %}
+{% block content %}
+<h1>Planning Dashboard</h1>
+
+{# --- Human-gate epics needing decisions --- #}
+<section id="planning-gate" hx-get="/partials/planning/gate" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
+  <h2>Planning Inbox{% if data.human_gate_epics %} ({{ data.human_gate_epics|length }}){% endif %}</h2>
+  {% if data.human_gate_epics %}
+  <table>
+    <thead><tr><th>Epic</th><th>Gate Reason</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for e in data.human_gate_epics %}
+      <tr>
+        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td>{{ e.gate_reason or "unknown" }}</td>
+        <td>{{ e.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No epics awaiting human action.</p>
+  {% endif %}
+</section>
+
+{# --- Active epics (new, drafting, in-review, revise) --- #}
+<section id="planning-active" hx-get="/partials/planning/active" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
+  <h2>Active Epics{% if data.active_epics %} ({{ data.active_epics|length }}){% endif %}</h2>
+  {% if data.active_epics %}
+  <table>
+    <thead><tr><th>Epic</th><th>Status</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for e in data.active_epics %}
+      <tr>
+        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><span class="status-badge planning-status-{{ e.status }}">{{ e.status }}</span></td>
+        <td>{{ e.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No active epics.</p>
+  {% endif %}
+</section>
+
+{# --- Blocked epics --- #}
+<section id="planning-blocked" hx-get="/partials/planning/blocked" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
+  {% if data.blocked_epics %}
+  <h2>Blocked ({{ data.blocked_epics|length }})</h2>
+  <table>
+    <thead><tr><th>Epic</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for e in data.blocked_epics %}
+      <tr>
+        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td>{{ e.blocked_reason or "unknown" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <h2>Blocked</h2>
+  <p class="empty">No blocked epics.</p>
+  {% endif %}
+</section>
+
+{# --- Queue overview --- #}
+<section id="planning-queue" hx-get="/partials/planning/queue" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
+  <h2>Planning Queue ({{ data.total_epics }} epic{{ "s" if data.total_epics != 1 else "" }})</h2>
+  {% if data.counts_by_status %}
+  <table>
+    <thead><tr><th>Status</th><th>Count</th></tr></thead>
+    <tbody>
+      {% for status in ["new","drafting","in-review","revise","human-gate","approved","blocked"] %}
+        {% if status in data.counts_by_status %}
+        <tr><td>{{ status }}</td><td>{{ data.counts_by_status[status] }}</td></tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No epics yet.</p>
+  {% endif %}
+</section>
+
+<p class="back-link"><a href="/">Back to implementation dashboard</a></p>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var src = new EventSource('/events/planning');
+  var events = ['planning-gate', 'planning-active', 'planning-blocked', 'planning-queue'];
+  events.forEach(function(name) {
+    src.addEventListener(name, function() {
+      document.body.dispatchEvent(new CustomEvent('sse-' + name));
+    });
+  });
+  src.onerror = function() {};
+})();
+</script>
+{% endblock %}

@@ -605,6 +605,42 @@ details summary:hover { color: var(--link-hover); }
 
 
 /* ================================================================
+   Planning status badges — visually distinct from implementation
+   ================================================================ */
+.planning-status-new { background: var(--status-ready); }
+.planning-status-drafting { background: var(--status-active); }
+.planning-status-in-review { background: var(--status-active); }
+.planning-status-revise { background: var(--status-revise); }
+.planning-status-human-gate { background: var(--status-gate); }
+.planning-status-approved { background: var(--status-pr-ready); font-weight: 700; }
+.planning-status-blocked { background: var(--status-blocked); }
+
+.planning-status-drafting,
+.planning-status-in-review {
+  position: relative;
+  padding-left: 1.4rem;
+}
+
+.planning-status-drafting::before,
+.planning-status-in-review::before {
+  content: "";
+  position: absolute;
+  left: .45rem;
+  top: 50%;
+  transform: translateY(-50%);
+  width: .5rem;
+  height: .5rem;
+  border-radius: 50%;
+  background: #2563eb;
+  animation: pulse-dot 1.5s ease-in-out infinite;
+}
+
+.planning-action-panel {
+  border-left: 3px solid var(--btn-action);
+}
+
+
+/* ================================================================
    HTMX swap transition
    ================================================================ */
 .htmx-swapping { opacity: .5; transition: opacity 100ms ease-out; }
