@@ -158,6 +158,41 @@
   {% endif %}
 </section>
 
+{# --- Implementation tickets (approved epics only) --- #}
+{% if data.epic.status == "approved" and data.impl_tickets %}
+<section>
+  <h2>Implementation Tickets ({{ data.impl_tickets|length }})</h2>
+  <p class="impl-tickets-summary">
+    {% set status_counts = {} %}
+    {% for t in data.impl_tickets %}
+      {% set _ = status_counts.__setitem__(t.status, status_counts.get(t.status, 0) + 1) %}
+    {% endfor %}
+    {% for s, c in status_counts.items() %}
+      <span class="status-badge status-{{ s }}">{{ s }}: {{ c }}</span>
+    {% endfor %}
+  </p>
+  <div class="table-wrap"><table>
+    <thead><tr><th>#</th><th>Title</th><th>Status</th><th>Readiness</th></tr></thead>
+    <tbody>
+      {% for t in data.impl_tickets %}
+      <tr>
+        <td>{{ t.sequence }}</td>
+        <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
+        <td><span class="status-badge status-{{ t.status }}">{{ t.status }}</span></td>
+        <td>
+          {% if t.is_ready %}
+            <span class="readiness-ready">ready</span>
+          {% else %}
+            <span class="readiness-blocked">blocked</span>
+          {% endif %}
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
 {# --- Open findings --- #}
 <section>
   <h2>Open Findings</h2>
