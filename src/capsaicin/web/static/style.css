@@ -72,69 +72,6 @@
 }
 
 /* --- Dark palette --- */
-[data-theme="dark"],
-:root:not([data-theme="light"]) {
-  /* Only apply dark via explicit toggle — OS preference below */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f1117;
-    --bg-surface: #1a1d27;
-    --bg-surface-alt: #232733;
-    --bg-header: #111318;
-    --text: #e2e4e9;
-    --text-muted: #9ca3af;
-    --text-header: #e2e4e9;
-    --border: #2d3039;
-    --border-light: #23262f;
-    --link: #60a5fa;
-    --link-hover: #93bbfd;
-    --status-ready: #1e3a5f;
-    --status-active: #14332a;
-    --status-revise: #3d2814;
-    --status-gate: #3b3510;
-    --status-pr-ready: #14332a;
-    --status-blocked: #3b1a1a;
-    --status-done: #2a2d33;
-    --orch-idle-bg: var(--bg-surface);
-    --orch-idle-border: var(--border);
-    --orch-running-bg: #14332a;
-    --orch-running-border: #34d399;
-    --orch-awaiting-bg: #3d2814;
-    --orch-awaiting-border: #fb923c;
-    --orch-suspended-bg: #3b1a1a;
-    --orch-suspended-border: #f87171;
-    --criteria-met: #4ade80;
-    --criteria-unmet: #f87171;
-    --criteria-pending: var(--text-muted);
-    --criteria-disputed: #fb923c;
-    --finding-blocking: #f87171;
-    --finding-warning: #fb923c;
-    --finding-info: #60a5fa;
-    --btn-approve: #16a34a;
-    --btn-approve-hover: #22c55e;
-    --btn-revise: #ea580c;
-    --btn-revise-hover: #f97316;
-    --btn-defer: #6b7280;
-    --btn-defer-hover: #9ca3af;
-    --btn-action: #2563eb;
-    --btn-action-hover: #3b82f6;
-    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
-    --shadow-md: 0 4px 6px rgba(0,0,0,.3), 0 2px 4px rgba(0,0,0,.2);
-    --error-bg: #3b1a1a;
-    --error-border: #f87171;
-    --error-text: #fca5a5;
-    --diagnostic-bg: #3d2814;
-    --diagnostic-border: #fb923c;
-    --code-bg: #12141c;
-    --code-border: var(--border);
-    --table-stripe: rgba(255,255,255,.02);
-    --table-hover: rgba(255,255,255,.04);
-  }
-}
-
-/* Explicit dark toggle overrides OS preference */
 [data-theme="dark"] {
   --bg: #0f1117;
   --bg-surface: #1a1d27;
@@ -232,6 +169,10 @@ header a:hover { opacity: .85; }
   width: clamp(168px, 22vw, 236px);
   height: auto;
 }
+
+/* Header controls */
+.header-controls { display: flex; align-items: center; gap: .5rem; }
+.header-controls form { margin: 0; }
 
 /* Theme toggle */
 .theme-toggle {
