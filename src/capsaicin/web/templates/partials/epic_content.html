@@ -48,22 +48,7 @@
 <section class="action-panel planning-action-panel">
   <h2>Human Decision Required</h2>
 
-  {% set gate = data.epic.gate_reason %}
-  {% if gate == "review_passed" %}
-  <p class="gate-context">Plan review passed. Approve to materialize implementation tickets, or revise to send it back for another planning pass.</p>
-  {% elif gate == "low_confidence_pass" %}
-  <p class="gate-context gate-warning">Plan review passed with low confidence.</p>
-  {% elif gate == "reviewer_escalated" %}
-  <p class="gate-context gate-warning">The planning reviewer escalated this epic.</p>
-  {% elif gate == "cycle_limit" %}
-  <p class="gate-context gate-warning">The planning cycle limit was reached.</p>
-  {% elif gate == "draft_failure" %}
-  <p class="gate-context gate-warning">The draft step failed.</p>
-  {% elif gate == "human_requested" %}
-  <p class="gate-context">Human review was explicitly requested.</p>
-  {% else %}
-  <p class="gate-context">This epic is waiting for a human decision.</p>
-  {% endif %}
+  <p class="gate-context{% if gate_display.is_warning %} gate-warning{% endif %}">{{ gate_display.display_text }}</p>
 
   <div class="action-forms">
     {# --- Approve form --- #}
@@ -155,7 +140,7 @@
 <section>
   <h2>Planned Tickets{% if data.planned_tickets %} ({{ data.planned_tickets|length }}){% endif %}</h2>
   {% if data.planned_tickets %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>#</th><th>Title</th><th>Goal</th><th>Criteria</th></tr></thead>
     <tbody>
       {% for pt in data.planned_tickets %}
@@ -167,7 +152,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No planned tickets yet.</p>
   {% endif %}
@@ -187,7 +172,7 @@
     {% for severity in ["blocking","warning","info"] %}
       {% if severity in findings_by_severity %}
       <h3 class="finding-{{ severity }}">{{ severity }}</h3>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Category</th><th>Description</th></tr></thead>
         <tbody>
           {% for f in findings_by_severity[severity] %}
@@ -197,7 +182,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% endif %}
     {% endfor %}
   {% else %}
@@ -223,7 +208,7 @@
 {% if data.transition_history %}
 <section>
   <h2>Transition History</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Time</th><th>From</th><th>To</th><th>By</th><th>Reason</th></tr></thead>
     <tbody>
       {% for t in data.transition_history %}
@@ -236,7 +221,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endif %}
 

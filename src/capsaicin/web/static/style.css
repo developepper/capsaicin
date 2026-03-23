@@ -72,69 +72,6 @@
 }
 
 /* --- Dark palette --- */
-[data-theme="dark"],
-:root:not([data-theme="light"]) {
-  /* Only apply dark via explicit toggle — OS preference below */
-}
-
-@media (prefers-color-scheme: dark) {
-  :root:not([data-theme="light"]) {
-    --bg: #0f1117;
-    --bg-surface: #1a1d27;
-    --bg-surface-alt: #232733;
-    --bg-header: #111318;
-    --text: #e2e4e9;
-    --text-muted: #9ca3af;
-    --text-header: #e2e4e9;
-    --border: #2d3039;
-    --border-light: #23262f;
-    --link: #60a5fa;
-    --link-hover: #93bbfd;
-    --status-ready: #1e3a5f;
-    --status-active: #14332a;
-    --status-revise: #3d2814;
-    --status-gate: #3b3510;
-    --status-pr-ready: #14332a;
-    --status-blocked: #3b1a1a;
-    --status-done: #2a2d33;
-    --orch-idle-bg: var(--bg-surface);
-    --orch-idle-border: var(--border);
-    --orch-running-bg: #14332a;
-    --orch-running-border: #34d399;
-    --orch-awaiting-bg: #3d2814;
-    --orch-awaiting-border: #fb923c;
-    --orch-suspended-bg: #3b1a1a;
-    --orch-suspended-border: #f87171;
-    --criteria-met: #4ade80;
-    --criteria-unmet: #f87171;
-    --criteria-pending: var(--text-muted);
-    --criteria-disputed: #fb923c;
-    --finding-blocking: #f87171;
-    --finding-warning: #fb923c;
-    --finding-info: #60a5fa;
-    --btn-approve: #16a34a;
-    --btn-approve-hover: #22c55e;
-    --btn-revise: #ea580c;
-    --btn-revise-hover: #f97316;
-    --btn-defer: #6b7280;
-    --btn-defer-hover: #9ca3af;
-    --btn-action: #2563eb;
-    --btn-action-hover: #3b82f6;
-    --shadow: 0 1px 3px rgba(0,0,0,.3), 0 1px 2px rgba(0,0,0,.2);
-    --shadow-md: 0 4px 6px rgba(0,0,0,.3), 0 2px 4px rgba(0,0,0,.2);
-    --error-bg: #3b1a1a;
-    --error-border: #f87171;
-    --error-text: #fca5a5;
-    --diagnostic-bg: #3d2814;
-    --diagnostic-border: #fb923c;
-    --code-bg: #12141c;
-    --code-border: var(--border);
-    --table-stripe: rgba(255,255,255,.02);
-    --table-hover: rgba(255,255,255,.04);
-  }
-}
-
-/* Explicit dark toggle overrides OS preference */
 [data-theme="dark"] {
   --bg: #0f1117;
   --bg-surface: #1a1d27;
@@ -232,6 +169,10 @@ header a:hover { opacity: .85; }
   width: clamp(168px, 22vw, 236px);
   height: auto;
 }
+
+/* Header controls */
+.header-controls { display: flex; align-items: center; gap: .5rem; }
+.header-controls form { margin: 0; }
 
 /* Theme toggle */
 .theme-toggle {
@@ -540,6 +481,57 @@ details summary:hover { color: var(--link-hover); }
 .gate-context { margin: .4rem 0 1rem; color: var(--text-muted); font-size: .9em; }
 .gate-warning { color: var(--finding-warning); font-weight: 600; }
 
+/* ================================================================
+   Generic form inputs
+   ================================================================ */
+input[type="text"],
+textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: .88em;
+  padding: .4rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text);
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+input[type="text"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--link);
+}
+textarea { resize: vertical; }
+
+/* ================================================================
+   Create-form layout (create-epic, create-ticket)
+   ================================================================ */
+.create-form {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: .85rem;
+  max-width: 36rem;
+}
+.create-form label {
+  display: block;
+  font-size: .82em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: .25rem;
+}
+.create-form label + input,
+.create-form label + textarea {
+  margin-bottom: .65rem;
+}
+.create-form .btn {
+  margin-top: .35rem;
+}
+
+/* ================================================================
+   Action forms (human-gate panels)
+   ================================================================ */
 .action-forms { display: flex; flex-wrap: wrap; gap: 1rem; }
 .action-forms-inline { align-items: flex-start; }
 
@@ -554,19 +546,7 @@ details summary:hover { color: var(--link-hover); }
 
 .action-form label { display: block; font-size: .82em; color: var(--text-muted); margin-bottom: .25rem; }
 
-.action-form textarea {
-  width: 100%;
-  font-family: inherit;
-  font-size: .88em;
-  padding: .4rem .5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  resize: vertical;
-  background: var(--bg-surface);
-  color: var(--text);
-  transition: border-color var(--transition);
-}
-.action-form textarea:focus { outline: none; border-color: var(--link); }
+/* textarea and input[type=text] inherit generic rules above */
 
 .action-options { margin: .5rem 0; }
 .action-options label { font-size: .82em; color: var(--text-muted); cursor: pointer; }
@@ -676,3 +656,32 @@ details summary:hover { color: var(--link-hover); }
 .summary-pass { background: var(--status-active); color: var(--criteria-met); }
 .summary-warn { background: var(--status-revise); color: var(--finding-warning); }
 .summary-fail { background: var(--status-blocked); color: var(--criteria-unmet); }
+
+
+/* ================================================================
+   Full-page message (shutdown, 404, etc.)
+   ================================================================ */
+.page-message { text-align: center; padding: 4rem 1rem; }
+
+
+/* ================================================================
+   Responsive — narrow viewports (≤ 768px)
+   ================================================================ */
+@media (max-width: 768px) {
+  /* Header: wrap so nav and controls don't overlap */
+  header { flex-wrap: wrap; gap: .4rem; }
+
+  /* Action form panels stack vertically */
+  .action-forms { flex-direction: column; }
+  .action-form  { min-width: 0; }
+
+  /* Tables: horizontally scrollable via wrapper div */
+  .table-wrap { overflow-x: auto; }
+
+  /* Definition lists: labels above values */
+  dl {
+    grid-template-columns: 1fr;
+    gap: .15rem;
+  }
+  dt { margin-top: .4rem; }
+}

@@ -4,12 +4,10 @@
 <h1>Health Check</h1>
 <p class="back-link"><a href="{{ request.url_for('dashboard') }}">Back to dashboard</a></p>
 
-{% if error %}
-<div class="error-banner">{{ error }}</div>
-{% endif %}
+{% include "partials/error_banner.html" %}
 
 {% if report %}
-<table>
+<div class="table-wrap"><table>
   <thead>
     <tr><th>Status</th><th>Check</th><th>Details</th></tr>
   </thead>
@@ -30,7 +28,7 @@
     </tr>
     {% endfor %}
   </tbody>
-</table>
+</table></div>
 
 <section class="doctor-summary">
   {% if report.passed and not report.has_warnings %}

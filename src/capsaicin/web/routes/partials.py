@@ -7,7 +7,7 @@ its template needs, so partial refreshes don't pay for a full query.
 from __future__ import annotations
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.dashboard import (
     DashboardData,
@@ -16,12 +16,14 @@ from capsaicin.app.queries.dashboard import (
     get_recent_runs,
 )
 from capsaicin.app.queries.ticket_detail import get_ticket_detail
+from capsaicin.state_machine import TICKET_STATUS_ORDER
 from capsaicin.ticket_status import (
     get_active_ticket,
     get_blocked_tickets,
     get_next_runnable_ticket,
     get_ticket_counts_by_status,
 )
+from capsaicin.web.gate_display import get_ticket_gate_display
 from capsaicin.web.templating import templates
 
 
@@ -56,7 +58,7 @@ async def partial_queue(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "partials/queue.html",
-        {"data": data},
+        {"data": data, "status_order": TICKET_STATUS_ORDER},
     )
 
 
@@ -137,10 +139,17 @@ async def partial_ticket_content(request: Request) -> HTMLResponse:
     try:
         data = get_ticket_detail(conn, ticket_id, verbose=True)
     except ValueError:
-        return PlainTextResponse(f"Ticket '{ticket_id}' not found.", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "404.html",
+            {"message": f"Ticket '{ticket_id}' not found."},
+            status_code=404,
+        )
+
+    gate_display = get_ticket_gate_display(data.ticket.get("gate_reason"))
 
     return templates.TemplateResponse(
         request,
         "partials/ticket_content.html",
-        {"data": data},
+        {"data": data, "gate_display": gate_display},
     )

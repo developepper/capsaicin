@@ -18,6 +18,7 @@ from capsaicin.diagnostics import (
     truncate,
     build_run_outcome_message,
 )
+from capsaicin.state_machine import TICKET_STATUS_ORDER
 
 
 def _parse_adapter_metadata(raw: str | None) -> dict:
@@ -114,16 +115,7 @@ def build_project_summary(conn: sqlite3.Connection, project_id: str) -> str:
 
     if counts:
         lines.append("Status Counts:")
-        for status in [
-            "ready",
-            "implementing",
-            "in-review",
-            "revise",
-            "human-gate",
-            "pr-ready",
-            "blocked",
-            "done",
-        ]:
+        for status in TICKET_STATUS_ORDER:
             if status in counts:
                 lines.append(f"  {status}: {counts[status]}")
     else:
@@ -403,16 +395,7 @@ def render_dashboard(conn: sqlite3.Connection, project_id: str) -> str:
 
     if data.counts_by_status:
         lines.append("Status Counts:")
-        for s in [
-            "ready",
-            "implementing",
-            "in-review",
-            "revise",
-            "human-gate",
-            "pr-ready",
-            "blocked",
-            "done",
-        ]:
+        for s in TICKET_STATUS_ORDER:
             if s in data.counts_by_status:
                 lines.append(f"  {s}: {data.counts_by_status[s]}")
     else:

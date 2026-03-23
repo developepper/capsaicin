@@ -1,16 +1,16 @@
 <section id="queue" hx-get="{{ request.url_for('partial_queue') }}" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
   <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
   {% if data.counts_by_status %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Status</th><th>Count</th></tr></thead>
     <tbody>
-      {% for status in ["ready","implementing","in-review","revise","human-gate","pr-ready","blocked","done"] %}
+      {% for status in status_order %}
         {% if status in data.counts_by_status %}
         <tr><td>{{ status }}</td><td>{{ data.counts_by_status[status] }}</td></tr>
         {% endif %}
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No tickets yet.</p>
   {% endif %}

@@ -25,32 +25,15 @@
 <section class="action-panel">
   <h2>Human Decision Required</h2>
 
-  {% set gate = data.ticket.gate_reason %}
-  {% set rationale_required = gate in ("cycle_limit", "reviewer_escalated", "low_confidence_pass") %}
-
-  {% if gate == "review_passed" %}
-  <p class="gate-context">Review passed. Approve to move this ticket to PR-ready, or revise to send it back for another implementation pass.</p>
-  {% elif gate == "low_confidence_pass" %}
-  <p class="gate-context gate-warning">Review passed with low confidence. A rationale is required to approve.</p>
-  {% elif gate == "reviewer_escalated" %}
-  <p class="gate-context gate-warning">The reviewer escalated this ticket. A rationale is required to approve.</p>
-  {% elif gate == "cycle_limit" %}
-  <p class="gate-context gate-warning">The cycle limit was reached. A rationale is required to approve.</p>
-  {% elif gate == "empty_implementation" %}
-  <p class="gate-context gate-warning">The implementation produced no changes.</p>
-  {% elif gate == "permission_denied" %}
-  <p class="gate-context gate-warning">The implementation was blocked by permission denials.</p>
-  {% else %}
-  <p class="gate-context">This ticket is waiting for a human decision.</p>
-  {% endif %}
+  <p class="gate-context{% if gate_display.is_warning %} gate-warning{% endif %}">{{ gate_display.display_text }}</p>
 
   <div class="action-forms">
     {# --- Approve form --- #}
     <form method="post" action="{{ request.url_for('action_approve', ticket_id=data.ticket.id) }}" class="action-form action-approve">
       <h3>Approve</h3>
       <p class="action-description">Move ticket to PR-ready.</p>
-      <label for="approve-rationale">Rationale{% if rationale_required %} <strong>(required)</strong>{% endif %}</label>
-      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if rationale_required %}Explain why this is acceptable despite {{ gate }}{% endif %}"{% if rationale_required %} required{% endif %}>{{ "" }}</textarea>
+      <label for="approve-rationale">Rationale{% if gate_display.rationale_required %} <strong>(required)</strong>{% endif %}</label>
+      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if gate_display.rationale_required %}Explain why this is acceptable despite {{ data.ticket.gate_reason }}{% endif %}"{% if gate_display.rationale_required %} required{% endif %}>{{ "" }}</textarea>
       <div class="action-options">
         <label><input type="checkbox" name="force"> Force (skip workspace match check)</label>
       </div>
@@ -145,7 +128,7 @@
 <section>
   <h2>Acceptance Criteria</h2>
   {% if data.criteria %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Status</th><th>Criterion</th></tr></thead>
     <tbody>
       {% for c in data.criteria %}
@@ -155,7 +138,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">(none)</p>
   {% endif %}
@@ -165,7 +148,7 @@
 <section>
   <h2>Dependencies</h2>
   {% if data.dependencies %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Ticket ID</th><th>Title</th><th>Status</th></tr></thead>
     <tbody>
       {% for dep in data.dependencies %}
@@ -176,7 +159,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">(none)</p>
   {% endif %}
@@ -198,7 +181,7 @@
     {% for severity in ["blocking","warning","info"] %}
       {% if severity in data.open_findings %}
       <h3 class="finding-{{ severity }}">{{ severity }}</h3>
-      <table>
+      <div class="table-wrap"><table>
         <thead><tr><th>Category</th><th>Location</th><th>Description</th></tr></thead>
         <tbody>
           {% for f in data.open_findings[severity] %}
@@ -209,7 +192,7 @@
           </tr>
           {% endfor %}
         </tbody>
-      </table>
+      </table></div>
       {% endif %}
     {% endfor %}
   {% else %}
@@ -275,7 +258,7 @@
 {% if data.run_history %}
 <section>
   <h2>Run History</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Started</th><th>Role</th><th>Cycle</th><th>Attempt</th><th>Exit</th><th>Verdict</th><th>Duration</th></tr></thead>
     <tbody>
       {% for r in data.run_history %}
@@ -290,7 +273,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endif %}
 
@@ -298,7 +281,7 @@
 {% if data.transition_history %}
 <section>
   <h2>Transition History</h2>
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Time</th><th>From</th><th>To</th><th>By</th><th>Reason</th></tr></thead>
     <tbody>
       {% for t in data.transition_history %}
@@ -311,7 +294,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
 </section>
 {% endif %}
 

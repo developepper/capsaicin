@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 from starlette.requests import Request
-from starlette.responses import HTMLResponse, PlainTextResponse
+from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.planning_detail import get_planning_detail
 from capsaicin.errors import PlannedEpicNotFoundError
@@ -14,6 +14,8 @@ from capsaicin.app.queries.planning_summary import (
     get_human_gate_epics,
     PlanningSummaryData,
 )
+from capsaicin.state_machine import PLANNING_STATUS_ORDER
+from capsaicin.web.gate_display import get_epic_gate_display
 from capsaicin.web.templating import templates
 
 
@@ -82,7 +84,7 @@ async def partial_planning_queue(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "partials/planning_queue.html",
-        {"data": data},
+        {"data": data, "status_order": PLANNING_STATUS_ORDER},
     )
 
 
@@ -94,10 +96,17 @@ async def partial_epic_content(request: Request) -> HTMLResponse:
     try:
         data = get_planning_detail(conn, epic_id, verbose=True)
     except (ValueError, LookupError, PlannedEpicNotFoundError):
-        return PlainTextResponse(f"Epic '{epic_id}' not found.", status_code=404)
+        return templates.TemplateResponse(
+            request,
+            "404.html",
+            {"message": f"Epic '{epic_id}' not found."},
+            status_code=404,
+        )
+
+    gate_display = get_epic_gate_display(data.epic.get("gate_reason"))
 
     return templates.TemplateResponse(
         request,
         "partials/epic_content.html",
-        {"data": data},
+        {"data": data, "gate_display": gate_display},
     )

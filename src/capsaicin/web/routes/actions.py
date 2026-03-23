@@ -346,13 +346,7 @@ async def action_shutdown(request: Request) -> HTMLResponse:
 
     threading.Timer(0.5, shutdown_server).start()
 
-    return HTMLResponse(
-        "<html><body style='font-family:system-ui;text-align:center;padding:4rem'>"
-        "<h1>Server stopped</h1>"
-        "<p>The capsaicin UI server has been shut down.</p>"
-        "<p style='color:#6c757d'>You can close this tab.</p>"
-        "</body></html>"
-    )
+    return templates.TemplateResponse(request, "shutdown.html")
 
 
 # ---------------------------------------------------------------------------

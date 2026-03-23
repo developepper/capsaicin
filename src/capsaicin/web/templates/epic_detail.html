@@ -3,9 +3,7 @@
 {% block content %}
 <h1>{{ data.epic.title or data.epic.problem_statement[:80] }}</h1>
 
-{% if error %}
-<div class="error-banner">{{ error }}</div>
-{% endif %}
+{% include "partials/error_banner.html" %}
 
 {% include "partials/epic_content.html" %}
 

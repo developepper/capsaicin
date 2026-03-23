@@ -9,7 +9,11 @@
   <script>
   (function() {
     var saved = localStorage.getItem('capsaicin-theme');
-    if (saved) document.documentElement.setAttribute('data-theme', saved);
+    if (saved) {
+      document.documentElement.setAttribute('data-theme', saved);
+    } else if (window.matchMedia('(prefers-color-scheme: dark)').matches) {
+      document.documentElement.setAttribute('data-theme', 'dark');
+    }
   })();
   </script>
 </head>
@@ -20,11 +24,11 @@
         <img src="{{ request.url_for('static', path='brand/capsaicin-logo.svg') }}" alt="capsaicin">
       </a>
     </nav>
-    <div style="display:flex;align-items:center;gap:.5rem">
+    <div class="header-controls">
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
         <span id="theme-icon"></span>
       </button>
-      <form method="post" action="{{ request.url_for('action_shutdown') }}" style="margin:0"
+      <form method="post" action="{{ request.url_for('action_shutdown') }}"
             onsubmit="return confirm('Stop the capsaicin UI server?')">
         <button type="submit" class="theme-toggle" title="Stop server">Stop</button>
       </form>
@@ -45,12 +49,15 @@
   function updateThemeIcon() {
     var el = document.getElementById('theme-icon');
     if (!el) return;
-    var isDark = document.documentElement.getAttribute('data-theme') === 'dark'
-      || (!document.documentElement.getAttribute('data-theme')
-          && window.matchMedia('(prefers-color-scheme: dark)').matches);
-    el.textContent = isDark ? 'Light' : 'Dark';
+    el.textContent = document.documentElement.getAttribute('data-theme') === 'dark' ? 'Light' : 'Dark';
   }
   updateThemeIcon();
+  window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', function(e) {
+    if (!localStorage.getItem('capsaicin-theme')) {
+      document.documentElement.setAttribute('data-theme', e.matches ? 'dark' : 'light');
+      updateThemeIcon();
+    }
+  });
   </script>
 </body>
 </html>

@@ -1,7 +1,7 @@
 <section id="recent-activity" hx-get="{{ request.url_for('partial_activity') }}" hx-trigger="every 30s, sse-activity from:body" hx-swap="outerHTML">
   <h2>Recent Activity</h2>
   {% if data.recent_runs %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Time</th><th>Ticket</th><th>Role</th><th>Result</th><th>Duration</th></tr></thead>
     <tbody>
       {% for r in data.recent_runs %}
@@ -14,7 +14,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No runs yet.</p>
   {% endif %}

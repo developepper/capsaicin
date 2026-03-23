@@ -1,7 +1,7 @@
 <section id="planning-gate" hx-get="{{ request.url_for('partial_planning_gate') }}" hx-trigger="every 30s, sse-planning-gate from:body" hx-swap="outerHTML">
   <h2>Planning Inbox{% if data.human_gate_epics %} ({{ data.human_gate_epics|length }}){% endif %}</h2>
   {% if data.human_gate_epics %}
-  <table>
+  <div class="table-wrap"><table>
     <thead><tr><th>Epic</th><th>Gate Reason</th><th>Since</th></tr></thead>
     <tbody>
       {% for e in data.human_gate_epics %}
@@ -12,7 +12,7 @@
       </tr>
       {% endfor %}
     </tbody>
-  </table>
+  </table></div>
   {% else %}
   <p class="empty">No epics awaiting human action.</p>
   {% endif %}
