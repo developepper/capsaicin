@@ -351,6 +351,102 @@ class TestPlanningDetailQuery:
         data = get_planning_detail(conn, r.epic_id, verbose=False)
         assert data.transition_history is None
 
+    def test_impl_tickets_returned_for_approved_epic(self, conn):
+        r = new_epic(conn, "p1", "problem")
+        _set_epic_status(conn, r.epic_id, "approved")
+        # Create planned tickets
+        conn.execute(
+            "INSERT INTO planned_tickets "
+            "(id, epic_id, sequence, title, goal, scope, non_goals, references_, implementation_notes) "
+            "VALUES (?, ?, ?, ?, ?, '[]', '[]', '[]', '[]')",
+            ("pt1", r.epic_id, 1, "Set up DB", "Create schema"),
+        )
+        conn.execute(
+            "INSERT INTO planned_tickets "
+            "(id, epic_id, sequence, title, goal, scope, non_goals, references_, implementation_notes) "
+            "VALUES (?, ?, ?, ?, ?, '[]', '[]', '[]', '[]')",
+            ("pt2", r.epic_id, 2, "Add API", "Build endpoints"),
+        )
+        # Create impl tickets linked to planned tickets
+        conn.execute(
+            "INSERT INTO tickets (id, project_id, title, description, status, planned_ticket_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("t1", "p1", "Set up DB", "Create schema", "done", "pt1"),
+        )
+        conn.execute(
+            "INSERT INTO tickets (id, project_id, title, description, status, planned_ticket_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("t2", "p1", "Add API", "Build endpoints", "ready", "pt2"),
+        )
+        # t2 depends on t1
+        conn.execute(
+            "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
+            ("t2", "t1"),
+        )
+        conn.commit()
+
+        data = get_planning_detail(conn, r.epic_id)
+        assert len(data.impl_tickets) == 2
+
+        it1 = data.impl_tickets[0]
+        assert it1["id"] == "t1"
+        assert it1["title"] == "Set up DB"
+        assert it1["status"] == "done"
+        assert it1["planned_ticket_id"] == "pt1"
+        assert it1["sequence"] == 1
+        assert it1["dependencies"] == []
+        assert it1["is_ready"] is True
+
+        it2 = data.impl_tickets[1]
+        assert it2["id"] == "t2"
+        assert it2["planned_ticket_id"] == "pt2"
+        assert it2["sequence"] == 2
+        assert len(it2["dependencies"]) == 1
+        assert it2["dependencies"][0]["depends_on_id"] == "t1"
+        assert it2["dependencies"][0]["status"] == "done"
+        assert it2["is_ready"] is True
+
+    def test_impl_tickets_empty_when_none_materialized(self, conn):
+        r = new_epic(conn, "p1", "problem")
+        data = get_planning_detail(conn, r.epic_id)
+        assert data.impl_tickets == []
+
+    def test_impl_ticket_not_ready_when_dep_not_done(self, conn):
+        r = new_epic(conn, "p1", "problem")
+        _set_epic_status(conn, r.epic_id, "approved")
+        conn.execute(
+            "INSERT INTO planned_tickets "
+            "(id, epic_id, sequence, title, goal, scope, non_goals, references_, implementation_notes) "
+            "VALUES (?, ?, ?, ?, ?, '[]', '[]', '[]', '[]')",
+            ("pt1", r.epic_id, 1, "First", "goal1"),
+        )
+        conn.execute(
+            "INSERT INTO planned_tickets "
+            "(id, epic_id, sequence, title, goal, scope, non_goals, references_, implementation_notes) "
+            "VALUES (?, ?, ?, ?, ?, '[]', '[]', '[]', '[]')",
+            ("pt2", r.epic_id, 2, "Second", "goal2"),
+        )
+        conn.execute(
+            "INSERT INTO tickets (id, project_id, title, description, status, planned_ticket_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("t1", "p1", "First", "goal1", "implementing", "pt1"),
+        )
+        conn.execute(
+            "INSERT INTO tickets (id, project_id, title, description, status, planned_ticket_id) "
+            "VALUES (?, ?, ?, ?, ?, ?)",
+            ("t2", "p1", "Second", "goal2", "ready", "pt2"),
+        )
+        conn.execute(
+            "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES (?, ?)",
+            ("t2", "t1"),
+        )
+        conn.commit()
+
+        data = get_planning_detail(conn, r.epic_id)
+        it2 = data.impl_tickets[1]
+        assert it2["is_ready"] is False
+        assert it2["dependencies"][0]["status"] == "implementing"
+
 
 # ---------------------------------------------------------------------------
 # Planning status rendering
