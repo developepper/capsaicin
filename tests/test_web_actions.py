@@ -711,3 +711,103 @@ class TestResumeUI:
         assert resp.status_code == 200
         assert "/actions/resume" in resp.text
         assert "Resume" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Create ticket action
+# ---------------------------------------------------------------------------
+
+
+class TestCreateTicketAction:
+    def test_dashboard_shows_create_form(self, web_client):
+        client, env = web_client
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Create New Ticket" in resp.text
+        assert "/tickets/new" in resp.text
+
+    def test_create_redirects_to_ticket_detail(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "New Ticket", "description": "Do the thing", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "/tickets/" in resp.headers["location"]
+
+    def test_create_persists_ticket(self, web_client):
+        client, env = web_client
+        client.post(
+            "/tickets/new",
+            data={
+                "title": "Persisted Ticket",
+                "description": "Check persistence",
+                "criteria": "",
+            },
+        )
+        row = (
+            env["conn"]
+            .execute(
+                "SELECT title, description, status FROM tickets WHERE title = ?",
+                ("Persisted Ticket",),
+            )
+            .fetchone()
+        )
+        assert row is not None
+        assert row["description"] == "Check persistence"
+        assert row["status"] == "ready"
+
+    def test_create_with_criteria(self, web_client):
+        client, env = web_client
+        client.post(
+            "/tickets/new",
+            data={
+                "title": "Criteria Ticket",
+                "description": "Has criteria",
+                "criteria": "First criterion\nSecond criterion",
+            },
+        )
+        row = (
+            env["conn"]
+            .execute("SELECT id FROM tickets WHERE title = ?", ("Criteria Ticket",))
+            .fetchone()
+        )
+        criteria = (
+            env["conn"]
+            .execute(
+                "SELECT description FROM acceptance_criteria WHERE ticket_id = ? ORDER BY id",
+                (row["id"],),
+            )
+            .fetchall()
+        )
+        assert len(criteria) == 2
+        assert criteria[0]["description"] == "First criterion"
+        assert criteria[1]["description"] == "Second criterion"
+
+    def test_create_missing_title_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "", "description": "No title", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_create_missing_description_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "Has title", "description": "", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_error_banner_shown_on_dashboard(self, web_client):
+        client, env = web_client
+        resp = client.get("/?error=Something+went+wrong")
+        assert resp.status_code == 200
+        assert "Something went wrong" in resp.text
+        assert "error-banner" in resp.text

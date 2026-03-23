@@ -15,9 +15,10 @@ async def dashboard(request: Request) -> HTMLResponse:
     project_id = request.app.state.project_id
 
     data = get_dashboard(conn, project_id)
+    error = request.query_params.get("error")
 
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"data": data},
+        {"data": data, "error": error},
     )

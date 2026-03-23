@@ -27,6 +27,7 @@ from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.actions import (
     action_approve,
     action_complete,
+    action_create_ticket,
     action_defer,
     action_loop,
     action_resume,
@@ -90,6 +91,12 @@ def create_app(
     """
     routes = [
         Route("/", dashboard, name="dashboard"),
+        Route(
+            "/tickets/new",
+            action_create_ticket,
+            methods=["POST"],
+            name="action_create_ticket",
+        ),
         Route("/tickets/{ticket_id}", ticket_detail, name="ticket_detail"),
         # Ticket action routes — POST only
         Route(
