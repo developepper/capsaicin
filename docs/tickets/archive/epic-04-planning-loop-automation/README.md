@@ -67,13 +67,13 @@ implementation loop.
 
 The intended implementation order is:
 
-1. [T01](./T01.md) planning data model and state-machine foundation
-2. [T02](./T02.md) planner and planning-reviewer contracts
-3. [T03](./T03.md) planning command surface and read models
-4. [T04](./T04.md) planning loop orchestration and resume behavior
-5. [T05](./T05.md) approval flow and implementation-ticket materialization
-6. [T06](./T06.md) planning UI surfaces
-7. [T07](./T07.md) explicit implementation completion from `pr-ready` to `done`
+1. [T01](T01.md) planning data model and state-machine foundation
+2. [T02](T02.md) planner and planning-reviewer contracts
+3. [T03](T03.md) planning command surface and read models
+4. [T04](T04.md) planning loop orchestration and resume behavior
+5. [T05](T05.md) approval flow and implementation-ticket materialization
+6. [T06](T06.md) planning UI surfaces
+7. [T07](T07.md) explicit implementation completion from `pr-ready` to `done`
 
 ## Open Design Constraints
 
@@ -88,20 +88,20 @@ The intended implementation order is:
 
 ## References
 
-- [docs/overview.md](../../overview.md)
-- [docs/architecture.md](../../architecture.md)
-- [docs/state-machine.md](../../state-machine.md)
-- [docs/data-model.md](../../data-model.md)
-- [docs/adapters.md](../../adapters.md)
-- [docs/configuration.md](../../configuration.md)
-- [docs/cli.md](../../cli.md)
-- [docs/tickets/README.md](../README.md)
-- [docs/tickets/roadmap.md](../roadmap.md)
-- [src/capsaicin/db.py](../../../src/capsaicin/db.py)
-- [src/capsaicin/state_machine.py](../../../src/capsaicin/state_machine.py)
-- [src/capsaicin/orchestrator.py](../../../src/capsaicin/orchestrator.py)
-- [src/capsaicin/prompts.py](../../../src/capsaicin/prompts.py)
-- [src/capsaicin/loop.py](../../../src/capsaicin/loop.py)
-- [src/capsaicin/app/context.py](../../../src/capsaicin/app/context.py)
-- [src/capsaicin/app/commands/loop.py](../../../src/capsaicin/app/commands/loop.py)
-- [src/capsaicin/migrations/0001_initial_schema.sql](../../../src/capsaicin/migrations/0001_initial_schema.sql)
+- [docs/overview.md](../../../overview.md)
+- [docs/architecture.md](../../../architecture.md)
+- [docs/state-machine.md](../../../state-machine.md)
+- [docs/data-model.md](../../../data-model.md)
+- [docs/adapters.md](../../../adapters.md)
+- [docs/configuration.md](../../../configuration.md)
+- [docs/cli.md](../../../cli.md)
+- [docs/tickets/README.md](../../README.md)
+- [docs/tickets/roadmap.md](../../roadmap.md)
+- [src/capsaicin/db.py](../../../../src/capsaicin/db.py)
+- [src/capsaicin/state_machine.py](../../../../src/capsaicin/state_machine.py)
+- [src/capsaicin/orchestrator.py](../../../../src/capsaicin/orchestrator.py)
+- [src/capsaicin/prompts.py](../../../../src/capsaicin/prompts.py)
+- [src/capsaicin/loop.py](../../../../src/capsaicin/loop.py)
+- [src/capsaicin/app/context.py](../../../../src/capsaicin/app/context.py)
+- [src/capsaicin/app/commands/loop.py](../../../../src/capsaicin/app/commands/loop.py)
+- [src/capsaicin/migrations/0001_initial_schema.sql](../../../../src/capsaicin/migrations/0001_initial_schema.sql)
