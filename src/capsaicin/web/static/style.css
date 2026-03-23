@@ -398,6 +398,13 @@ form.htmx-request .btn { opacity: .6; pointer-events: none; }
 .readiness-blocked { color: var(--finding-blocking); font-weight: 600; }
 
 .impl-tickets-summary { display: flex; gap: .5rem; flex-wrap: wrap; }
+.planned-ticket-title { font-weight: 600; margin-bottom: .25rem; }
+.planned-ticket-goal {
+  white-space: normal;
+  overflow-wrap: anywhere;
+  min-width: 20rem;
+}
+.planned-ticket-details { margin-top: .35rem; }
 
 /* ================================================================
    Diagnostic & error banners

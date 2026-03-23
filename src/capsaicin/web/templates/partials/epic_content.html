@@ -172,8 +172,41 @@
       {% for pt in data.planned_tickets %}
       <tr>
         <td>{{ pt.sequence }}</td>
-        <td>{{ pt.title }}</td>
-        <td>{{ pt.goal[:120] if pt.goal else "\u2014" }}</td>
+        <td>
+          <div class="planned-ticket-title">{{ pt.title }}</div>
+          <details class="planned-ticket-details">
+            <summary>Show ticket brief</summary>
+            {% if pt.goal %}
+            <h3>Goal</h3>
+            <pre class="agent-text">{{ pt.goal }}</pre>
+            {% endif %}
+            {% if data.ticket_criteria.get(pt.id, []) %}
+            <h3>Acceptance Criteria</h3>
+            <ul>
+              {% for criterion in data.ticket_criteria.get(pt.id, []) %}
+              <li>{{ criterion.description }}</li>
+              {% endfor %}
+            </ul>
+            {% endif %}
+            {% if pt.scope %}
+            <h3>Scope</h3>
+            <pre class="agent-text">{{ pt.scope }}</pre>
+            {% endif %}
+            {% if pt.non_goals %}
+            <h3>Non-goals</h3>
+            <pre class="agent-text">{{ pt.non_goals }}</pre>
+            {% endif %}
+            {% if pt.references_ %}
+            <h3>References</h3>
+            <pre class="agent-text">{{ pt.references_ }}</pre>
+            {% endif %}
+            {% if pt.implementation_notes %}
+            <h3>Implementation Notes</h3>
+            <pre class="agent-text">{{ pt.implementation_notes }}</pre>
+            {% endif %}
+          </details>
+        </td>
+        <td class="planned-ticket-goal">{{ pt.goal if pt.goal else "\u2014" }}</td>
         <td>{{ data.ticket_criteria.get(pt.id, [])|length }}</td>
       </tr>
       {% endfor %}
