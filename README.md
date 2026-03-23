@@ -4,14 +4,14 @@
 
 # capsaicin
 
-`capsaicin` is a local-first ticket orchestrator for AI-assisted software development. It runs an implementation loop around one ticket at a time: implement, review, revise, stop for human approval, then move on.
+`capsaicin` is a local-first ticket orchestrator for AI-assisted software development. It now supports both an upstream planning loop and a downstream implementation loop, with explicit review and human gates in both flows.
 
 The intended workflow split is:
 
 - implementation loop: `Claude Code` as implementer, `Codex` as reviewer
 - planning loop: `Codex` as planner, `Claude Code` as planning reviewer
 
-The current MVP runtime is still built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the only implemented adapter backend today.
+The current runtime is built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the only implemented adapter backend today.
 
 ## What It Does
 
@@ -30,29 +30,41 @@ It is designed to orchestrate the workflow, not replace human judgment.
 
 ## Current Scope
 
-The implementation-loop MVP is available now.
+The local planning and implementation loops are available now.
 
 Included:
 
 - `capsaicin init`
+- `capsaicin plan new`
+- `capsaicin plan draft`
+- `capsaicin plan review`
+- `capsaicin plan revise`
+- `capsaicin plan approve`
+- `capsaicin plan materialize`
+- `capsaicin plan defer`
+- `capsaicin plan unblock`
+- `capsaicin plan loop`
+- `capsaicin plan status`
 - `capsaicin ticket add`
 - `capsaicin ticket dep`
 - `capsaicin ticket run`
 - `capsaicin ticket review`
 - `capsaicin ticket approve`
 - `capsaicin ticket revise`
+- `capsaicin ticket complete`
 - `capsaicin ticket defer`
 - `capsaicin ticket unblock`
 - `capsaicin status`
 - `capsaicin resume`
 - `capsaicin loop`
 - `capsaicin ui`
+- `capsaicin doctor`
 
 Not in scope yet:
 
 - GitHub issue creation
 - pull request creation
-- planning-loop automation
+- Codex adapter support
 - hosted sync
 
 ## Requirements
@@ -62,9 +74,10 @@ Not in scope yet:
 - a git repository to run against
 - the `Claude Code` CLI installed and available on `PATH` as `claude`
 
-Today that is the only implemented adapter backend. The intended long-term role
-split is `Claude Code` for implementation and plan review, with `Codex` for
-ticket review and planning once Codex adapter support lands.
+Today that is the only implemented adapter backend. The current runtime uses
+the Claude adapter for planner, implementer, and reviewer runs. The intended
+long-term role split is `Claude Code` for implementation and plan review, with
+`Codex` for ticket review and planning once Codex adapter support lands.
 
 The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`, and `python-multipart` — all installed automatically via `pip install`.
 
@@ -123,7 +136,7 @@ Inside the repository you want to manage:
 capsaicin init --project "My Project" --repo .
 ```
 
-Then add a ticket:
+If you want to start directly in the implementation loop, add a ticket:
 
 ```bash
 capsaicin ticket add \
@@ -151,6 +164,22 @@ Inspect status:
 capsaicin status
 ```
 
+If you want to start from planning instead, create an epic from a problem
+statement:
+
+```bash
+capsaicin plan new --problem "Add a complete health-check and diagnostics workflow for the service."
+capsaicin plan loop
+capsaicin plan status
+```
+
+When a plan reaches `human-gate`, approve it to materialize implementation
+tickets:
+
+```bash
+capsaicin plan approve --rationale "Scope and sequencing look right"
+```
+
 If the ticket reaches `human-gate`, choose one:
 
 ```bash
@@ -164,14 +193,15 @@ capsaicin ticket defer --rationale "Waiting on API decision"
 The normal operator workflow is:
 
 1. Initialize a project in the repo.
-2. Add one or more tickets.
-3. Optionally add dependencies.
-4. Run `capsaicin ticket run` for a specific ticket or let it auto-select the next runnable `ready` ticket.
-5. Run `capsaicin ticket review`.
-6. If review fails, the ticket moves to `revise`; run `capsaicin ticket run` again.
-7. If review passes or escalates, the ticket moves to `human-gate`.
-8. Make a human decision with `approve`, `revise`, or `defer`.
-9. Repeat for the next ticket.
+2. Either create a planning epic with `capsaicin plan new` or add tickets manually with `capsaicin ticket add`.
+3. If you started in planning, run `capsaicin plan loop` until the epic reaches `human-gate`, then approve it to materialize tickets.
+4. Optionally add or inspect ticket dependencies.
+5. Run `capsaicin ticket run` for a specific ticket or let it auto-select the next runnable `ready` ticket.
+6. Run `capsaicin ticket review`.
+7. If review fails, the ticket moves to `revise`; run `capsaicin ticket run` again.
+8. If review passes or escalates, the ticket moves to `human-gate`.
+9. Make a human decision with `approve`, `revise`, or `defer`.
+10. Repeat for the next ticket.
 
 If you prefer an in-process loop, use:
 
@@ -249,6 +279,49 @@ capsaicin ticket dep TICKET_ID --on DEPENDENCY_ID
 ```
 
 The dependent ticket will not run until the dependency is `done`.
+
+### `capsaicin plan new`
+
+Create a planning epic from a problem statement:
+
+```bash
+capsaicin plan new --problem "Add a health-check and diagnostics workflow"
+```
+
+### `capsaicin plan loop`
+
+Run the planning draft-review-revise loop automatically:
+
+```bash
+capsaicin plan loop
+capsaicin plan loop EPIC_ID --max-cycles 2
+```
+
+This drives planner and planning-reviewer runs until the epic reaches
+`human-gate` or `blocked`.
+
+### `capsaicin plan approve`
+
+Approve a plan and materialize implementation tickets:
+
+```bash
+capsaicin plan approve
+capsaicin plan approve EPIC_ID --rationale "Ready to implement"
+capsaicin plan approve EPIC_ID --force
+```
+
+`--force` is for overwriting previously materialized docs that were edited
+manually.
+
+### `capsaicin plan status`
+
+Show planning summary or one epic in detail:
+
+```bash
+capsaicin plan status
+capsaicin plan status EPIC_ID
+capsaicin plan status EPIC_ID --verbose
+```
 
 ### `capsaicin ticket run`
 
@@ -473,7 +546,9 @@ Important points:
 
 - `config.toml` is the source of truth
 - repo paths are stored as absolute paths
-- current shipped defaults still assume the `claude` CLI for both roles
+- current shipped defaults still assume the `claude` CLI for both adapter roles
+- planner runs currently use `[adapters.implementer]`
+- planning reviewer runs currently use `[adapters.reviewer]`
 - the intended implementation-loop pairing is `Claude Code` implementer plus
   `Codex` reviewer
 - the intended planning-loop pairing is `Codex` planner plus `Claude Code`

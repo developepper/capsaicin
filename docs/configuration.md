@@ -1,6 +1,7 @@
 # Configuration
 
-`capsaicin` needs explicit project and runtime configuration.
+`capsaicin` needs explicit project and runtime configuration for both the
+planning and implementation loops.
 
 ## Source of Truth
 
@@ -12,7 +13,7 @@ independent authority.
 
 ## Configuration Areas
 
-Likely configuration areas:
+Current configuration areas:
 
 - agent selection by role
 - adapter command paths
@@ -63,6 +64,10 @@ Semantics:
 - reviewer `allowed_tools` maps to Claude Code `--allowed-tools`
 - prompt assembly is handled by the adapter; template customization is
   deferred
+- the current runtime uses `[adapters.implementer]` for both ticket
+  implementation and planning draft/revise runs
+- the current runtime uses `[adapters.reviewer]` for both ticket review and
+  planning review runs
 
 Intended role split once Codex adapter support lands:
 
@@ -98,6 +103,17 @@ Current implementation note:
   step
 - `loop`: requires both implementer and reviewer adapter config plus cycle
   limits
+- `plan new`: no adapter config required
+- `plan draft`: no adapter config required
+- `plan review`: no adapter config required
+- `plan revise`: no adapter config required
+- `plan approve`: no adapter config required
+- `plan materialize`: no adapter config required
+- `plan defer`: no adapter config required
+- `plan unblock`: no adapter config required
+- `plan status`: no adapter config required
+- `plan loop`: requires both implementer and reviewer adapter config plus
+  cycle limits
 
 ## Non-goal
 

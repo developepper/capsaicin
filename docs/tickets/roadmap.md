@@ -66,41 +66,40 @@ If the project evolves well, it should remain centered on:
 
 Adapters and models can change over time. The workflow engine is the product.
 
+Completed foundations:
+
+- implementation loop foundation
+- reliability and diagnostics:
+  [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)
+- local operator UI:
+  [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)
+- planning-loop automation:
+  [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)
+
 ## Short-Term Priorities
 
 This section is the near-term sequencing view. `Evolution` above is the
 long-term arc; this section is just the next set of work streams to keep in
 focus.
 
-1. planning-loop automation (scoped as
-   [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/))
-2. planning-to-implementation continuity after materialization
-3. GitHub handoff and PR automation
-4. workflow policy and capability modeling to support cleaner backend
+1. planning-to-implementation continuity after materialization
+2. GitHub handoff and PR automation
+3. workflow policy and capability modeling to support cleaner backend
    diversification
-
-Completed foundations:
-
-- reliability and diagnostics: [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)
-- local operator UI: [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)
 
 Multi-ticket orchestration remains later work.
 
-## Planning Loop
+## Planning Loop Follow-Ons
 
-Extend the product upstream from manual ticket entry to structured planning and
-review.
-
-This work is now scoped as
-[epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/).
+The base planning loop is now shipped. The remaining work is around smoother
+handoff, stronger exports, and operational polish around the planning surfaces.
 
 Key areas:
 
-- problem statement intake
-- planner and reviewer runs for plan creation
-- epic and ticket records for planning state
-- human approval before issue export
-- issue-body generation from approved plans
+- better issue-body and export generation from approved plans
+- richer operator views around plan history and materialization state
+- cleaner transitions from approved plan to active implementation execution
+- stronger auditability and policy controls around planning decisions
 
 ## GitHub Handoff And PR Automation
 
@@ -116,8 +115,6 @@ Candidate areas:
 ## Planning-To-Implementation Continuity
 
 Close the operator gap between approved plans and active implementation work.
-
-This becomes relevant after planning-loop automation exists.
 
 Candidate areas:
 

@@ -139,18 +139,18 @@ Primary targets:
 Initial backend priority:
 
 1. `Claude Code` implementer adapter
-2. `Codex` reviewer adapter
-3. planning-loop role support: `Codex` planner and `Claude Code` planning
-   reviewer
+2. planning-loop role support on the same local adapter foundation
+3. `Codex` reviewer/planner adapter support
 
 The intended steady-state pairing is:
 
 - implementation loop: `Claude Code` implementer, `Codex` reviewer
 - planning loop: `Codex` planner, `Claude Code` reviewer
 
-The current shipped runtime is still Claude-only. Until Codex adapter support
-lands, these pairings remain product direction rather than implemented runtime
-defaults.
+The planning loop is now implemented, but the shipped runtime is still
+Claude-only. Planner runs currently reuse the implementer adapter config and
+planning-reviewer runs reuse the reviewer adapter config. Codex role support
+remains future adapter work rather than a shipped runtime default.
 
 ## Application Layer
 

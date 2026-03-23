@@ -20,16 +20,18 @@ Non-goals:
 - hosted synchronization
 - broad plugin infrastructure
 - deep GitHub automation on day one
-- full planning-loop automation on day one
+- full remote issue/PR automation on day one
 
 Command set:
 
 1. `capsaicin init` plus SQLite schema and config
-2. `capsaicin ticket run` to invoke an implementer adapter and persist the run
-3. `capsaicin ticket review` to invoke a reviewer adapter in a fresh session
-4. bounded revise and re-review loop support
-5. `capsaicin status` to render current workflow state
-6. planning-loop support and GitHub export as separate work streams
+2. `capsaicin plan *` to create, review, approve, and materialize planning
+   epics
+3. `capsaicin ticket run` to invoke an implementer adapter and persist the run
+4. `capsaicin ticket review` to invoke a reviewer adapter in a fresh session
+5. bounded revise and re-review loop support in both loops
+6. `capsaicin status` and `capsaicin plan status` to render current workflow
+   state
 
 Intended role split once multi-backend adapter selection exists:
 
@@ -39,7 +41,8 @@ Intended role split once multi-backend adapter selection exists:
 Current implementation note:
 
 - the shipped command layer still instantiates the Claude adapter for both
-  implementer and reviewer roles
+  adapter roles; planning draft runs reuse the implementer config and planning
+  review runs reuse the reviewer config
 
 ## Command Contract
 
@@ -73,7 +76,7 @@ capsaicin ticket add --from FILE
 
 Behavior:
 
-- create a manual ticket because planning-loop automation is handled separately
+- create a manual ticket for direct implementation work
 - insert the ticket in `ready`
 - insert acceptance criteria in `pending`
 - print a human-readable ticket brief to stdout (rendered file output to
@@ -107,6 +110,161 @@ Behavior:
 - validate both tickets exist
 - reject cycles before writing the dependency edge
 - insert the dependency if valid
+
+### `capsaicin plan new`
+
+Usage:
+
+```text
+capsaicin plan new --problem "PROBLEM STATEMENT"
+```
+
+Behavior:
+
+- create a `planned_epics` row in `new`
+- persist the problem statement as the planning brief
+- print the created epic ID and current status
+
+### `capsaicin plan draft`
+
+Usage:
+
+```text
+capsaicin plan draft [EPIC_ID]
+```
+
+Behavior:
+
+- select an epic in `new` or `revise`
+- transition it into `drafting`
+- act as a manual stepping command rather than invoking the planner pipeline
+- leave planner execution to `capsaicin plan loop`
+
+### `capsaicin plan review`
+
+Usage:
+
+```text
+capsaicin plan review [EPIC_ID]
+```
+
+Behavior:
+
+- select an epic in `drafting`
+- transition it into `in-review`
+- act as a manual stepping command rather than invoking the planning reviewer
+  pipeline
+- leave planning review execution to `capsaicin plan loop`
+
+### `capsaicin plan revise`
+
+Usage:
+
+```text
+capsaicin plan revise [EPIC_ID] [--add-finding DESCRIPTION]
+```
+
+Behavior:
+
+- accept epics only from `human-gate`
+- optionally persist human-supplied findings
+- record the human decision
+- move the epic back to `revise`
+
+### `capsaicin plan approve`
+
+Usage:
+
+```text
+capsaicin plan approve [EPIC_ID] [--rationale TEXT] [--force]
+```
+
+Behavior:
+
+- accept epics only from `human-gate`
+- record a human approval decision
+- move the epic to `approved`
+- materialize implementation tickets and ticket docs under `docs/tickets/`
+- respect `--force` when existing materialized docs were edited manually
+
+### `capsaicin plan materialize`
+
+Usage:
+
+```text
+capsaicin plan materialize EPIC_ID [--force]
+```
+
+Behavior:
+
+- accept epics only from `approved`
+- write or refresh the materialized implementation ticket docs
+- create or update implementation-loop tickets linked back to the plan
+
+### `capsaicin plan defer`
+
+Usage:
+
+```text
+capsaicin plan defer [EPIC_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- accept epics only from `human-gate`
+- record a human defer decision
+- move the epic to `blocked`
+
+### `capsaicin plan unblock`
+
+Usage:
+
+```text
+capsaicin plan unblock EPIC_ID [--reason TEXT]
+```
+
+Behavior:
+
+- accept epics only from `blocked`
+- record a human unblock decision
+- move the epic back to `new`
+
+### `capsaicin plan status`
+
+Usage:
+
+```text
+capsaicin plan status [EPIC_ID] [--verbose]
+```
+
+Behavior without `EPIC_ID`:
+
+- show planning totals by epic status
+- show epics waiting in `human-gate`
+- show active and blocked epics
+
+Behavior with `EPIC_ID`:
+
+- show the planning brief, status, cycle counters, and materialization state
+- show planned tickets and dependencies
+- show open planning findings
+- with `--verbose`, include run and transition history
+
+### `capsaicin plan loop`
+
+Usage:
+
+```text
+capsaicin plan loop [EPIC_ID] [--max-cycles N]
+```
+
+Behavior:
+
+- run the planning draft-review-revise loop automatically
+- persist the same state transitions as `plan draft` and `plan review`
+- stop at `human-gate`
+- stop at `blocked`
+- never auto-approve
 
 ### `capsaicin ticket run`
 
@@ -280,6 +438,21 @@ Behavior:
 - optionally reset cycle and retry counters
 - set `orchestrator_state.status = 'idle'`
 
+### `capsaicin ticket complete`
+
+Usage:
+
+```text
+capsaicin ticket complete [TICKET_ID] [--rationale TEXT]
+```
+
+Behavior:
+
+- accept tickets only from `pr-ready`
+- record a human completion decision
+- move the ticket to `done`
+- unblock dependent tickets whose prerequisites are now satisfied
+
 ### `capsaicin ticket defer`
 
 Usage:
@@ -431,3 +604,20 @@ Runtime model:
 - SSE endpoints poll the database on a short interval rather than using
   filesystem or database notifications
 - the server runs until the operator presses Ctrl+C
+
+### `capsaicin doctor`
+
+Usage:
+
+```text
+capsaicin doctor [--repo PATH] [--project SLUG]
+```
+
+Behavior:
+
+- run preflight checks against the resolved repo and project config
+- verify the configured adapter command is available on `PATH`
+- verify the repo path exists and is a git worktree
+- warn on a dirty working tree
+- verify local Claude permission settings required for write-capable runs
+- exit non-zero when required checks fail
