@@ -238,6 +238,75 @@ async def action_plan_loop(request: Request) -> RedirectResponse:
     )
 
 
+async def action_continue_implementation(request: Request) -> RedirectResponse:
+    """POST /epics/{epic_id}/continue-implementation — trigger implementation loop for next ready ticket."""
+    db_path = request.app.state.db_path
+    project_id = request.app.state.project_id
+    config_path = request.app.state.config_path
+    log_path = request.app.state.log_path
+    epic_id = request.path_params["epic_id"]
+    conn = request.state.conn
+
+    form = await request.form()
+    ticket_id = form.get("ticket_id", "").strip() or None
+
+    # Find the next ready ticket scoped to this epic
+    from capsaicin.app.queries.planning_detail import _load_impl_tickets
+
+    impl_tickets = _load_impl_tickets(conn, epic_id)
+
+    if ticket_id:
+        # Validate the selected ticket belongs to this epic and is eligible
+        match = [t for t in impl_tickets if t["id"] == ticket_id]
+        if not match:
+            return _error_redirect(
+                request, epic_id, "Selected ticket does not belong to this epic."
+            )
+        t = match[0]
+        if t["status"] not in ("ready", "revise"):
+            return _error_redirect(
+                request,
+                epic_id,
+                f"Ticket is in '{t['status']}' status, not ready for implementation.",
+            )
+        if t["status"] == "ready" and not t["is_ready"]:
+            return _error_redirect(
+                request, epic_id, "Ticket has unsatisfied dependencies."
+            )
+    else:
+        # Auto-select: prefer revise, then ready with deps satisfied
+        candidate = None
+        for t in impl_tickets:
+            if t["status"] == "revise":
+                candidate = t
+                break
+        if candidate is None:
+            for t in impl_tickets:
+                if t["status"] == "ready" and t["is_ready"]:
+                    candidate = t
+                    break
+        if candidate is None:
+            return _error_redirect(
+                request,
+                epic_id,
+                "No tickets are ready for implementation (all blocked by dependencies or already in progress/done).",
+            )
+        ticket_id = candidate["id"]
+
+    _run_in_background(
+        _bg_continue_implementation,
+        db_path,
+        project_id,
+        config_path,
+        ticket_id,
+        log_path,
+    )
+
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
+
+
 async def action_materialize_epic(request: Request) -> RedirectResponse:
     """POST /epics/{epic_id}/materialize — re-materialize an approved epic."""
     conn = request.state.conn
@@ -332,5 +401,26 @@ def _bg_plan_loop(db_path, project_id, config_path, epic_id, log_path) -> None:
         )
     except Exception:
         _log.exception("Background plan loop failed for epic %s", epic_id)
+    finally:
+        conn.close()
+
+
+def _bg_continue_implementation(
+    db_path, project_id, config_path, ticket_id, log_path
+) -> None:
+    from capsaicin.app.commands.loop import loop
+
+    config = load_config(config_path)
+    conn = get_connection(db_path)
+    try:
+        loop(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            ticket_id=ticket_id,
+            log_path=log_path,
+        )
+    except Exception:
+        _log.exception("Background implementation loop failed for ticket %s", ticket_id)
     finally:
         conn.close()

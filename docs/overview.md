@@ -60,7 +60,7 @@ It should not:
 ### Planning Loop
 
 The planning loop starts from a problem statement and ends with an approved
-local plan that is ready to seed into GitHub issues.
+local plan that can be materialized into implementation tickets.
 
 Flow:
 
@@ -71,12 +71,13 @@ Flow:
 4. If findings exist, the planner revises the plan.
 5. Repeat until review returns no blocking findings.
 6. Human approves the plan.
-7. GitHub epic and ticket issues are created from the approved local plan.
+7. The approved plan is materialized into implementation tickets for the
+   downstream implementation loop.
 
 ### Implementation Loop
 
-The implementation loop starts from one approved ticket and ends only when that
-ticket is PR-ready.
+The implementation loop starts from one approved or manually created ticket and
+ends only when that ticket is PR-ready.
 
 Flow:
 
@@ -100,8 +101,8 @@ Separate review catches real problems:
 - architecture drift
 - scope expansion that should have been split into a follow-up ticket
 
-The workflow already works well manually. The missing piece is automation around
-state, handoff, persistence, and escalation.
+That workflow can now run end to end locally. Remaining work is mostly around
+backend diversification, GitHub handoff, and stronger policy controls.
 
 ## Actor Model
 
@@ -116,6 +117,13 @@ Recommended dual-agent mode:
 
 - implementation loop: `Claude Code` for implementation, `Codex` for review
 - planning loop: `Codex` for planning, `Claude Code` for review
+
+Current runtime note:
+
+- both loops are shipped
+- the current adapter implementation is still Claude-only
+- role-specialized Codex/Claude pairings remain the intended destination once
+  adapter diversification lands
 
 Single-agent mode should still be supported, but review must happen in a
 separate fresh session. The same session should not certify its own completion.

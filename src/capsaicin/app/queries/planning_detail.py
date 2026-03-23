@@ -14,8 +14,62 @@ class PlanningDetailData:
     planned_tickets: list[dict] = field(default_factory=list)
     ticket_criteria: dict[str, list[dict]] = field(default_factory=dict)
     open_findings: list[dict] = field(default_factory=list)
+    impl_tickets: list[dict] = field(default_factory=list)
     last_run: dict | None = None
     transition_history: list[dict] | None = None
+
+
+def _load_impl_tickets(
+    conn: sqlite3.Connection,
+    epic_id: str,
+) -> list[dict]:
+    """Load materialized implementation tickets for an epic with dependency info."""
+    rows = conn.execute(
+        "SELECT t.id, t.title, t.status, t.planned_ticket_id, pt.sequence "
+        "FROM tickets t "
+        "JOIN planned_tickets pt ON pt.id = t.planned_ticket_id "
+        "WHERE pt.epic_id = ? "
+        "ORDER BY pt.sequence",
+        (epic_id,),
+    ).fetchall()
+    if not rows:
+        return []
+
+    ticket_ids = [r["id"] for r in rows]
+    placeholders = ", ".join("?" for _ in ticket_ids)
+
+    # Load all dependencies for these tickets in one query
+    dep_rows = conn.execute(
+        f"SELECT td.ticket_id, td.depends_on_id, t.status AS dep_status "
+        f"FROM ticket_dependencies td "
+        f"JOIN tickets t ON t.id = td.depends_on_id "
+        f"WHERE td.ticket_id IN ({placeholders})",
+        ticket_ids,
+    ).fetchall()
+
+    # Group dependencies by ticket_id
+    deps_by_ticket: dict[str, list[dict]] = {}
+    for dep in dep_rows:
+        deps_by_ticket.setdefault(dep["ticket_id"], []).append(
+            {"depends_on_id": dep["depends_on_id"], "status": dep["dep_status"]}
+        )
+
+    result = []
+    for r in rows:
+        deps = deps_by_ticket.get(r["id"], [])
+        is_ready = all(d["status"] == "done" for d in deps) if deps else True
+        result.append(
+            {
+                "id": r["id"],
+                "title": r["title"],
+                "status": r["status"],
+                "planned_ticket_id": r["planned_ticket_id"],
+                "sequence": r["sequence"],
+                "dependencies": deps,
+                "is_ready": is_ready,
+            }
+        )
+    return result
 
 
 def get_planning_detail(
@@ -52,11 +106,14 @@ def get_planning_detail(
     ).fetchone()
     last_run = dict(last_run) if last_run else None
 
+    impl_tickets = _load_impl_tickets(conn, epic_id)
+
     data = PlanningDetailData(
         epic=epic,
         planned_tickets=planned_tickets,
         ticket_criteria=ticket_criteria,
         open_findings=open_findings,
+        impl_tickets=impl_tickets,
         last_run=last_run,
     )
 

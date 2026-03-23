@@ -1,7 +1,8 @@
 # Capsaicin Docs
 
 This directory holds the working design and implementation specs for
-`capsaicin`.
+`capsaicin`, covering both the planning loop and the implementation loop as
+they exist today.
 
 Recommended reading order:
 
@@ -15,7 +16,8 @@ Recommended reading order:
 
 Document roles:
 
-- `overview.md`: product vision, workflow, actors, and design principles
+- `overview.md`: product vision, current workflow shape, actors, and design
+  principles
 - `architecture.md`: local-first system shape, storage strategy, and runtime
   direction
 - `state-machine.md`: ticket states, transition rules, retries, cycles, human
@@ -24,6 +26,6 @@ Document roles:
 - `adapters.md`: agent invocation model, adapter contract, run envelopes, and
   reviewer isolation rules
 - `configuration.md`: configuration surface and defaults
-- `cli.md`: command contract and operator-facing behavior, including the
-  `capsaicin ui` web interface
+- `cli.md`: command contract and operator-facing behavior for both loops,
+  including the `capsaicin ui` web interface
 - `tickets/`: roadmap, planning, and archived epics

@@ -165,7 +165,7 @@ def get_ticket_detail(conn: sqlite3.Connection, ticket_id: str) -> dict | None:
     row = conn.execute(
         "SELECT id, title, description, status, status_changed_at, "
         "current_cycle, current_impl_attempt, current_review_attempt, "
-        "gate_reason, blocked_reason, created_at "
+        "gate_reason, blocked_reason, created_at, planned_ticket_id "
         "FROM tickets WHERE id = ?",
         (ticket_id,),
     ).fetchone()

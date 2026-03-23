@@ -393,6 +393,11 @@ form.htmx-request .btn { opacity: .6; pointer-events: none; }
 .finding-warning { color: var(--finding-warning); }
 .finding-info { color: var(--finding-info); }
 
+/* Readiness badges */
+.readiness-ready { color: var(--criteria-met); font-weight: 600; }
+.readiness-blocked { color: var(--finding-blocking); font-weight: 600; }
+
+.impl-tickets-summary { display: flex; gap: .5rem; flex-wrap: wrap; }
 
 /* ================================================================
    Diagnostic & error banners
