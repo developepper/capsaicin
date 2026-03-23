@@ -39,6 +39,7 @@ from capsaicin.web.routes.actions import (
     action_unblock,
 )
 from capsaicin.web.routes.dashboard import dashboard
+from capsaicin.web.routes.doctor import doctor_page
 from capsaicin.web.routes.events import (
     dashboard_events,
     epic_events,
@@ -92,6 +93,7 @@ def create_app(
     """
     routes = [
         Route("/", dashboard, name="dashboard"),
+        Route("/doctor", doctor_page, name="doctor"),
         Route(
             "/tickets/new",
             action_create_ticket,

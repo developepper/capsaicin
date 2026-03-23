@@ -1,0 +1,46 @@
+{% extends "base.html" %}
+{% block title %}Health Check — capsaicin{% endblock %}
+{% block content %}
+<h1>Health Check</h1>
+<p class="back-link"><a href="{{ request.url_for('dashboard') }}">Back to dashboard</a></p>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+{% if report %}
+<table>
+  <thead>
+    <tr><th>Status</th><th>Check</th><th>Details</th></tr>
+  </thead>
+  <tbody>
+    {% for check in report.checks %}
+    <tr>
+      <td>
+        {% if check.status == "pass" %}
+          <span class="badge badge-pass">PASS</span>
+        {% elif check.status == "warn" %}
+          <span class="badge badge-warn">WARN</span>
+        {% else %}
+          <span class="badge badge-fail">FAIL</span>
+        {% endif %}
+      </td>
+      <td>{{ check.message }}</td>
+      <td>{% if check.detail and check.status != "pass" %}{{ check.detail }}{% endif %}</td>
+    </tr>
+    {% endfor %}
+  </tbody>
+</table>
+
+<section class="doctor-summary">
+  {% if report.passed and not report.has_warnings %}
+    <p class="summary summary-pass">All checks passed. Environment is ready.</p>
+  {% elif report.passed %}
+    <p class="summary summary-warn">All checks passed with {{ report.warnings|length }} warning(s). Environment is ready.</p>
+  {% else %}
+    <p class="summary summary-fail">{{ report.failures|length }} check(s) failed. Fix the issues above before running agent work.</p>
+  {% endif %}
+</section>
+{% endif %}
+
+{% endblock %}
