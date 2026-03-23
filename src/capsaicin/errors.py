@@ -41,3 +41,11 @@ class NoEligibleTicketError(CapsaicinError):
 
 class DependencyCycleError(CapsaicinError):
     """Raised when adding a dependency would create a cycle."""
+
+
+class PlannedEpicNotFoundError(CapsaicinError):
+    """Raised when a planned epic ID does not exist."""
+
+    def __init__(self, epic_id: str) -> None:
+        self.epic_id = epic_id
+        super().__init__(f"Planned epic '{epic_id}' not found.")

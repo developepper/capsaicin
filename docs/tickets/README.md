@@ -27,14 +27,14 @@ The intended session-start workflow is:
 
 ## Structure
 
-- [epic-04-planning-loop-automation/](./epic-04-planning-loop-automation/): active epic for upstream planning, review, approval, and ticket materialization into the implementation loop
 - [roadmap.md](./roadmap.md): future work, sequencing, and open directions that are not yet scoped into an epic
 - [archive/](./archive/): completed epic plans retained for history
 
 ## Archive
 
-| Epic                         | Directory                                                                             |
-|------------------------------|---------------------------------------------------------------------------------------|
-| Epic 01: Implementation Loop | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |
-| Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/) |
-| Epic 03: UI For Implementation Loop | [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/) |
+| Epic                                 | Directory                                                                             |
+|--------------------------------------|---------------------------------------------------------------------------------------|
+| Epic 01: Implementation Loop         | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |
+| Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)   |
+| Epic 03: UI For Implementation Loop  | [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)     |
+| Epic 04: Planning Loop Automation    | [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)         |

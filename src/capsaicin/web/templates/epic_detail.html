@@ -1,0 +1,28 @@
+{% extends "base.html" %}
+{% block title %}{{ data.epic.title or "Epic" }} — capsaicin{% endblock %}
+{% block content %}
+<h1>{{ data.epic.title or data.epic.problem_statement[:80] }}</h1>
+
+{% if error %}
+<div class="error-banner">{{ error }}</div>
+{% endif %}
+
+{% include "partials/epic_content.html" %}
+
+<p class="back-link"><a href="/planning">Back to planning dashboard</a></p>
+
+<script>
+(function() {
+  if (typeof EventSource === 'undefined') return;
+  var epicId = '{{ data.epic.id }}';
+  var src = new EventSource('/events/epics/' + epicId);
+  src.addEventListener('epic-updated', function() {
+    document.body.dispatchEvent(new CustomEvent('sse-epic'));
+  });
+  src.addEventListener('epic-gone', function() {
+    src.close();
+  });
+  src.onerror = function() {};
+})();
+</script>
+{% endblock %}

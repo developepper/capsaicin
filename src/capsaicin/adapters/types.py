@@ -19,6 +19,7 @@ VALID_VERDICTS = frozenset({"pass", "fail", "escalate"})
 VALID_CONFIDENCES = frozenset({"high", "medium", "low"})
 VALID_SEVERITIES = frozenset({"blocking", "warning", "info"})
 VALID_DISPOSITIONS = frozenset({"open", "fixed", "wont_fix", "disputed"})
+VALID_TARGET_TYPES = frozenset({"epic", "ticket"})
 VALID_EXIT_STATUSES = frozenset(
     {
         "success",
@@ -190,6 +191,230 @@ class ReviewResult:
 
 
 # ---------------------------------------------------------------------------
+# Planning types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class PlanningFinding:
+    """A planning review finding targeting an epic or ticket artifact."""
+
+    severity: str
+    category: str
+    description: str
+    target_type: str
+    target_sequence: int | None = None
+    disposition: str = "open"
+
+    def __post_init__(self) -> None:
+        _check_enum(self.severity, VALID_SEVERITIES, "severity")
+        _check_enum(self.target_type, VALID_TARGET_TYPES, "target_type")
+        _check_enum(self.disposition, VALID_DISPOSITIONS, "disposition")
+
+    def to_dict(self) -> dict:
+        return {
+            "severity": self.severity,
+            "category": self.category,
+            "description": self.description,
+            "target_type": self.target_type,
+            "target_sequence": self.target_sequence,
+            "disposition": self.disposition,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlanningFinding:
+        return cls(
+            severity=data["severity"],
+            category=data["category"],
+            description=data["description"],
+            target_type=data["target_type"],
+            target_sequence=data.get("target_sequence"),
+            disposition=data.get("disposition", "open"),
+        )
+
+
+@dataclass
+class PlanningScopeReviewed:
+    """Evidence of what the planning reviewer actually checked."""
+
+    epic_reviewed: bool = False
+    tickets_reviewed: list[int] = field(default_factory=list)
+    aspects_checked: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "epic_reviewed": self.epic_reviewed,
+            "tickets_reviewed": self.tickets_reviewed,
+            "aspects_checked": self.aspects_checked,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlanningScopeReviewed:
+        return cls(
+            epic_reviewed=data.get("epic_reviewed", False),
+            tickets_reviewed=data.get("tickets_reviewed", []),
+            aspects_checked=data.get("aspects_checked", []),
+        )
+
+
+@dataclass
+class PlanningReviewResult:
+    """Structured result from a planning reviewer run."""
+
+    verdict: str
+    confidence: str
+    findings: list[PlanningFinding] = field(default_factory=list)
+    scope_reviewed: PlanningScopeReviewed = field(default_factory=PlanningScopeReviewed)
+
+    def __post_init__(self) -> None:
+        _check_enum(self.verdict, VALID_VERDICTS, "verdict")
+        _check_enum(self.confidence, VALID_CONFIDENCES, "confidence")
+
+    def to_dict(self) -> dict:
+        return {
+            "verdict": self.verdict,
+            "confidence": self.confidence,
+            "findings": [f.to_dict() for f in self.findings],
+            "scope_reviewed": self.scope_reviewed.to_dict(),
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlanningReviewResult:
+        return cls(
+            verdict=data["verdict"],
+            confidence=data["confidence"],
+            findings=[PlanningFinding.from_dict(f) for f in data.get("findings", [])],
+            scope_reviewed=PlanningScopeReviewed.from_dict(
+                data.get("scope_reviewed", {})
+            ),
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, s: str) -> PlanningReviewResult:
+        return cls.from_dict(json.loads(s))
+
+
+@dataclass
+class PlannedAcceptanceCriterion:
+    """An acceptance criterion within a planned ticket."""
+
+    description: str
+
+    def to_dict(self) -> dict:
+        return {"description": self.description}
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlannedAcceptanceCriterion:
+        return cls(description=data["description"])
+
+
+@dataclass
+class PlannedTicketData:
+    """A ticket within a planner result."""
+
+    sequence: int
+    title: str
+    goal: str
+    scope: list[str] = field(default_factory=list)
+    non_goals: list[str] = field(default_factory=list)
+    acceptance_criteria: list[PlannedAcceptanceCriterion] = field(default_factory=list)
+    dependencies: list[int] = field(default_factory=list)
+    references: list[str] = field(default_factory=list)
+    implementation_notes: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "sequence": self.sequence,
+            "title": self.title,
+            "goal": self.goal,
+            "scope": self.scope,
+            "non_goals": self.non_goals,
+            "acceptance_criteria": [c.to_dict() for c in self.acceptance_criteria],
+            "dependencies": self.dependencies,
+            "references": self.references,
+            "implementation_notes": self.implementation_notes,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlannedTicketData:
+        return cls(
+            sequence=data["sequence"],
+            title=data["title"],
+            goal=data["goal"],
+            scope=data.get("scope", []),
+            non_goals=data.get("non_goals", []),
+            acceptance_criteria=[
+                PlannedAcceptanceCriterion.from_dict(c)
+                for c in data.get("acceptance_criteria", [])
+            ],
+            dependencies=data.get("dependencies", []),
+            references=data.get("references", []),
+            implementation_notes=data.get("implementation_notes", []),
+        )
+
+
+@dataclass
+class PlannedEpicData:
+    """The epic portion of a planner result."""
+
+    title: str
+    summary: str
+    success_outcome: str
+
+    def to_dict(self) -> dict:
+        return {
+            "title": self.title,
+            "summary": self.summary,
+            "success_outcome": self.success_outcome,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlannedEpicData:
+        return cls(
+            title=data["title"],
+            summary=data["summary"],
+            success_outcome=data["success_outcome"],
+        )
+
+
+@dataclass
+class PlannerResult:
+    """Structured result from a planner run."""
+
+    epic: PlannedEpicData
+    tickets: list[PlannedTicketData]
+    sequencing_notes: str | None = None
+    open_questions: list[str] = field(default_factory=list)
+
+    def to_dict(self) -> dict:
+        return {
+            "epic": self.epic.to_dict(),
+            "tickets": [t.to_dict() for t in self.tickets],
+            "sequencing_notes": self.sequencing_notes,
+            "open_questions": self.open_questions,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> PlannerResult:
+        return cls(
+            epic=PlannedEpicData.from_dict(data["epic"]),
+            tickets=[PlannedTicketData.from_dict(t) for t in data["tickets"]],
+            sequencing_notes=data.get("sequencing_notes"),
+            open_questions=data.get("open_questions", []),
+        )
+
+    def to_json(self) -> str:
+        return json.dumps(self.to_dict(), separators=(",", ":"))
+
+    @classmethod
+    def from_json(cls, s: str) -> PlannerResult:
+        return cls.from_dict(json.loads(s))
+
+
+# ---------------------------------------------------------------------------
 # Run request and result
 # ---------------------------------------------------------------------------
 
@@ -258,6 +483,35 @@ class RunRequest:
         return cls.from_dict(json.loads(s))
 
 
+_StructuredResult = ReviewResult | PlannerResult | PlanningReviewResult
+
+
+def _serialize_structured_result(sr: _StructuredResult | None) -> dict | None:
+    """Serialize a structured result with a _result_type discriminator."""
+    if sr is None:
+        return None
+    d = sr.to_dict()
+    if isinstance(sr, PlannerResult):
+        d["_result_type"] = "planner"
+    elif isinstance(sr, PlanningReviewResult):
+        d["_result_type"] = "planning_review"
+    else:
+        d["_result_type"] = "review"
+    return d
+
+
+def _deserialize_structured_result(data: dict | None) -> _StructuredResult | None:
+    """Deserialize a structured result using the _result_type discriminator."""
+    if data is None:
+        return None
+    result_type = data.get("_result_type", "review")
+    if result_type == "planner":
+        return PlannerResult.from_dict(data)
+    if result_type == "planning_review":
+        return PlanningReviewResult.from_dict(data)
+    return ReviewResult.from_dict(data)
+
+
 @dataclass
 class RunResult:
     """Result envelope from an adapter invocation."""
@@ -268,7 +522,7 @@ class RunResult:
     result_text: str = ""
     raw_stdout: str = ""
     raw_stderr: str = ""
-    structured_result: ReviewResult | None = None
+    structured_result: _StructuredResult | None = None
     adapter_metadata: dict = field(default_factory=dict)
 
     def __post_init__(self) -> None:
@@ -282,9 +536,7 @@ class RunResult:
             "result_text": self.result_text,
             "raw_stdout": self.raw_stdout,
             "raw_stderr": self.raw_stderr,
-            "structured_result": (
-                self.structured_result.to_dict() if self.structured_result else None
-            ),
+            "structured_result": _serialize_structured_result(self.structured_result),
             "adapter_metadata": self.adapter_metadata,
         }
 
@@ -298,7 +550,7 @@ class RunResult:
             result_text=data.get("result_text", ""),
             raw_stdout=data.get("raw_stdout", ""),
             raw_stderr=data.get("raw_stderr", ""),
-            structured_result=ReviewResult.from_dict(sr) if sr else None,
+            structured_result=_deserialize_structured_result(sr),
             adapter_metadata=data.get("adapter_metadata", {}),
         )
 

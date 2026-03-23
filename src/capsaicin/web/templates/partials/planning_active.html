@@ -1,0 +1,19 @@
+<section id="planning-active" hx-get="/partials/planning/active" hx-trigger="every 30s, sse-planning-active from:body" hx-swap="outerHTML">
+  <h2>Active Epics{% if data.active_epics %} ({{ data.active_epics|length }}){% endif %}</h2>
+  {% if data.active_epics %}
+  <table>
+    <thead><tr><th>Epic</th><th>Status</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for e in data.active_epics %}
+      <tr>
+        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td><span class="status-badge planning-status-{{ e.status }}">{{ e.status }}</span></td>
+        <td>{{ e.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <p class="empty">No active epics.</p>
+  {% endif %}
+</section>

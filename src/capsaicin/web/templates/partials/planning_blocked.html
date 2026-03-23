@@ -1,0 +1,19 @@
+<section id="planning-blocked" hx-get="/partials/planning/blocked" hx-trigger="every 30s, sse-planning-blocked from:body" hx-swap="outerHTML">
+  {% if data.blocked_epics %}
+  <h2>Blocked ({{ data.blocked_epics|length }})</h2>
+  <table>
+    <thead><tr><th>Epic</th><th>Reason</th></tr></thead>
+    <tbody>
+      {% for e in data.blocked_epics %}
+      <tr>
+        <td><a href="/epics/{{ e.id }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td>{{ e.blocked_reason or "unknown" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+  {% else %}
+  <h2>Blocked</h2>
+  <p class="empty">No blocked epics.</p>
+  {% endif %}
+</section>

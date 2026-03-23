@@ -87,12 +87,21 @@ T06_ID=$(capsaicin ticket add \
   --criteria "Planning UI actions reuse shared command and query boundaries rather than adding separate workflow logic." \
   | awk 'NR==1 {print $2}')
 
+T07_ID=$(capsaicin ticket add \
+  --repo . \
+  --title "Epic 04 / T07: Explicit Implementation Completion From pr-ready To done" \
+  --description "Implement docs/tickets/epic-04-planning-loop-automation/T07.md. Add an explicit completion action so approved tickets can unblock dependents without requiring GitHub automation." \
+  --criteria "There is an explicit CLI and UI path for transitioning pr-ready tickets to done." \
+  --criteria "Downstream tickets become runnable only after this explicit completion step." \
+  | awk 'NR==1 {print $2}')
+
 echo "T01=$T01_ID"
 echo "T02=$T02_ID"
 echo "T03=$T03_ID"
 echo "T04=$T04_ID"
 echo "T05=$T05_ID"
 echo "T06=$T06_ID"
+echo "T07=$T07_ID"
 ```
 
 ## Recreate Dependencies
@@ -104,6 +113,7 @@ Epic 04 dependencies from the current ticket plan:
 - T04 depends on T03
 - T05 depends on T04
 - T06 depends on T05
+- T07 has no dependencies and can be implemented immediately
 
 Use the captured IDs from the previous step:
 

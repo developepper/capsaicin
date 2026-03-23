@@ -73,7 +73,7 @@ long-term arc; this section is just the next set of work streams to keep in
 focus.
 
 1. planning-loop automation (scoped as
-   [epic-04-planning-loop-automation](./epic-04-planning-loop-automation/))
+   [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/))
 2. planning-to-implementation continuity after materialization
 3. GitHub handoff and PR automation
 4. workflow policy and capability modeling to support cleaner backend
@@ -92,7 +92,7 @@ Extend the product upstream from manual ticket entry to structured planning and
 review.
 
 This work is now scoped as
-[epic-04-planning-loop-automation](./epic-04-planning-loop-automation/).
+[epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/).
 
 Key areas:
 

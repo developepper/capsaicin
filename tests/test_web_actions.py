@@ -486,6 +486,113 @@ class TestErrorDisplay:
 # ---------------------------------------------------------------------------
 
 
+class TestCompleteAction:
+    """Tests for POST /tickets/{ticket_id}/complete — T07 web UI."""
+
+    def _move_to_pr_ready(self, env, ticket_id):
+        transition_ticket(
+            env["conn"], ticket_id, "implementing", "system", reason="test"
+        )
+        transition_ticket(
+            env["conn"],
+            ticket_id,
+            "human-gate",
+            "system",
+            reason="test",
+            gate_reason="review_passed",
+        )
+        transition_ticket(env["conn"], ticket_id, "pr-ready", "human", reason="test")
+
+    def test_pr_ready_shows_complete_form(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="PR Ready Ticket")
+        self._move_to_pr_ready(env, tid)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "Implementation Complete" in resp.text
+        assert "Mark Done" in resp.text
+
+    def test_ready_does_not_show_complete_form(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Ready Ticket")
+
+        resp = client.get(f"/tickets/{tid}")
+        assert "Implementation Complete" not in resp.text
+        assert "Mark Done" not in resp.text
+
+    def test_complete_redirects(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Complete Redirect")
+        self._move_to_pr_ready(env, tid)
+
+        resp = client.post(
+            f"/tickets/{tid}/complete",
+            data={"rationale": "PR merged"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert f"/tickets/{tid}" in resp.headers["location"]
+
+    def test_complete_transitions_to_done(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Complete Done")
+        self._move_to_pr_ready(env, tid)
+
+        client.post(f"/tickets/{tid}/complete", data={"rationale": "Merged"})
+
+        row = (
+            env["conn"]
+            .execute("SELECT status FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
+        assert row["status"] == "done"
+
+    def test_complete_records_decision(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Complete Decision")
+        self._move_to_pr_ready(env, tid)
+
+        client.post(f"/tickets/{tid}/complete", data={"rationale": "All done"})
+
+        rows = (
+            env["conn"]
+            .execute(
+                "SELECT * FROM decisions WHERE ticket_id = ? AND decision = 'complete'",
+                (tid,),
+            )
+            .fetchall()
+        )
+        assert len(rows) == 1
+        assert dict(rows[0])["rationale"] == "All done"
+
+    def test_complete_without_rationale(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="No Rationale")
+        self._move_to_pr_ready(env, tid)
+
+        client.post(f"/tickets/{tid}/complete", data={})
+
+        row = (
+            env["conn"]
+            .execute("SELECT status FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
+        assert row["status"] == "done"
+
+    def test_complete_wrong_status_returns_error(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Wrong Status Complete")
+
+        resp = client.post(
+            f"/tickets/{tid}/complete",
+            data={},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+
 class TestWrongStatusActions:
     def test_approve_wrong_status(self, web_client):
         """Approve on a ready ticket should redirect with error."""

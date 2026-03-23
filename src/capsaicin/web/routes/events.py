@@ -249,6 +249,208 @@ def _ticket_snapshot(conn: sqlite3.Connection, ticket_id: str) -> dict | None:
     }
 
 
+# ---------------------------------------------------------------------------
+# Planning dashboard snapshot
+# ---------------------------------------------------------------------------
+
+
+def _planning_snapshot(conn: sqlite3.Connection, project_id: str) -> dict:
+    """Return a lightweight planning state snapshot for change detection."""
+    # Human-gate epics
+    gate_row = conn.execute(
+        "SELECT COUNT(*) AS cnt, MAX(status_changed_at) AS latest "
+        "FROM planned_epics WHERE project_id = ? AND status = 'human-gate'",
+        (project_id,),
+    ).fetchone()
+    gate_key = (gate_row["cnt"], gate_row["latest"]) if gate_row else (0, None)
+
+    # Active epics (new, drafting, in-review, revise)
+    active_row = conn.execute(
+        "SELECT COUNT(*) AS cnt, MAX(status_changed_at) AS latest "
+        "FROM planned_epics WHERE project_id = ? "
+        "AND status IN ('new', 'drafting', 'in-review', 'revise')",
+        (project_id,),
+    ).fetchone()
+    active_key = (active_row["cnt"], active_row["latest"]) if active_row else (0, None)
+
+    # Blocked epics
+    blocked_row = conn.execute(
+        "SELECT COUNT(*) AS cnt, MAX(status_changed_at) AS latest "
+        "FROM planned_epics WHERE project_id = ? AND status = 'blocked'",
+        (project_id,),
+    ).fetchone()
+    blocked_key = (
+        (blocked_row["cnt"], blocked_row["latest"]) if blocked_row else (0, None)
+    )
+
+    # Queue totals
+    queue_row = conn.execute(
+        "SELECT COUNT(*) AS cnt, MAX(status_changed_at) AS latest "
+        "FROM planned_epics WHERE project_id = ?",
+        (project_id,),
+    ).fetchone()
+    queue_key = (queue_row["cnt"], queue_row["latest"]) if queue_row else (0, None)
+
+    return {
+        "planning-gate": gate_key,
+        "planning-active": active_key,
+        "planning-blocked": blocked_key,
+        "planning-queue": queue_key,
+    }
+
+
+async def planning_events(request: Request) -> StreamingResponse:
+    """Stream planning dashboard change events via SSE."""
+    db_path = request.app.state.db_path
+    project_id = request.app.state.project_id
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        prev: dict = {}
+        ticks_since_keepalive = 0
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                conn = get_connection(db_path)
+                try:
+                    snap = _planning_snapshot(conn, project_id)
+                finally:
+                    conn.close()
+
+                changed = False
+                for key in (
+                    "planning-gate",
+                    "planning-active",
+                    "planning-blocked",
+                    "planning-queue",
+                ):
+                    if snap[key] != prev.get(key):
+                        yield _sse_event(key, json.dumps({"ts": str(snap[key])}))
+                        changed = True
+
+                prev = snap
+
+                if changed:
+                    ticks_since_keepalive = 0
+                else:
+                    ticks_since_keepalive += _POLL_INTERVAL
+                    if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
+                        yield _sse_comment()
+                        ticks_since_keepalive = 0
+
+                await asyncio.sleep(_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+# ---------------------------------------------------------------------------
+# Epic detail snapshot
+# ---------------------------------------------------------------------------
+
+
+def _epic_snapshot(conn: sqlite3.Connection, epic_id: str) -> dict | None:
+    """Return a lightweight state snapshot for a single epic."""
+    row = conn.execute(
+        "SELECT status, status_changed_at, current_cycle, "
+        "current_draft_attempt, current_review_attempt, "
+        "gate_reason, blocked_reason, updated_at "
+        "FROM planned_epics WHERE id = ?",
+        (epic_id,),
+    ).fetchone()
+    if row is None:
+        return None
+
+    epic_key = tuple(row)
+
+    # Planning findings
+    findings_row = conn.execute(
+        "SELECT COUNT(*) AS cnt, MAX(ROWID) AS latest "
+        "FROM planning_findings WHERE epic_id = ? AND disposition = 'open'",
+        (epic_id,),
+    ).fetchone()
+    findings_key = (
+        (findings_row["cnt"], findings_row["latest"]) if findings_row else (0, None)
+    )
+
+    # Latest run
+    run_row = conn.execute(
+        "SELECT MAX(COALESCE(finished_at, started_at)) AS latest "
+        "FROM agent_runs WHERE epic_id = ?",
+        (epic_id,),
+    ).fetchone()
+    run_key = run_row["latest"] if run_row else None
+
+    return {
+        "epic": epic_key,
+        "findings": findings_key,
+        "runs": run_key,
+    }
+
+
+async def epic_events(request: Request) -> StreamingResponse:
+    """Stream change events for a single epic via SSE."""
+    db_path = request.app.state.db_path
+    epic_id = request.path_params["epic_id"]
+
+    async def event_generator() -> AsyncGenerator[str, None]:
+        prev: dict | None = None
+        ticks_since_keepalive = 0
+
+        try:
+            while True:
+                if await request.is_disconnected():
+                    break
+
+                conn = get_connection(db_path)
+                try:
+                    snap = _epic_snapshot(conn, epic_id)
+                finally:
+                    conn.close()
+
+                if snap is None:
+                    yield _sse_event("epic-gone", json.dumps({"epic_id": epic_id}))
+                    break
+
+                if snap != prev:
+                    yield _sse_event(
+                        "epic-updated",
+                        json.dumps({"epic_id": epic_id, "status": snap["epic"][0]}),
+                    )
+                    prev = snap
+                    ticks_since_keepalive = 0
+                else:
+                    ticks_since_keepalive += _POLL_INTERVAL
+                    if ticks_since_keepalive >= _KEEPALIVE_INTERVAL:
+                        yield _sse_comment()
+                        ticks_since_keepalive = 0
+
+                await asyncio.sleep(_POLL_INTERVAL)
+        except asyncio.CancelledError:
+            return
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "Connection": "keep-alive",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
 async def ticket_events(request: Request) -> StreamingResponse:
     """Stream change events for a single ticket via SSE.
 
