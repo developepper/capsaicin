@@ -48,22 +48,7 @@
 <section class="action-panel planning-action-panel">
   <h2>Human Decision Required</h2>
 
-  {% set gate = data.epic.gate_reason %}
-  {% if gate == "review_passed" %}
-  <p class="gate-context">Plan review passed. Approve to materialize implementation tickets, or revise to send it back for another planning pass.</p>
-  {% elif gate == "low_confidence_pass" %}
-  <p class="gate-context gate-warning">Plan review passed with low confidence.</p>
-  {% elif gate == "reviewer_escalated" %}
-  <p class="gate-context gate-warning">The planning reviewer escalated this epic.</p>
-  {% elif gate == "cycle_limit" %}
-  <p class="gate-context gate-warning">The planning cycle limit was reached.</p>
-  {% elif gate == "draft_failure" %}
-  <p class="gate-context gate-warning">The draft step failed.</p>
-  {% elif gate == "human_requested" %}
-  <p class="gate-context">Human review was explicitly requested.</p>
-  {% else %}
-  <p class="gate-context">This epic is waiting for a human decision.</p>
-  {% endif %}
+  <p class="gate-context{% if gate_display.is_warning %} gate-warning{% endif %}">{{ gate_display.display_text }}</p>
 
   <div class="action-forms">
     {# --- Approve form --- #}

@@ -9,16 +9,7 @@ from __future__ import annotations
 
 import sqlite3
 
-# Canonical display order for planning statuses.
-_STATUS_ORDER = [
-    "new",
-    "drafting",
-    "in-review",
-    "revise",
-    "human-gate",
-    "approved",
-    "blocked",
-]
+from capsaicin.state_machine import PLANNING_STATUS_ORDER
 
 
 def render_planning_summary(conn: sqlite3.Connection, project_id: str) -> str:
@@ -36,7 +27,7 @@ def render_planning_summary(conn: sqlite3.Connection, project_id: str) -> str:
 
     if data.counts_by_status:
         lines.append("Status Counts:")
-        for s in _STATUS_ORDER:
+        for s in PLANNING_STATUS_ORDER:
             if s in data.counts_by_status:
                 lines.append(f"  {s}: {data.counts_by_status[s]}")
     else:

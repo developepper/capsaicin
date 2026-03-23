@@ -8,6 +8,8 @@ from starlette.responses import HTMLResponse, PlainTextResponse
 from capsaicin.app.queries.planning_detail import get_planning_detail
 from capsaicin.app.queries.planning_summary import get_planning_summary
 from capsaicin.errors import PlannedEpicNotFoundError
+from capsaicin.state_machine import PLANNING_STATUS_ORDER
+from capsaicin.web.gate_display import get_epic_gate_display
 from capsaicin.web.templating import templates
 
 
@@ -22,7 +24,7 @@ async def planning_dashboard(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "planning_dashboard.html",
-        {"data": data, "error": error},
+        {"data": data, "error": error, "status_order": PLANNING_STATUS_ORDER},
     )
 
 
@@ -37,9 +39,10 @@ async def epic_detail(request: Request) -> HTMLResponse:
         return PlainTextResponse(f"Epic '{epic_id}' not found.", status_code=404)
 
     error = request.query_params.get("error")
+    gate_display = get_epic_gate_display(data.epic.get("gate_reason"))
 
     return templates.TemplateResponse(
         request,
         "epic_detail.html",
-        {"data": data, "error": error},
+        {"data": data, "error": error, "gate_display": gate_display},
     )

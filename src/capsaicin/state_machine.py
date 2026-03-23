@@ -17,19 +17,20 @@ from capsaicin.activity_log import log_event
 # Ticket (implementation loop) statuses and transitions
 # ---------------------------------------------------------------------------
 
-# Valid ticket statuses
-STATUSES = frozenset(
-    {
-        "ready",
-        "implementing",
-        "in-review",
-        "revise",
-        "human-gate",
-        "pr-ready",
-        "blocked",
-        "done",
-    }
+# Canonical display order for ticket statuses.
+TICKET_STATUS_ORDER: tuple[str, ...] = (
+    "ready",
+    "implementing",
+    "in-review",
+    "revise",
+    "human-gate",
+    "pr-ready",
+    "blocked",
+    "done",
 )
+
+# Valid ticket statuses
+STATUSES = frozenset(TICKET_STATUS_ORDER)
 
 # Valid actors
 ACTORS = frozenset({"system", "implementer", "reviewer", "human"})
@@ -57,17 +58,18 @@ LEGAL_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
 # Planning loop statuses and transitions
 # ---------------------------------------------------------------------------
 
-PLANNING_STATUSES = frozenset(
-    {
-        "new",
-        "drafting",
-        "in-review",
-        "revise",
-        "human-gate",
-        "approved",
-        "blocked",
-    }
+# Canonical display order for planning statuses.
+PLANNING_STATUS_ORDER: tuple[str, ...] = (
+    "new",
+    "drafting",
+    "in-review",
+    "revise",
+    "human-gate",
+    "approved",
+    "blocked",
 )
+
+PLANNING_STATUSES = frozenset(PLANNING_STATUS_ORDER)
 
 PLANNING_LEGAL_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
     ("new", "drafting"): frozenset({"system"}),

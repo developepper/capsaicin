@@ -25,32 +25,15 @@
 <section class="action-panel">
   <h2>Human Decision Required</h2>
 
-  {% set gate = data.ticket.gate_reason %}
-  {% set rationale_required = gate in ("cycle_limit", "reviewer_escalated", "low_confidence_pass") %}
-
-  {% if gate == "review_passed" %}
-  <p class="gate-context">Review passed. Approve to move this ticket to PR-ready, or revise to send it back for another implementation pass.</p>
-  {% elif gate == "low_confidence_pass" %}
-  <p class="gate-context gate-warning">Review passed with low confidence. A rationale is required to approve.</p>
-  {% elif gate == "reviewer_escalated" %}
-  <p class="gate-context gate-warning">The reviewer escalated this ticket. A rationale is required to approve.</p>
-  {% elif gate == "cycle_limit" %}
-  <p class="gate-context gate-warning">The cycle limit was reached. A rationale is required to approve.</p>
-  {% elif gate == "empty_implementation" %}
-  <p class="gate-context gate-warning">The implementation produced no changes.</p>
-  {% elif gate == "permission_denied" %}
-  <p class="gate-context gate-warning">The implementation was blocked by permission denials.</p>
-  {% else %}
-  <p class="gate-context">This ticket is waiting for a human decision.</p>
-  {% endif %}
+  <p class="gate-context{% if gate_display.is_warning %} gate-warning{% endif %}">{{ gate_display.display_text }}</p>
 
   <div class="action-forms">
     {# --- Approve form --- #}
     <form method="post" action="{{ request.url_for('action_approve', ticket_id=data.ticket.id) }}" class="action-form action-approve">
       <h3>Approve</h3>
       <p class="action-description">Move ticket to PR-ready.</p>
-      <label for="approve-rationale">Rationale{% if rationale_required %} <strong>(required)</strong>{% endif %}</label>
-      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if rationale_required %}Explain why this is acceptable despite {{ gate }}{% endif %}"{% if rationale_required %} required{% endif %}>{{ "" }}</textarea>
+      <label for="approve-rationale">Rationale{% if gate_display.rationale_required %} <strong>(required)</strong>{% endif %}</label>
+      <textarea id="approve-rationale" name="rationale" rows="2" placeholder="{% if gate_display.rationale_required %}Explain why this is acceptable despite {{ data.ticket.gate_reason }}{% endif %}"{% if gate_display.rationale_required %} required{% endif %}>{{ "" }}</textarea>
       <div class="action-options">
         <label><input type="checkbox" name="force"> Force (skip workspace match check)</label>
       </div>

@@ -87,7 +87,7 @@
   <table>
     <thead><tr><th>Status</th><th>Count</th></tr></thead>
     <tbody>
-      {% for status in ["new","drafting","in-review","revise","human-gate","approved","blocked"] %}
+      {% for status in status_order %}
         {% if status in data.counts_by_status %}
         <tr><td>{{ status }}</td><td>{{ data.counts_by_status[status] }}</td></tr>
         {% endif %}

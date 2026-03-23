@@ -6,6 +6,7 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.dashboard import get_dashboard
+from capsaicin.state_machine import TICKET_STATUS_ORDER
 from capsaicin.web.templating import templates
 
 
@@ -20,5 +21,5 @@ async def dashboard(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "dashboard.html",
-        {"data": data, "error": error},
+        {"data": data, "error": error, "status_order": TICKET_STATUS_ORDER},
     )
