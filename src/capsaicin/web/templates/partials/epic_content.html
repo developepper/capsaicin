@@ -87,11 +87,37 @@
 </section>
 {% endif %}
 
-{# --- Approved epic: materialize action --- #}
+{# --- Approved epic: materialize and continue implementation actions --- #}
 {% if data.epic.status == "approved" %}
 <section class="action-panel planning-action-panel">
   <h2>Plan Approved</h2>
   <p class="gate-context">This plan is approved.{% if data.epic.materialized_path %} Implementation tickets have been materialized.{% endif %}</p>
+
+  {# --- Continue Implementation form --- #}
+  {% if data.impl_tickets %}
+  <form method="post" action="{{ request.url_for('action_continue_implementation', epic_id=data.epic.id) }}" class="action-form">
+    <h3>Continue Implementation</h3>
+    <p class="action-description">Trigger the implementation loop for the next ready ticket in this epic.</p>
+    {% set eligible = data.impl_tickets|selectattr("status", "in", ["ready", "revise"])|list %}
+    {% set ready_tickets = [] %}
+    {% for t in eligible %}
+      {% if t.status == "revise" or t.is_ready %}
+        {% set _ = ready_tickets.append(t) %}
+      {% endif %}
+    {% endfor %}
+    {% if ready_tickets|length > 1 %}
+    <label for="ticket-select">Ticket (optional)</label>
+    <select id="ticket-select" name="ticket_id">
+      <option value="">Auto-select next ready ticket</option>
+      {% for t in ready_tickets %}
+      <option value="{{ t.id }}">#{{ t.sequence }} — {{ t.title }} ({{ t.status }})</option>
+      {% endfor %}
+    </select>
+    {% endif %}
+    <button type="submit" class="btn btn-action">Continue Implementation <span class="htmx-indicator spinner spinner-sm"></span></button>
+  </form>
+  {% endif %}
+
   <form method="post" action="{{ request.url_for('action_materialize_epic', epic_id=data.epic.id) }}" class="action-form action-approve">
     <div class="action-options">
       <label><input type="checkbox" name="force"> Force (overwrite existing docs)</label>

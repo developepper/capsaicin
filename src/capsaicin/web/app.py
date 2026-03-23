@@ -58,6 +58,7 @@ from capsaicin.web.routes.partials import (
 from capsaicin.web.routes.planning import epic_detail, planning_dashboard
 from capsaicin.web.routes.planning_actions import (
     action_approve_epic,
+    action_continue_implementation,
     action_create_epic,
     action_defer_epic,
     action_draft_epic,
@@ -243,6 +244,12 @@ def create_app(
             action_materialize_epic,
             methods=["POST"],
             name="action_materialize_epic",
+        ),
+        Route(
+            "/epics/{epic_id}/continue-implementation",
+            action_continue_implementation,
+            methods=["POST"],
+            name="action_continue_implementation",
         ),
         # Planning partials
         Route(
