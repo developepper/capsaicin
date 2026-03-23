@@ -373,6 +373,206 @@ def ticket_unblock_cmd(ticket_id, reset_cycles, repo_path, project_slug):
             click.echo("  Cycle counters reset")
 
 
+@cli.group()
+def plan():
+    """Manage planning epics."""
+
+
+@plan.command("new")
+@click.option(
+    "--problem",
+    "problem_statement",
+    required=True,
+    help="Problem statement for the epic.",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_new_cmd(problem_statement, repo_path, project_slug):
+    """Create a new planning epic from a problem statement."""
+    from capsaicin.app.commands.new_epic import new_epic
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        try:
+            result = new_epic(
+                conn=app.conn,
+                project_id=app.project_id,
+                problem_statement=problem_statement,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+        click.echo(result.detail)
+
+
+@plan.command("draft")
+@click.argument("epic_id", required=False, default=None)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_draft_cmd(epic_id, repo_path, project_slug):
+    """Transition an epic to drafting."""
+    from capsaicin.app.commands.draft_epic import draft
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = draft(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+
+
+@plan.command("review")
+@click.argument("epic_id", required=False, default=None)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_review_cmd(epic_id, repo_path, project_slug):
+    """Transition an epic to in-review."""
+    from capsaicin.app.commands.review_epic import review
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = review(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+
+
+@plan.command("revise")
+@click.argument("epic_id", required=False, default=None)
+@click.option(
+    "--add-finding",
+    "add_findings",
+    multiple=True,
+    help="Human finding description (repeatable).",
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_revise_cmd(epic_id, add_findings, repo_path, project_slug):
+    """Send an epic back for revision from the human gate."""
+    from capsaicin.app.commands.revise_epic import revise
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        findings_list = list(add_findings) if add_findings else None
+
+        try:
+            result = revise(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                add_findings=findings_list,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+        if findings_list:
+            click.echo(f"  Added {len(findings_list)} finding(s)")
+
+
+@plan.command("approve")
+@click.argument("epic_id", required=False, default=None)
+@click.option("--rationale", default=None, help="Rationale for approval.")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_approve_cmd(epic_id, rationale, repo_path, project_slug):
+    """Approve an epic at the human gate."""
+    from capsaicin.app.commands.approve_epic import approve
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        try:
+            result = approve(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                rationale=rationale,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+
+
+@plan.command("defer")
+@click.argument("epic_id", required=False, default=None)
+@click.option("--rationale", default=None, help="Rationale for deferral.")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_defer_cmd(epic_id, rationale, repo_path, project_slug):
+    """Defer (block) an epic from the human gate."""
+    from capsaicin.app.commands.defer_epic import defer
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        try:
+            result = defer(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                rationale=rationale,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+
+
+@plan.command("status")
+@click.argument("epic_id", required=False, default=None)
+@click.option(
+    "--verbose", is_flag=True, default=False, help="Include transition history."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_status_cmd(epic_id, verbose, repo_path, project_slug):
+    """Show planning status (summary or epic detail)."""
+    from capsaicin.planning_status import (
+        render_planning_detail,
+        render_planning_summary,
+    )
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        if epic_id:
+            try:
+                output = render_planning_detail(app.conn, epic_id, verbose=verbose)
+            except (ValueError, CapsaicinError) as e:
+                raise click.ClickException(str(e))
+        else:
+            output = render_planning_summary(app.conn, app.project_id)
+
+        click.echo(output)
+
+
 @cli.command()
 @click.option(
     "--ticket", "ticket_id", default=None, help="Show detail for a specific ticket."

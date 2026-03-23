@@ -211,9 +211,7 @@ def validate_planner_result(raw_data: dict) -> ValidationResult:
                     f"which does not exist in the plan"
                 )
             elif dep == t.sequence:
-                violations.append(
-                    f"ticket #{t.sequence} depends on itself"
-                )
+                violations.append(f"ticket #{t.sequence} depends on itself")
             else:
                 adj[t.sequence].append(dep)
 
@@ -223,9 +221,7 @@ def validate_planner_result(raw_data: dict) -> ValidationResult:
     # Each ticket must have at least one acceptance criterion
     for t in result.tickets:
         if not t.acceptance_criteria:
-            violations.append(
-                f"ticket #{t.sequence} has no acceptance criteria"
-            )
+            violations.append(f"ticket #{t.sequence} has no acceptance criteria")
 
     return ValidationResult(
         is_valid=len(violations) == 0,
@@ -298,9 +294,7 @@ def validate_planning_review_result(
     # confidence:high requires non-empty tickets_reviewed
     if result.confidence == "high":
         if not result.scope_reviewed.tickets_reviewed:
-            violations.append(
-                "confidence is 'high' but tickets_reviewed is empty"
-            )
+            violations.append("confidence is 'high' but tickets_reviewed is empty")
 
     # target_type / target_sequence consistency
     for f in result.findings:
@@ -325,9 +319,7 @@ def validate_planning_review_result(
     # tickets_reviewed entries must reference valid sequences
     for seq in result.scope_reviewed.tickets_reviewed:
         if seq not in seq_set:
-            violations.append(
-                f"tickets_reviewed references unknown sequence #{seq}"
-            )
+            violations.append(f"tickets_reviewed references unknown sequence #{seq}")
 
     return ValidationResult(
         is_valid=len(violations) == 0,

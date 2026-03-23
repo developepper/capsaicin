@@ -2,7 +2,10 @@
 
 from __future__ import annotations
 
-from capsaicin.validation import validate_planner_result, validate_planning_review_result
+from capsaicin.validation import (
+    validate_planner_result,
+    validate_planning_review_result,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -172,9 +175,7 @@ class TestPlannerSequences:
         assert any("contiguous" in v for v in vr.violations)
 
     def test_single_ticket_sequence_1(self):
-        vr = validate_planner_result(
-            _planner_raw(tickets=[_ticket(sequence=1)])
-        )
+        vr = validate_planner_result(_planner_raw(tickets=[_ticket(sequence=1)]))
         assert vr.is_valid is True
 
 
@@ -339,9 +340,7 @@ class TestPlanningReviewValid:
             _review_raw(
                 verdict="fail",
                 findings=[
-                    _blocking_planning_finding(
-                        target_type="epic", target_sequence=None
-                    )
+                    _blocking_planning_finding(target_type="epic", target_sequence=None)
                 ],
             ),
             VALID_SEQUENCES,
@@ -461,9 +460,7 @@ class TestPlanningReviewTargetType:
             _review_raw(
                 verdict="fail",
                 findings=[
-                    _blocking_planning_finding(
-                        target_type="ticket", target_sequence=99
-                    )
+                    _blocking_planning_finding(target_type="ticket", target_sequence=99)
                 ],
             ),
             VALID_SEQUENCES,
@@ -476,9 +473,7 @@ class TestPlanningReviewTargetType:
             _review_raw(
                 verdict="fail",
                 findings=[
-                    _blocking_planning_finding(
-                        target_type="epic", target_sequence=1
-                    )
+                    _blocking_planning_finding(target_type="epic", target_sequence=1)
                 ],
             ),
             VALID_SEQUENCES,
@@ -491,9 +486,7 @@ class TestPlanningReviewTargetType:
             _review_raw(
                 verdict="fail",
                 findings=[
-                    _blocking_planning_finding(
-                        target_type="epic", target_sequence=None
-                    )
+                    _blocking_planning_finding(target_type="epic", target_sequence=None)
                 ],
             ),
             VALID_SEQUENCES,

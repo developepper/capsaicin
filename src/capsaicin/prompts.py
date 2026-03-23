@@ -410,8 +410,7 @@ def _format_planning_findings(findings: list[PlanningFinding]) -> str:
         if f.target_sequence is not None:
             target += f" (ticket #{f.target_sequence})"
         lines.append(
-            f"- [{f.severity}] [{f.disposition}] {f.category} {target}: "
-            f"{f.description}"
+            f"- [{f.severity}] [{f.disposition}] {f.category} {target}: {f.description}"
         )
     return "\n".join(lines)
 
@@ -444,8 +443,7 @@ def _format_plan_draft(plan_draft: dict) -> str:
                 parts.append(f"  {i}. {desc}")
         if t.get("dependencies"):
             parts.append(
-                "**Dependencies**: "
-                + ", ".join(f"#{d}" for d in t["dependencies"])
+                "**Dependencies**: " + ", ".join(f"#{d}" for d in t["dependencies"])
             )
         if t.get("references"):
             parts.append("**References**: " + ", ".join(t["references"]))
@@ -455,9 +453,7 @@ def _format_plan_draft(plan_draft: dict) -> str:
                 parts.append(f"  - {note}")
 
     if plan_draft.get("sequencing_notes"):
-        parts.extend(
-            ["", "## Sequencing Notes", "", plan_draft["sequencing_notes"]]
-        )
+        parts.extend(["", "## Sequencing Notes", "", plan_draft["sequencing_notes"]])
 
     if plan_draft.get("open_questions"):
         parts.extend(["", "## Open Questions", ""])
@@ -688,18 +684,15 @@ def build_planning_reviewer_prompt(
             "Rules:",
             "- `verdict: fail` must include at least one finding with "
             "`severity: blocking`",
-            "- `verdict: pass` cannot include any findings with "
-            "`severity: blocking`",
+            "- `verdict: pass` cannot include any findings with `severity: blocking`",
             "- `verdict: escalate` means you cannot complete a reliable review "
             "without human input",
-            "- Set `target_type: \"epic\"` with `target_sequence: null` for "
+            '- Set `target_type: "epic"` with `target_sequence: null` for '
             "epic-level findings",
-            "- Set `target_type: \"ticket\"` with `target_sequence` set to the "
+            '- Set `target_type: "ticket"` with `target_sequence` set to the '
             "ticket's sequence number for ticket-level findings",
-            "- Include all ticket sequence numbers you reviewed in "
-            "`tickets_reviewed`",
-            "- Set `epic_reviewed: true` if you reviewed the epic-level "
-            "artifacts",
+            "- Include all ticket sequence numbers you reviewed in `tickets_reviewed`",
+            "- Set `epic_reviewed: true` if you reviewed the epic-level artifacts",
         ]
     )
 

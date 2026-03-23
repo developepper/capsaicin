@@ -264,9 +264,7 @@ class PlanningReviewResult:
     verdict: str
     confidence: str
     findings: list[PlanningFinding] = field(default_factory=list)
-    scope_reviewed: PlanningScopeReviewed = field(
-        default_factory=PlanningScopeReviewed
-    )
+    scope_reviewed: PlanningScopeReviewed = field(default_factory=PlanningScopeReviewed)
 
     def __post_init__(self) -> None:
         _check_enum(self.verdict, VALID_VERDICTS, "verdict")
@@ -285,9 +283,7 @@ class PlanningReviewResult:
         return cls(
             verdict=data["verdict"],
             confidence=data["confidence"],
-            findings=[
-                PlanningFinding.from_dict(f) for f in data.get("findings", [])
-            ],
+            findings=[PlanningFinding.from_dict(f) for f in data.get("findings", [])],
             scope_reviewed=PlanningScopeReviewed.from_dict(
                 data.get("scope_reviewed", {})
             ),
@@ -324,9 +320,7 @@ class PlannedTicketData:
     goal: str
     scope: list[str] = field(default_factory=list)
     non_goals: list[str] = field(default_factory=list)
-    acceptance_criteria: list[PlannedAcceptanceCriterion] = field(
-        default_factory=list
-    )
+    acceptance_criteria: list[PlannedAcceptanceCriterion] = field(default_factory=list)
     dependencies: list[int] = field(default_factory=list)
     references: list[str] = field(default_factory=list)
     implementation_notes: list[str] = field(default_factory=list)
@@ -542,9 +536,7 @@ class RunResult:
             "result_text": self.result_text,
             "raw_stdout": self.raw_stdout,
             "raw_stderr": self.raw_stderr,
-            "structured_result": _serialize_structured_result(
-                self.structured_result
-            ),
+            "structured_result": _serialize_structured_result(self.structured_result),
             "adapter_metadata": self.adapter_metadata,
         }
 
