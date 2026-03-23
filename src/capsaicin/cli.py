@@ -21,6 +21,16 @@ def _app_context(ctx):
     return AppContext.from_project_context(ctx)
 
 
+def _get_repo_root(conn):
+    """Get the repo root path from the projects table."""
+    from pathlib import Path
+
+    row = conn.execute("SELECT repo_path FROM projects LIMIT 1").fetchone()
+    if row is None:
+        raise click.ClickException("No project found in database.")
+    return Path(row["repo_path"])
+
+
 @click.group()
 def cli():
     """Capsaicin — local-first autonomous ticket loop for AI-assisted development."""
@@ -496,14 +506,19 @@ def plan_revise_cmd(epic_id, add_findings, repo_path, project_slug):
 @plan.command("approve")
 @click.argument("epic_id", required=False, default=None)
 @click.option("--rationale", default=None, help="Rationale for approval.")
+@click.option(
+    "--force", is_flag=True, default=False, help="Force overwrite edited docs."
+)
 @click.option("--repo", "repo_path", default=None, help="Path to the repository.")
 @click.option("--project", "project_slug", default=None, help="Project slug.")
-def plan_approve_cmd(epic_id, rationale, repo_path, project_slug):
-    """Approve an epic at the human gate."""
+def plan_approve_cmd(epic_id, rationale, force, repo_path, project_slug):
+    """Approve an epic at the human gate and materialize implementation tickets."""
     from capsaicin.app.commands.approve_epic import approve
 
     with _resolve_or_fail(repo_path, project_slug) as ctx:
         app = _app_context(ctx)
+
+        repo_root = _get_repo_root(app.conn)
 
         try:
             result = approve(
@@ -512,11 +527,44 @@ def plan_approve_cmd(epic_id, rationale, repo_path, project_slug):
                 epic_id=epic_id,
                 rationale=rationale,
                 log_path=app.log_path,
+                repo_root=repo_root,
+                force=force,
             )
         except (ValueError, CapsaicinError) as e:
             raise click.ClickException(str(e))
 
-        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+        click.echo(result.detail)
+
+
+@plan.command("materialize")
+@click.argument("epic_id", required=True)
+@click.option(
+    "--force", is_flag=True, default=False, help="Overwrite manually edited docs."
+)
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_materialize_cmd(epic_id, force, repo_path, project_slug):
+    """(Re-)materialize an approved epic into implementation tickets."""
+    from capsaicin.app.commands.materialize_epic import materialize
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        repo_root = _get_repo_root(app.conn)
+
+        try:
+            result = materialize(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                repo_root=repo_root,
+                force=force,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(result.detail)
 
 
 @plan.command("defer")

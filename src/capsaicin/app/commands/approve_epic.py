@@ -1,4 +1,8 @@
-"""Command service for ``plan approve``."""
+"""Command service for ``plan approve``.
+
+Approval triggers materialization as a side-effect when a ``repo_root``
+is provided (T05).
+"""
 
 from __future__ import annotations
 
@@ -48,10 +52,13 @@ def approve(
     epic_id: str | None = None,
     rationale: str | None = None,
     log_path: str | Path | None = None,
+    repo_root: Path | None = None,
+    force: bool = False,
 ) -> PlanningCommandResult:
     """Approve an epic at the human gate.
 
-    Records a decision and transitions to ``approved``.
+    Records a decision, transitions to ``approved``, and materializes
+    the plan into implementation tickets when *repo_root* is provided.
 
     Returns a structured ``PlanningCommandResult``.
     """
@@ -76,8 +83,31 @@ def approve(
         log_path=log_path,
     )
 
+    detail = f"Epic {epic['id']} approved"
+
+    # Materialize as approval side-effect
+    if repo_root is not None:
+        from capsaicin.materialize import materialize_epic
+
+        mat = materialize_epic(
+            conn=conn,
+            project_id=project_id,
+            epic_id=epic["id"],
+            repo_root=repo_root,
+            force=force,
+            log_path=log_path,
+        )
+        parts = [detail]
+        parts.append(
+            f"; materialized {mat.docs_written} docs, {mat.tickets_created} tickets"
+        )
+        if mat.conflicts:
+            conflict_files = ", ".join(c.file_path for c in mat.conflicts)
+            parts.append(f" (conflicts: {conflict_files})")
+        detail = "".join(parts)
+
     return PlanningCommandResult(
         epic_id=epic["id"],
         final_status="approved",
-        detail=f"Epic {epic['id']} approved",
+        detail=detail,
     )
