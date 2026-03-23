@@ -73,6 +73,7 @@ The intended implementation order is:
 4. [T04](./T04.md) planning loop orchestration and resume behavior
 5. [T05](./T05.md) approval flow and implementation-ticket materialization
 6. [T06](./T06.md) planning UI surfaces
+7. [T07](./T07.md) explicit implementation completion from `pr-ready` to `done`
 
 ## Open Design Constraints
 
