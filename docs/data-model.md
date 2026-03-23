@@ -2,22 +2,43 @@
 
 ## Core Entities
 
-The implementation loop uses entities along these lines:
+### Implementation Loop
 
 - `projects`
 - `tickets`
 - `acceptance_criteria`
 - `ticket_dependencies`
-- `agent_runs`
+- `agent_runs` (shared with planning)
 - `run_diffs`
 - `review_baselines`
-- `orchestrator_state`
+- `orchestrator_state` (shared with planning)
 - `findings`
-- `decisions`
-- `state_transitions`
+- `decisions` (shared with planning)
+- `state_transitions` (shared with planning)
 
-Planning entities such as `epics` and outward-facing entities such as
-`exports` can be added after the core loop is validated.
+### Planning Loop
+
+- `planned_epics` — a planning brief and its draft/review state
+- `planned_tickets` — individual ticket plans within an epic
+- `planned_ticket_criteria` — acceptance criteria for planned tickets
+- `planned_ticket_dependencies` — dependency edges between planned tickets
+- `planning_findings` — review findings against planning artifacts
+- `materialization_hashes` — content hashes for materialized files
+
+### Shared Tables
+
+`agent_runs`, `decisions`, and `state_transitions` are shared between the
+implementation and planning loops. Each has a nullable `ticket_id` and
+`epic_id` with an XOR constraint: exactly one must be set per row.
+
+`orchestrator_state` is shared via a `loop_type` discriminator column
+(`'implementation'` or `'planning'`) and `active_plan_id` alongside the
+existing `active_ticket_id`.
+
+### Lineage
+
+`tickets.planned_ticket_id` links a materialized implementation ticket back
+to the planned ticket it was generated from (1:1 relationship).
 
 ## SQLite Schema
 
@@ -51,6 +72,7 @@ CREATE TABLE tickets (
                     'revise','human-gate','pr-ready',
                     'blocked','done'
                 )),
+    planned_ticket_id TEXT UNIQUE REFERENCES planned_tickets(id),
     status_changed_at TEXT NOT NULL DEFAULT (datetime('now')),
     created_at  TEXT NOT NULL DEFAULT (datetime('now')),
     updated_at  TEXT NOT NULL DEFAULT (datetime('now'))
@@ -74,7 +96,8 @@ CREATE TABLE ticket_dependencies (
 
 CREATE TABLE agent_runs (
     id                TEXT PRIMARY KEY,
-    ticket_id         TEXT NOT NULL REFERENCES tickets(id),
+    ticket_id         TEXT REFERENCES tickets(id),
+    epic_id           TEXT REFERENCES planned_epics(id),
     role              TEXT NOT NULL CHECK (role IN ('implementer','reviewer','planner','human')),
     mode              TEXT NOT NULL CHECK (mode IN ('read-write','read-only')),
     cycle_number      INTEGER NOT NULL,
@@ -93,7 +116,11 @@ CREATE TABLE agent_runs (
     duration_seconds  REAL,
     adapter_metadata  TEXT,
     started_at        TEXT NOT NULL,
-    finished_at       TEXT
+    finished_at       TEXT,
+    CHECK (
+        (ticket_id IS NOT NULL AND epic_id IS NULL) OR
+        (ticket_id IS NULL AND epic_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE run_diffs (
@@ -130,7 +157,9 @@ CREATE TABLE findings (
 CREATE TABLE orchestrator_state (
     project_id       TEXT NOT NULL REFERENCES projects(id),
     active_ticket_id TEXT REFERENCES tickets(id),
+    active_plan_id   TEXT REFERENCES planned_epics(id),
     active_run_id    TEXT REFERENCES agent_runs(id),
+    loop_type        TEXT CHECK (loop_type IN ('implementation', 'planning')),
     status           TEXT NOT NULL DEFAULT 'idle'
                      CHECK (status IN ('idle','running','awaiting_human','suspended')),
     suspended_at     TEXT,
@@ -141,24 +170,122 @@ CREATE TABLE orchestrator_state (
 
 CREATE TABLE state_transitions (
     id            INTEGER PRIMARY KEY AUTOINCREMENT,
-    ticket_id     TEXT NOT NULL REFERENCES tickets(id),
+    ticket_id     TEXT REFERENCES tickets(id),
+    epic_id       TEXT REFERENCES planned_epics(id),
     from_status   TEXT NOT NULL,
     to_status     TEXT NOT NULL,
     triggered_by  TEXT NOT NULL,
     reason        TEXT,
-    created_at    TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at    TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+        (ticket_id IS NOT NULL AND epic_id IS NULL) OR
+        (ticket_id IS NULL AND epic_id IS NOT NULL)
+    )
 );
 
 CREATE TABLE decisions (
     id          TEXT PRIMARY KEY,
-    ticket_id   TEXT NOT NULL REFERENCES tickets(id),
+    ticket_id   TEXT REFERENCES tickets(id),
+    epic_id     TEXT REFERENCES planned_epics(id),
     decision    TEXT NOT NULL CHECK (decision IN (
                     'approve','reject','revise','defer','unblock'
                 )),
     rationale   TEXT,
-    created_at  TEXT NOT NULL DEFAULT (datetime('now'))
+    created_at  TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+        (ticket_id IS NOT NULL AND epic_id IS NULL) OR
+        (ticket_id IS NULL AND epic_id IS NOT NULL)
+    )
+);
+
+-- Planning tables
+
+CREATE TABLE planned_epics (
+    id                TEXT PRIMARY KEY,
+    project_id        TEXT NOT NULL REFERENCES projects(id),
+    problem_statement TEXT NOT NULL,
+    title             TEXT,
+    summary           TEXT,
+    success_outcome   TEXT,
+    sequencing_notes  TEXT,
+    current_cycle     INTEGER NOT NULL DEFAULT 0,
+    current_draft_attempt  INTEGER NOT NULL DEFAULT 1,
+    current_review_attempt INTEGER NOT NULL DEFAULT 1,
+    blocked_reason    TEXT,
+    gate_reason       TEXT CHECK (gate_reason IN (
+                          'review_passed','reviewer_escalated','cycle_limit',
+                          'draft_failure','human_requested','low_confidence_pass'
+                      )),
+    status            TEXT NOT NULL DEFAULT 'new'
+                      CHECK (status IN (
+                          'new','drafting','in-review',
+                          'revise','human-gate','approved','blocked'
+                      )),
+    materialized_path TEXT,
+    status_changed_at TEXT NOT NULL DEFAULT (datetime('now')),
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE planned_tickets (
+    id                TEXT PRIMARY KEY,
+    epic_id           TEXT NOT NULL REFERENCES planned_epics(id),
+    sequence          INTEGER NOT NULL,
+    title             TEXT NOT NULL,
+    goal              TEXT NOT NULL,
+    scope             TEXT NOT NULL,
+    non_goals         TEXT NOT NULL,
+    references_       TEXT NOT NULL,
+    implementation_notes TEXT NOT NULL,
+    created_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at        TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE (epic_id, sequence)
+);
+
+CREATE TABLE planned_ticket_criteria (
+    id                TEXT PRIMARY KEY,
+    planned_ticket_id TEXT NOT NULL REFERENCES planned_tickets(id),
+    description       TEXT NOT NULL
+);
+
+CREATE TABLE planned_ticket_dependencies (
+    planned_ticket_id TEXT NOT NULL REFERENCES planned_tickets(id),
+    depends_on_id     TEXT NOT NULL REFERENCES planned_tickets(id),
+    PRIMARY KEY (planned_ticket_id, depends_on_id),
+    CHECK (planned_ticket_id != depends_on_id)
+);
+
+CREATE TABLE planning_findings (
+    id              TEXT PRIMARY KEY,
+    run_id          TEXT NOT NULL REFERENCES agent_runs(id),
+    epic_id         TEXT NOT NULL REFERENCES planned_epics(id),
+    planned_ticket_id TEXT REFERENCES planned_tickets(id),
+    severity        TEXT NOT NULL CHECK (severity IN ('blocking','warning','info')),
+    category        TEXT NOT NULL,
+    description     TEXT NOT NULL,
+    fingerprint     TEXT NOT NULL,
+    disposition     TEXT NOT NULL DEFAULT 'open'
+                    CHECK (disposition IN ('open','fixed','wont_fix','disputed')),
+    resolved_in_run TEXT REFERENCES agent_runs(id),
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now'))
+);
+
+CREATE TABLE materialization_hashes (
+    epic_id           TEXT NOT NULL REFERENCES planned_epics(id),
+    planned_ticket_id TEXT REFERENCES planned_tickets(id),
+    file_path         TEXT NOT NULL,
+    content_hash      TEXT NOT NULL,
+    materialized_at   TEXT NOT NULL DEFAULT (datetime('now')),
+    PRIMARY KEY (epic_id, file_path)
 );
 ```
+
+## Lineage
+
+`tickets.planned_ticket_id` is a nullable FK to `planned_tickets(id)`. When
+a planned ticket is materialized into an implementation ticket, this column
+links the two. The relationship is 1:1.
 
 ## Persistence Notes
 
@@ -191,6 +318,16 @@ CREATE TABLE decisions (
   refreshed on each command invocation
 - `activity.log` is an append-only debug trace for operators; it is not
   canonical state
+- `planning_findings.fingerprint` is computed as
+  `(category, target_type, target_sequence, description_prefix)` where
+  `description_prefix` is the first 80 characters of the description,
+  normalized to lowercase with collapsed whitespace
+- `planned_tickets.scope`, `non_goals`, `references_`, and
+  `implementation_notes` are stored as JSON arrays of strings
+- `orchestrator_state.loop_type` is `NULL` when idle, `'implementation'` when
+  running the implementation loop, and `'planning'` when running the planning
+  loop; `active_ticket_id` and `active_plan_id` follow the same mutual
+  exclusion as the loop type
 
 ## Recommended Indexes
 
@@ -224,6 +361,35 @@ CREATE INDEX idx_ticket_deps_depends_on
 
 CREATE INDEX idx_orchestrator_state_active_ticket
     ON orchestrator_state(active_ticket_id);
+
+-- Planning indexes
+
+CREATE INDEX idx_planned_epics_project_status
+    ON planned_epics(project_id, status);
+
+CREATE INDEX idx_planned_tickets_epic
+    ON planned_tickets(epic_id, sequence);
+
+CREATE INDEX idx_planning_findings_epic_disposition
+    ON planning_findings(epic_id, disposition);
+
+CREATE INDEX idx_planning_findings_run
+    ON planning_findings(run_id);
+
+CREATE INDEX idx_planning_findings_fingerprint
+    ON planning_findings(epic_id, fingerprint, disposition);
+
+CREATE INDEX idx_planned_ticket_criteria_ticket
+    ON planned_ticket_criteria(planned_ticket_id);
+
+CREATE INDEX idx_planned_ticket_deps_depends_on
+    ON planned_ticket_dependencies(depends_on_id);
+
+CREATE INDEX idx_agent_runs_epic
+    ON agent_runs(epic_id, role, started_at);
+
+CREATE INDEX idx_state_transitions_epic
+    ON state_transitions(epic_id, created_at);
 ```
 
 ## SQLite Notes

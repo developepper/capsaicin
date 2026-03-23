@@ -20,6 +20,12 @@ EXPECTED_TABLES = {
     "orchestrator_state",
     "state_transitions",
     "decisions",
+    "planned_epics",
+    "planned_tickets",
+    "planned_ticket_criteria",
+    "planned_ticket_dependencies",
+    "planning_findings",
+    "materialization_hashes",
 }
 
 EXPECTED_INDEXES = {
@@ -33,6 +39,15 @@ EXPECTED_INDEXES = {
     "idx_acceptance_criteria_ticket",
     "idx_ticket_deps_depends_on",
     "idx_orchestrator_state_active_ticket",
+    "idx_planned_epics_project_status",
+    "idx_planned_tickets_epic",
+    "idx_planning_findings_epic_disposition",
+    "idx_planning_findings_run",
+    "idx_planning_findings_fingerprint",
+    "idx_planned_ticket_criteria_ticket",
+    "idx_planned_ticket_deps_depends_on",
+    "idx_agent_runs_epic",
+    "idx_state_transitions_epic",
 }
 
 

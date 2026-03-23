@@ -23,6 +23,56 @@ Ticket states:
 - `ticket/blocked`
 - `ticket/done`
 
+## Planning Transition Rules
+
+- `planning/new -> planning/drafting`
+  trigger: system starts a planner run for a new planning brief
+- `planning/drafting -> planning/in-review`
+  trigger: planner run succeeds and produces a structured draft
+- `planning/drafting -> planning/human-gate`
+  trigger: planner run fails repeatedly or the draft-attempt limit is reached
+  (`gate_reason = 'draft_failure'`)
+- `planning/drafting -> planning/blocked`
+  trigger: planner run encounters an unrecoverable error
+- `planning/in-review -> planning/revise`
+  trigger: planning reviewer returns blocking findings
+- `planning/in-review -> planning/human-gate`
+  trigger: planning reviewer returns `verdict: pass`, reviewer escalates,
+  reviewer returns low-confidence pass, or the cycle limit is reached
+- `planning/in-review -> planning/blocked`
+  trigger: reviewer run hits repeated contract violations or parse errors
+- `planning/revise -> planning/drafting`
+  trigger: system starts another planner pass while under the cycle limit
+- `planning/revise -> planning/human-gate`
+  trigger: cycle limit reached before starting another planner pass
+  (`gate_reason = 'cycle_limit'`)
+- `planning/human-gate -> planning/approved`
+  trigger: human decision is `approve`
+- `planning/human-gate -> planning/revise`
+  trigger: human decision is `revise`
+- `planning/human-gate -> planning/blocked`
+  trigger: human decision is `defer`
+- `planning/blocked -> planning/new`
+  trigger: human explicitly unblocks and requeues the planned epic
+
+### Planning Guard Conditions
+
+- `planning/human-gate` requires a `gate_reason` — one of:
+  `review_passed`, `reviewer_escalated`, `cycle_limit`, `draft_failure`,
+  `human_requested`, `low_confidence_pass`
+- `planning/blocked` requires a `blocked_reason`
+- `planning/approved` is a terminal state; no further transitions are defined
+- No planned epic reaches `planning/approved` without passing through
+  `planning/human-gate`
+
+### Planning Retry And Cycle Model
+
+- `current_cycle` tracks draft-review loops
+- `current_draft_attempt` tracks retries for the current drafting step
+- `current_review_attempt` tracks retries for the current review step
+- Cycle limits send work to `planning/human-gate`; retry limits send work to
+  `planning/blocked`
+
 ## Ticket Transition Rules
 
 Recommended transitions:
