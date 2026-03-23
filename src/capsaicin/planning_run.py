@@ -28,6 +28,7 @@ from capsaicin.orchestrator import (
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planner_draft_prompt, build_planner_revise_prompt
 from capsaicin.queries import (
+    decode_text_list,
     generate_id,
     load_open_planning_findings,
     load_planned_epic,
@@ -183,14 +184,40 @@ def persist_planner_result(
         ),
     )
 
-    # Delete existing planned tickets (cascade via FK would be ideal, but
-    # SQLite foreign_keys may not cascade, so delete explicitly in order)
-    existing_ticket_ids = [
-        r["id"]
-        for r in conn.execute(
-            "SELECT id FROM planned_tickets WHERE epic_id = ?", (epic_id,)
-        ).fetchall()
+    existing_rows = conn.execute(
+        "SELECT id, sequence FROM planned_tickets WHERE epic_id = ?",
+        (epic_id,),
+    ).fetchall()
+    existing_by_sequence = {row["sequence"]: row["id"] for row in existing_rows}
+    new_sequences = {ticket.sequence for ticket in result.tickets}
+
+    obsolete_ticket_ids = [
+        row["id"] for row in existing_rows if row["sequence"] not in new_sequences
     ]
+    if obsolete_ticket_ids:
+        placeholders = ",".join("?" for _ in obsolete_ticket_ids)
+        conn.execute(
+            "UPDATE planning_findings SET planned_ticket_id = NULL, updated_at = ? "
+            f"WHERE planned_ticket_id IN ({placeholders})",
+            (now, *obsolete_ticket_ids),
+        )
+
+    for tid in obsolete_ticket_ids:
+        conn.execute(
+            "DELETE FROM planned_ticket_dependencies WHERE planned_ticket_id = ?",
+            (tid,),
+        )
+        conn.execute(
+            "DELETE FROM planned_ticket_dependencies WHERE depends_on_id = ?",
+            (tid,),
+        )
+        conn.execute(
+            "DELETE FROM planned_ticket_criteria WHERE planned_ticket_id = ?",
+            (tid,),
+        )
+        conn.execute("DELETE FROM planned_tickets WHERE id = ?", (tid,))
+
+    existing_ticket_ids = list(existing_by_sequence.values())
     for tid in existing_ticket_ids:
         conn.execute(
             "DELETE FROM planned_ticket_dependencies WHERE planned_ticket_id = ?",
@@ -204,32 +231,48 @@ def persist_planner_result(
             "DELETE FROM planned_ticket_criteria WHERE planned_ticket_id = ?",
             (tid,),
         )
-    conn.execute("DELETE FROM planned_tickets WHERE epic_id = ?", (epic_id,))
 
     # Insert new planned tickets
     seq_to_id: dict[int, str] = {}
     for ticket in result.tickets:
-        ticket_id = generate_id()
+        ticket_id = existing_by_sequence.get(ticket.sequence, generate_id())
         seq_to_id[ticket.sequence] = ticket_id
-        conn.execute(
-            "INSERT INTO planned_tickets "
-            "(id, epic_id, sequence, title, goal, scope, non_goals, "
-            "references_, implementation_notes, created_at, updated_at) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            (
-                ticket_id,
-                epic_id,
-                ticket.sequence,
-                ticket.title,
-                ticket.goal,
-                "\n".join(ticket.scope),
-                "\n".join(ticket.non_goals),
-                "\n".join(ticket.references),
-                "\n".join(ticket.implementation_notes),
-                now,
-                now,
-            ),
-        )
+        if ticket.sequence in existing_by_sequence:
+            conn.execute(
+                "UPDATE planned_tickets SET title = ?, goal = ?, scope = ?, "
+                "non_goals = ?, references_ = ?, implementation_notes = ?, "
+                "updated_at = ? WHERE id = ?",
+                (
+                    ticket.title,
+                    ticket.goal,
+                    json.dumps(ticket.scope),
+                    json.dumps(ticket.non_goals),
+                    json.dumps(ticket.references),
+                    json.dumps(ticket.implementation_notes),
+                    now,
+                    ticket_id,
+                ),
+            )
+        else:
+            conn.execute(
+                "INSERT INTO planned_tickets "
+                "(id, epic_id, sequence, title, goal, scope, non_goals, "
+                "references_, implementation_notes, created_at, updated_at) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                (
+                    ticket_id,
+                    epic_id,
+                    ticket.sequence,
+                    ticket.title,
+                    ticket.goal,
+                    json.dumps(ticket.scope),
+                    json.dumps(ticket.non_goals),
+                    json.dumps(ticket.references),
+                    json.dumps(ticket.implementation_notes),
+                    now,
+                    now,
+                ),
+            )
 
         # Insert acceptance criteria
         for criterion in ticket.acceptance_criteria:
@@ -434,7 +477,8 @@ def _draft_invoke_once(
                 severity=f["severity"],
                 category=f["category"],
                 description=f["description"],
-                target_type="epic",
+                target_type=f["target_type"],
+                target_sequence=f["target_sequence"],
             )
             for f in prior_findings
         ]
@@ -620,19 +664,15 @@ def _build_plan_draft_dict(conn: sqlite3.Connection, epic: dict) -> dict:
                 "sequence": t["sequence"],
                 "title": t["title"],
                 "goal": t["goal"],
-                "scope": t["scope"].split("\n") if t["scope"] else [],
-                "non_goals": t["non_goals"].split("\n") if t["non_goals"] else [],
+                "scope": decode_text_list(t["scope"]),
+                "non_goals": decode_text_list(t["non_goals"]),
                 "acceptance_criteria": [
                     {"description": c["description"]} for c in criteria
                 ],
                 "dependencies": [],  # Not critical for revision prompt
-                "references": (
-                    t["references_"].split("\n") if t["references_"] else []
-                ),
-                "implementation_notes": (
-                    t["implementation_notes"].split("\n")
-                    if t["implementation_notes"]
-                    else []
+                "references": decode_text_list(t["references_"]),
+                "implementation_notes": decode_text_list(
+                    t["implementation_notes"]
                 ),
             }
         )

@@ -135,8 +135,22 @@ def reconcile_planning_findings(
 
     # Insert new findings
     for finding in new_findings:
-        # Build fingerprint from category + description
-        fingerprint = f"{finding.category}:{finding.description[:80]}"
+        planned_ticket_id = None
+        if finding.target_type == "ticket" and finding.target_sequence is not None:
+            ticket_row = conn.execute(
+                "SELECT id FROM planned_tickets WHERE epic_id = ? AND sequence = ?",
+                (epic_id, finding.target_sequence),
+            ).fetchone()
+            if ticket_row:
+                planned_ticket_id = ticket_row["id"]
+
+        target_sequence = (
+            finding.target_sequence if finding.target_type == "ticket" else None
+        )
+        fingerprint = (
+            f"{finding.category}:{finding.target_type}:{target_sequence}:"
+            f"{finding.description[:80]}"
+        )
 
         # Check for existing finding with same fingerprint
         existing = conn.execute(
@@ -149,21 +163,17 @@ def reconcile_planning_findings(
             # Update existing finding
             conn.execute(
                 "UPDATE planning_findings SET "
-                "severity = ?, description = ?, updated_at = ? "
+                "planned_ticket_id = ?, severity = ?, description = ?, updated_at = ? "
                 "WHERE id = ?",
-                (finding.severity, finding.description, now, existing["id"]),
+                (
+                    planned_ticket_id,
+                    finding.severity,
+                    finding.description,
+                    now,
+                    existing["id"],
+                ),
             )
         else:
-            # Resolve planned_ticket_id from target_sequence if applicable
-            planned_ticket_id = None
-            if finding.target_type == "ticket" and finding.target_sequence is not None:
-                ticket_row = conn.execute(
-                    "SELECT id FROM planned_tickets WHERE epic_id = ? AND sequence = ?",
-                    (epic_id, finding.target_sequence),
-                ).fetchone()
-                if ticket_row:
-                    planned_ticket_id = ticket_row["id"]
-
             finding_id = generate_id()
             conn.execute(
                 "INSERT INTO planning_findings "
@@ -324,7 +334,8 @@ def _planning_review_invoke_once(
                 severity=f["severity"],
                 category=f["category"],
                 description=f["description"],
-                target_type="epic",
+                target_type=f["target_type"],
+                target_sequence=f["target_sequence"],
             )
             for f in prior_findings_rows
         ]

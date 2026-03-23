@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 import sqlite3
 from datetime import datetime, timezone
 
@@ -19,6 +20,23 @@ def generate_id() -> str:
     from ulid import ULID
 
     return str(ULID())
+
+
+def decode_text_list(value: str | list[str] | None) -> list[str]:
+    """Decode a list stored as JSON, with newline fallback for legacy rows."""
+    if value is None:
+        return []
+    if isinstance(value, list):
+        return value
+    if not value:
+        return []
+    try:
+        decoded = json.loads(value)
+    except json.JSONDecodeError:
+        return [item for item in value.splitlines() if item]
+    if isinstance(decoded, list):
+        return [str(item) for item in decoded]
+    return [str(decoded)]
 
 
 def load_criteria(
@@ -146,9 +164,15 @@ def load_planned_ticket_criteria(
 def load_open_planning_findings(conn: sqlite3.Connection, epic_id: str) -> list[dict]:
     """Load open planning findings for an epic."""
     rows = conn.execute(
-        "SELECT id, run_id, epic_id, planned_ticket_id, severity, category, "
-        "description, fingerprint, disposition "
-        "FROM planning_findings WHERE epic_id = ? AND disposition = 'open'",
+        "SELECT pf.id, pf.run_id, pf.epic_id, pf.planned_ticket_id, "
+        "pf.severity, pf.category, pf.description, pf.fingerprint, "
+        "pf.disposition, "
+        "CASE WHEN pf.planned_ticket_id IS NULL THEN 'epic' ELSE 'ticket' END "
+        "AS target_type, "
+        "pt.sequence AS target_sequence "
+        "FROM planning_findings pf "
+        "LEFT JOIN planned_tickets pt ON pt.id = pf.planned_ticket_id "
+        "WHERE pf.epic_id = ? AND pf.disposition = 'open'",
         (epic_id,),
     ).fetchall()
     return [dict(r) for r in rows]

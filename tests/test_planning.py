@@ -353,6 +353,26 @@ class TestLoadOpenPlanningFindings:
         result = load_open_planning_findings(conn, "e1")
         assert len(result) == 1
         assert result[0]["id"] == "pf1"
+        assert result[0]["target_type"] == "epic"
+        assert result[0]["target_sequence"] is None
+
+    def test_loads_ticket_target_metadata(self, conn):
+        _insert_project(conn)
+        _insert_epic(conn)
+        _insert_planned_ticket(conn, ticket_id="pt1", sequence=2)
+        _insert_agent_run_for_epic(conn)
+        conn.execute(
+            "INSERT INTO planning_findings "
+            "(id, run_id, epic_id, planned_ticket_id, severity, category, "
+            "description, fingerprint, disposition) "
+            "VALUES ('pf1', 'r1', 'e1', 'pt1', 'warning', 'cat', 'desc', 'fp', 'open')"
+        )
+        conn.commit()
+
+        result = load_open_planning_findings(conn, "e1")
+        assert len(result) == 1
+        assert result[0]["target_type"] == "ticket"
+        assert result[0]["target_sequence"] == 2
 
     def test_empty_when_none(self, conn):
         _insert_project(conn)

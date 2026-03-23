@@ -66,6 +66,29 @@ def _move_epic_to_human_gate(env, epic_id, gate_reason="review_passed"):
     )
 
 
+def _seed_materializable_plan(env, epic_id):
+    """Attach a minimal drafted plan so approval-side materialization can run."""
+    conn = env["conn"]
+    conn.execute(
+        "UPDATE planned_epics SET title = ?, summary = ?, success_outcome = ? "
+        "WHERE id = ?",
+        ("Seeded Plan", "Seeded summary", "Seeded outcome", epic_id),
+    )
+    conn.execute(
+        "INSERT INTO planned_tickets "
+        "(id, epic_id, sequence, title, goal, scope, non_goals, "
+        "references_, implementation_notes) "
+        "VALUES ('pt1', ?, 1, 'Ticket 1', 'Implement feature 1', "
+        "'[\"scope\"]', '[\"non-goal\"]', '[\"docs/ref.md\"]', '[\"note\"]')",
+        (epic_id,),
+    )
+    conn.execute(
+        "INSERT INTO planned_ticket_criteria (id, planned_ticket_id, description) "
+        "VALUES ('ptc1', 'pt1', 'Criterion 1')"
+    )
+    conn.commit()
+
+
 def _move_epic_to_blocked(env, epic_id):
     """Transition an epic to blocked status."""
     transition_planned_epic(env["conn"], epic_id, "drafting", "system", reason="test")
@@ -295,6 +318,7 @@ class TestApproveEpicAction:
     def test_approve_redirects(self, web_client):
         client, env = web_client
         eid = _create_epic(env, "Approve redirect")
+        _seed_materializable_plan(env, eid)
         _move_epic_to_human_gate(env, eid)
 
         resp = client.post(
@@ -308,6 +332,7 @@ class TestApproveEpicAction:
     def test_approve_transitions_to_approved(self, web_client):
         client, env = web_client
         eid = _create_epic(env, "Approve transition")
+        _seed_materializable_plan(env, eid)
         _move_epic_to_human_gate(env, eid)
 
         client.post(f"/epics/{eid}/approve", data={"rationale": "LGTM"})
@@ -322,6 +347,7 @@ class TestApproveEpicAction:
     def test_approve_records_decision(self, web_client):
         client, env = web_client
         eid = _create_epic(env, "Approve decision")
+        _seed_materializable_plan(env, eid)
         _move_epic_to_human_gate(env, eid)
 
         client.post(f"/epics/{eid}/approve", data={"rationale": "Looks good"})

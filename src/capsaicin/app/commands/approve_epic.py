@@ -64,8 +64,34 @@ def approve(
     """
     from capsaicin.queries import generate_id
     from capsaicin.state_machine import transition_planned_epic
+    from capsaicin.materialize import materialize_epic
 
     epic = _select_approvable_epic(conn, project_id, epic_id)
+
+    # Materialize as approval side-effect
+    detail = f"Epic {epic['id']} approved"
+    if repo_root is not None:
+        mat = materialize_epic(
+            conn=conn,
+            project_id=project_id,
+            epic_id=epic["id"],
+            repo_root=repo_root,
+            force=force,
+            log_path=log_path,
+            allowed_statuses=("human-gate",),
+        )
+        if mat.conflicts:
+            conflict_files = ", ".join(c.file_path for c in mat.conflicts)
+            raise ValueError(
+                "Materialization blocked by manual edits: "
+                f"{conflict_files}. Pass --force to overwrite."
+            )
+
+        parts = [detail]
+        parts.append(
+            f"; materialized {mat.docs_written} docs, {mat.tickets_created} tickets"
+        )
+        detail = "".join(parts)
 
     conn.execute(
         "INSERT INTO decisions "
@@ -82,29 +108,6 @@ def approve(
         reason=rationale or "human approval",
         log_path=log_path,
     )
-
-    detail = f"Epic {epic['id']} approved"
-
-    # Materialize as approval side-effect
-    if repo_root is not None:
-        from capsaicin.materialize import materialize_epic
-
-        mat = materialize_epic(
-            conn=conn,
-            project_id=project_id,
-            epic_id=epic["id"],
-            repo_root=repo_root,
-            force=force,
-            log_path=log_path,
-        )
-        parts = [detail]
-        parts.append(
-            f"; materialized {mat.docs_written} docs, {mat.tickets_created} tickets"
-        )
-        if mat.conflicts:
-            conflict_files = ", ".join(c.file_path for c in mat.conflicts)
-            parts.append(f" (conflicts: {conflict_files})")
-        detail = "".join(parts)
 
     return PlanningCommandResult(
         epic_id=epic["id"],

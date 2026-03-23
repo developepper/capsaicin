@@ -12,7 +12,6 @@ re-materialization.
 from __future__ import annotations
 
 import hashlib
-import json
 import re
 import sqlite3
 from dataclasses import dataclass, field
@@ -20,6 +19,7 @@ from pathlib import Path
 
 from capsaicin.activity_log import log_event
 from capsaicin.queries import (
+    decode_text_list,
     generate_id,
     load_planned_epic,
     load_planned_ticket_criteria,
@@ -137,11 +137,7 @@ def _render_ticket_doc(
     lines.append("")
 
     # Scope
-    scope = (
-        json.loads(ticket["scope"])
-        if isinstance(ticket["scope"], str)
-        else ticket["scope"]
-    )
+    scope = decode_text_list(ticket["scope"])
     if scope:
         lines.append("## Scope")
         lines.append("")
@@ -150,11 +146,7 @@ def _render_ticket_doc(
         lines.append("")
 
     # Non-goals
-    non_goals = (
-        json.loads(ticket["non_goals"])
-        if isinstance(ticket["non_goals"], str)
-        else ticket["non_goals"]
-    )
+    non_goals = decode_text_list(ticket["non_goals"])
     if non_goals:
         lines.append("## Non-goals")
         lines.append("")
@@ -179,11 +171,7 @@ def _render_ticket_doc(
         lines.append("")
 
     # References
-    refs = (
-        json.loads(ticket["references_"])
-        if isinstance(ticket["references_"], str)
-        else ticket["references_"]
-    )
+    refs = decode_text_list(ticket["references_"])
     if refs:
         lines.append("## References")
         lines.append("")
@@ -192,11 +180,7 @@ def _render_ticket_doc(
         lines.append("")
 
     # Implementation Notes
-    impl_notes = (
-        json.loads(ticket["implementation_notes"])
-        if isinstance(ticket["implementation_notes"], str)
-        else ticket["implementation_notes"]
-    )
+    impl_notes = decode_text_list(ticket["implementation_notes"])
     if impl_notes:
         lines.append("## Implementation Notes")
         lines.append("")
@@ -277,6 +261,40 @@ def _write_with_hash_gate(
     return None
 
 
+def _check_hash_gate_conflict(
+    conn: sqlite3.Connection,
+    epic_id: str,
+    planned_ticket_id: str | None,
+    file_path: Path,
+    force: bool,
+) -> MaterializationConflict | None:
+    """Check whether writing a file would conflict under hash gating."""
+    if force or not file_path.exists():
+        return None
+
+    rel_path = str(file_path)
+    row = conn.execute(
+        "SELECT content_hash FROM materialization_hashes "
+        "WHERE epic_id = ? AND file_path = ?",
+        (epic_id, rel_path),
+    ).fetchone()
+    if row is None:
+        return MaterializationConflict(
+            file_path=rel_path,
+            planned_ticket_id=planned_ticket_id,
+        )
+
+    current_content = file_path.read_text(encoding="utf-8")
+    current_hash = _content_hash(current_content)
+    if current_hash != row["content_hash"]:
+        return MaterializationConflict(
+            file_path=rel_path,
+            planned_ticket_id=planned_ticket_id,
+        )
+
+    return None
+
+
 # ---------------------------------------------------------------------------
 # Implementation-ticket DB record creation
 # ---------------------------------------------------------------------------
@@ -305,23 +323,36 @@ def _create_impl_tickets(
             (planned_id,),
         ).fetchone()
         if existing:
-            planned_to_impl[planned_id] = existing["id"]
-            continue
+            ticket_id = existing["id"]
+            planned_to_impl[planned_id] = ticket_id
 
-        ticket_id = generate_id()
-        planned_to_impl[planned_id] = ticket_id
+            conn.execute(
+                "UPDATE tickets SET title = ?, description = ?, updated_at = ? "
+                "WHERE id = ?",
+                (pt["title"], pt["goal"], now_utc(), ticket_id),
+            )
+            conn.execute(
+                "DELETE FROM acceptance_criteria WHERE ticket_id = ?",
+                (ticket_id,),
+            )
+        else:
+            ticket_id = generate_id()
+            planned_to_impl[planned_id] = ticket_id
 
-        # Build description from goal
-        description = pt["goal"]
+            conn.execute(
+                "INSERT INTO tickets "
+                "(id, project_id, title, description, status, planned_ticket_id) "
+                "VALUES (?, ?, ?, ?, 'ready', ?)",
+                (ticket_id, project_id, pt["title"], pt["goal"], planned_id),
+            )
 
-        conn.execute(
-            "INSERT INTO tickets "
-            "(id, project_id, title, description, status, planned_ticket_id) "
-            "VALUES (?, ?, ?, ?, 'ready', ?)",
-            (ticket_id, project_id, pt["title"], description, planned_id),
-        )
+            conn.execute(
+                "INSERT INTO state_transitions "
+                "(ticket_id, from_status, to_status, triggered_by, reason) "
+                "VALUES (?, 'null', 'ready', 'system', 'materialized from plan')",
+                (ticket_id,),
+            )
 
-        # Insert acceptance criteria
         for criterion in ticket_criteria.get(planned_id, []):
             criterion_id = generate_id()
             conn.execute(
@@ -331,31 +362,16 @@ def _create_impl_tickets(
                 (criterion_id, ticket_id, criterion["description"]),
             )
 
-        # Record state transition
-        conn.execute(
-            "INSERT INTO state_transitions "
-            "(ticket_id, from_status, to_status, triggered_by, reason) "
-            "VALUES (?, 'null', 'ready', 'system', 'materialized from plan')",
-            (ticket_id,),
-        )
-
     # Insert dependencies (second pass to ensure all tickets exist)
     for pt in tickets:
         planned_id = pt["id"]
         impl_id = planned_to_impl[planned_id]
 
+        conn.execute("DELETE FROM ticket_dependencies WHERE ticket_id = ?", (impl_id,))
+
         for dep_planned_id in ticket_deps.get(planned_id, []):
             dep_impl_id = planned_to_impl.get(dep_planned_id)
             if not dep_impl_id:
-                continue
-
-            # Skip if dependency already exists
-            existing_dep = conn.execute(
-                "SELECT 1 FROM ticket_dependencies "
-                "WHERE ticket_id = ? AND depends_on_id = ?",
-                (impl_id, dep_impl_id),
-            ).fetchone()
-            if existing_dep:
                 continue
 
             conn.execute(
@@ -379,6 +395,7 @@ def materialize_epic(
     repo_root: Path,
     force: bool = False,
     log_path: str | Path | None = None,
+    allowed_statuses: tuple[str, ...] = ("approved",),
 ) -> MaterializationResult:
     """Materialize an approved epic into docs and implementation tickets.
 
@@ -397,10 +414,10 @@ def materialize_epic(
         ValueError: If the epic is not in ``approved`` status.
     """
     epic = load_planned_epic(conn, epic_id)
-    if epic["status"] != "approved":
+    if epic["status"] not in allowed_statuses:
         raise ValueError(
             f"Epic '{epic_id}' is in '{epic['status']}' status; "
-            "expected 'approved' for materialization."
+            f"expected one of {allowed_statuses!r} for materialization."
         )
 
     if not epic.get("title"):
@@ -440,20 +457,16 @@ def materialize_epic(
     slug = _slugify(epic["title"])
     output_dir = repo_root / "docs" / "tickets" / "generated" / slug
     output_dir.mkdir(parents=True, exist_ok=True)
+    rel_output = str(output_dir.relative_to(repo_root))
 
     conflicts: list[MaterializationConflict] = []
     docs_written = 0
+    planned_docs: list[tuple[str | None, Path, str]] = []
 
     # Render and write epic README
     readme_content = _render_epic_readme(epic, tickets, ticket_deps_seqs)
     readme_path = output_dir / "README.md"
-    conflict = _write_with_hash_gate(
-        conn, epic_id, None, readme_path, readme_content, force
-    )
-    if conflict:
-        conflicts.append(conflict)
-    else:
-        docs_written += 1
+    planned_docs.append((None, readme_path, readme_content))
 
     # Render and write each ticket doc
     for t in tickets:
@@ -463,8 +476,31 @@ def materialize_epic(
 
         label = f"T{t['sequence']:02d}"
         file_path = output_dir / f"{label}.md"
+        planned_docs.append((t["id"], file_path, content))
+
+    for planned_ticket_id, file_path, _ in planned_docs:
+        conflict = _check_hash_gate_conflict(
+            conn,
+            epic_id,
+            planned_ticket_id,
+            file_path,
+            force,
+        )
+        if conflict:
+            conflicts.append(conflict)
+
+    if conflicts:
+        return MaterializationResult(
+            epic_id=epic_id,
+            output_dir=rel_output,
+            tickets_created=0,
+            docs_written=0,
+            conflicts=conflicts,
+        )
+
+    for planned_ticket_id, file_path, content in planned_docs:
         conflict = _write_with_hash_gate(
-            conn, epic_id, t["id"], file_path, content, force
+            conn, epic_id, planned_ticket_id, file_path, content, force
         )
         if conflict:
             conflicts.append(conflict)
@@ -473,12 +509,9 @@ def materialize_epic(
 
     # Create implementation-ticket DB records
     new_ticket_count = _count_new_tickets(conn, tickets)
-    planned_to_impl = _create_impl_tickets(
-        conn, project_id, epic_id, tickets, ticket_criteria, ticket_deps_ids
-    )
+    _create_impl_tickets(conn, project_id, epic_id, tickets, ticket_criteria, ticket_deps_ids)
 
     # Store materialized_path on the epic
-    rel_output = str(output_dir.relative_to(repo_root))
     conn.execute(
         "UPDATE planned_epics SET materialized_path = ?, updated_at = ? WHERE id = ?",
         (rel_output, now_utc(), epic_id),

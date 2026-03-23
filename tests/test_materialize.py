@@ -13,6 +13,12 @@ import json
 
 import pytest
 
+from capsaicin.adapters.types import (
+    PlannedAcceptanceCriterion,
+    PlannedEpicData,
+    PlannedTicketData,
+    PlannerResult,
+)
 from capsaicin.app.commands.approve_epic import approve
 from capsaicin.app.commands.new_epic import new_epic
 from capsaicin.db import get_connection, run_migrations
@@ -21,6 +27,7 @@ from capsaicin.materialize import (
     _slugify,
     materialize_epic,
 )
+from capsaicin.planning_run import persist_planner_result
 
 
 # ---------------------------------------------------------------------------
@@ -120,6 +127,66 @@ class TestSlugify:
 
 
 class TestMaterializeEpicDocs:
+    def test_creates_docs_from_planner_persisted_rows(self, conn, tmp_path):
+        from capsaicin.queries import generate_id
+
+        epic_id = generate_id()
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES (?, 'p1', 'Need auth', 'approved')",
+            (epic_id,),
+        )
+        persist_planner_result(
+            conn,
+            epic_id,
+            PlannerResult(
+                epic=PlannedEpicData(
+                    title="Build Auth System",
+                    summary="Add authentication",
+                    success_outcome="Users can log in",
+                ),
+                tickets=[
+                    PlannedTicketData(
+                        sequence=1,
+                        title="Ticket 1",
+                        goal="Implement feature 1",
+                        scope=["scope item 1"],
+                        non_goals=["non-goal 1"],
+                        acceptance_criteria=[
+                            PlannedAcceptanceCriterion(
+                                description="Criterion for ticket 1"
+                            )
+                        ],
+                        dependencies=[],
+                        references=["docs/ref1.md"],
+                        implementation_notes=["note 1"],
+                    )
+                ],
+                sequencing_notes="T01 first",
+            ),
+        )
+        conn.execute(
+            "UPDATE planned_epics SET status = 'approved' WHERE id = ?",
+            (epic_id,),
+        )
+        conn.commit()
+
+        materialize_epic(conn, "p1", epic_id, tmp_path)
+
+        t01 = (
+            tmp_path
+            / "docs"
+            / "tickets"
+            / "generated"
+            / "build-auth-system"
+            / "T01.md"
+        )
+        content = t01.read_text()
+        assert "scope item 1" in content
+        assert "docs/ref1.md" in content
+        assert "note 1" in content
+
     def test_creates_readme(self, conn, tmp_path):
         epic_id, _ = _create_approved_epic(conn)
         result = materialize_epic(conn, "p1", epic_id, tmp_path)
@@ -268,6 +335,57 @@ class TestMaterializeEpicDB:
         ).fetchone()["cnt"]
         assert count == 2
 
+    def test_rematerialization_updates_existing_ticket_rows(self, conn, tmp_path):
+        epic_id, planned_ids = _create_approved_epic(conn)
+        materialize_epic(conn, "p1", epic_id, tmp_path)
+
+        conn.execute(
+            "UPDATE planned_tickets SET title = ?, goal = ? WHERE id = ?",
+            ("Updated Ticket 1", "Updated goal", planned_ids[0]),
+        )
+        conn.execute(
+            "DELETE FROM planned_ticket_criteria WHERE planned_ticket_id = ?",
+            (planned_ids[0],),
+        )
+        conn.execute(
+            "INSERT INTO planned_ticket_criteria (id, planned_ticket_id, description) "
+            "VALUES ('new-crit', ?, 'Updated criterion')",
+            (planned_ids[0],),
+        )
+        conn.commit()
+
+        materialize_epic(conn, "p1", epic_id, tmp_path, force=True)
+
+        ticket = conn.execute(
+            "SELECT title, description FROM tickets WHERE planned_ticket_id = ?",
+            (planned_ids[0],),
+        ).fetchone()
+        assert ticket["title"] == "Updated Ticket 1"
+        assert ticket["description"] == "Updated goal"
+
+        criteria = conn.execute(
+            "SELECT description FROM acceptance_criteria "
+            "WHERE ticket_id = (SELECT id FROM tickets WHERE planned_ticket_id = ?)",
+            (planned_ids[0],),
+        ).fetchall()
+        assert [row["description"] for row in criteria] == ["Updated criterion"]
+
+    def test_rematerialization_replaces_dependency_rows(self, conn, tmp_path):
+        epic_id, planned_ids = _create_approved_epic(conn)
+        materialize_epic(conn, "p1", epic_id, tmp_path)
+
+        conn.execute("DELETE FROM planned_ticket_dependencies WHERE planned_ticket_id = ?", (planned_ids[1],))
+        conn.commit()
+
+        materialize_epic(conn, "p1", epic_id, tmp_path, force=True)
+
+        dep_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM ticket_dependencies "
+            "WHERE ticket_id = (SELECT id FROM tickets WHERE planned_ticket_id = ?)",
+            (planned_ids[1],),
+        ).fetchone()["cnt"]
+        assert dep_count == 0
+
 
 # ---------------------------------------------------------------------------
 # Hash-gating / regeneration
@@ -317,6 +435,41 @@ class TestHashGating:
 
         # File should NOT have been overwritten
         assert t01_path.read_text() == "manually edited content"
+
+    def test_conflict_does_not_mutate_db_records(self, conn, tmp_path):
+        epic_id, planned_ids = _create_approved_epic(conn)
+        materialize_epic(conn, "p1", epic_id, tmp_path)
+
+        ticket_row = conn.execute(
+            "SELECT id, title FROM tickets WHERE planned_ticket_id = ?",
+            (planned_ids[0],),
+        ).fetchone()
+        t01_path = (
+            tmp_path
+            / "docs"
+            / "tickets"
+            / "generated"
+            / "build-auth-system"
+            / "T01.md"
+        )
+        t01_path.write_text("manually edited content")
+
+        conn.execute(
+            "UPDATE planned_tickets SET title = ?, goal = ? WHERE id = ?",
+            ("Updated Ticket 1", "Updated goal", planned_ids[0]),
+        )
+        conn.commit()
+
+        result = materialize_epic(conn, "p1", epic_id, tmp_path)
+        assert len(result.conflicts) == 1
+
+        refreshed = conn.execute(
+            "SELECT id, title, description FROM tickets WHERE planned_ticket_id = ?",
+            (planned_ids[0],),
+        ).fetchone()
+        assert refreshed["id"] == ticket_row["id"]
+        assert refreshed["title"] == ticket_row["title"]
+        assert refreshed["description"] == "Implement feature 1"
 
     def test_force_overwrites_edited(self, conn, tmp_path):
         """--force overwrites manually edited files."""
@@ -374,7 +527,7 @@ class TestHashGating:
 class TestMaterializeValidation:
     def test_rejects_non_approved(self, conn, tmp_path):
         r = new_epic(conn, "p1", "problem")
-        with pytest.raises(ValueError, match="expected 'approved'"):
+        with pytest.raises(ValueError, match="expected one of"):
             materialize_epic(conn, "p1", r.epic_id, tmp_path)
 
     def test_rejects_no_title(self, conn, tmp_path):
@@ -465,6 +618,48 @@ class TestApproveWithMaterialization:
             "SELECT COUNT(*) as cnt FROM tickets WHERE project_id = 'p1'",
         ).fetchone()["cnt"]
         assert count == 0
+
+    def test_approve_conflict_leaves_epic_at_human_gate(self, conn, tmp_path):
+        epic_id, _ = _create_approved_epic(conn)
+        conn.execute(
+            "UPDATE planned_epics SET status = 'human-gate', "
+            "gate_reason = 'review_passed' WHERE id = ?",
+            (epic_id,),
+        )
+        conn.commit()
+
+        materialize_epic(conn, "p1", epic_id, tmp_path, allowed_statuses=("human-gate",))
+        t01_path = (
+            tmp_path
+            / "docs"
+            / "tickets"
+            / "generated"
+            / "build-auth-system"
+            / "T01.md"
+        )
+        t01_path.write_text("manually edited content")
+
+        with pytest.raises(ValueError, match="Materialization blocked by manual edits"):
+            approve(
+                conn,
+                "p1",
+                epic_id=epic_id,
+                rationale="lgtm",
+                repo_root=tmp_path,
+            )
+
+        epic = conn.execute(
+            "SELECT status, gate_reason FROM planned_epics WHERE id = ?",
+            (epic_id,),
+        ).fetchone()
+        assert epic["status"] == "human-gate"
+        assert epic["gate_reason"] == "review_passed"
+
+        decision_count = conn.execute(
+            "SELECT COUNT(*) AS cnt FROM decisions WHERE epic_id = ? AND decision = 'approve'",
+            (epic_id,),
+        ).fetchone()["cnt"]
+        assert decision_count == 0
 
 
 # ---------------------------------------------------------------------------

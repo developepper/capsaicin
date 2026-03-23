@@ -16,6 +16,8 @@ from capsaicin.adapters.types import (
 )
 from capsaicin.orchestrator import get_state
 from capsaicin.planning_loop import run_planning_loop
+from capsaicin.planning_review import run_planning_review_pipeline
+from capsaicin.planning_run import run_draft_pipeline
 
 
 # ---------------------------------------------------------------------------
@@ -275,6 +277,125 @@ class TestPlanningLoopRevise:
         assert final_status == "human-gate"
         assert len(adapter.calls) == 4
         assert _get_epic_status(env["conn"], eid) == "human-gate"
+
+    def test_revision_prompt_preserves_ticket_targeted_findings(self, project_env):
+        env = project_env
+        eid = _add_epic(env)
+
+        adapter = MockPlanningAdapter(
+            results=[
+                _make_draft_success(),
+                RunResult(
+                    run_id="mock",
+                    exit_status="success",
+                    duration_seconds=1.0,
+                    raw_stdout="ok",
+                    raw_stderr="",
+                    structured_result=PlanningReviewResult(
+                        verdict="fail",
+                        confidence="high",
+                        findings=[
+                            PlanningFinding(
+                                severity="blocking",
+                                category="completeness",
+                                description="Missing validation case",
+                                target_type="ticket",
+                                target_sequence=2,
+                            )
+                        ],
+                        scope_reviewed=PlanningScopeReviewed(
+                            epic_reviewed=True,
+                            tickets_reviewed=[1, 2],
+                        ),
+                    ),
+                ),
+                _make_draft_success(),
+                _make_review_pass(),
+            ]
+        )
+
+        final_status, _ = run_planning_loop(
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            epic_id=eid,
+            log_path=env["log_path"],
+        )
+
+        assert final_status == "human-gate"
+        assert "ticket #2" in adapter.calls[2].prompt
+
+    def test_review_keeps_distinct_ticket_findings_with_same_description(
+        self, project_env
+    ):
+        env = project_env
+        eid = _add_epic(env)
+
+        adapter = MockPlanningAdapter(
+            results=[
+                RunResult(
+                    run_id="mock",
+                    exit_status="success",
+                    duration_seconds=1.0,
+                    raw_stdout="ok",
+                    raw_stderr="",
+                    structured_result=PlanningReviewResult(
+                        verdict="fail",
+                        confidence="high",
+                        findings=[
+                            PlanningFinding(
+                                severity="blocking",
+                                category="completeness",
+                                description="Missing validation case",
+                                target_type="ticket",
+                                target_sequence=1,
+                            ),
+                            PlanningFinding(
+                                severity="blocking",
+                                category="completeness",
+                                description="Missing validation case",
+                                target_type="ticket",
+                                target_sequence=2,
+                            ),
+                        ],
+                        scope_reviewed=PlanningScopeReviewed(
+                            epic_reviewed=True,
+                            tickets_reviewed=[1, 2],
+                        ),
+                    ),
+                ),
+            ]
+        )
+
+        draft_status = run_draft_pipeline(
+            env["conn"],
+            env["project_id"],
+            {"id": eid, "status": "new"},
+            env["config"],
+            MockPlanningAdapter(results=[_make_draft_success()]),
+            log_path=env["log_path"],
+        )
+        assert draft_status == "in-review"
+
+        final_status = run_planning_review_pipeline(
+            env["conn"],
+            env["project_id"],
+            {"id": eid},
+            env["config"],
+            adapter,
+            log_path=env["log_path"],
+        )
+
+        assert final_status == "revise"
+        findings = env["conn"].execute(
+            "SELECT fingerprint, planned_ticket_id FROM planning_findings "
+            "WHERE epic_id = ? AND disposition = 'open' ORDER BY fingerprint",
+            (eid,),
+        ).fetchall()
+        assert len(findings) == 2
+        assert findings[0]["planned_ticket_id"] != findings[1]["planned_ticket_id"]
 
 
 # ---------------------------------------------------------------------------
