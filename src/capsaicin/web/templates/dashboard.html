@@ -11,14 +11,14 @@
 {# --- Create new ticket --- #}
 <section id="create-ticket">
   <h2>Create New Ticket</h2>
-  <form action="{{ request.url_for('action_create_ticket') }}" method="post">
+  <form action="{{ request.url_for('action_create_ticket') }}" method="post" class="create-form">
     <label for="ticket-title">Title</label>
     <input id="ticket-title" type="text" name="title" placeholder="Ticket title" required>
     <label for="ticket-description">Description</label>
     <textarea id="ticket-description" name="description" rows="3" placeholder="What needs to be done..." required></textarea>
     <label for="ticket-criteria">Acceptance Criteria <small>(one per line, optional)</small></label>
     <textarea id="ticket-criteria" name="criteria" rows="3" placeholder="Each line becomes one criterion..."></textarea>
-    <button type="submit">Create Ticket</button>
+    <button type="submit" class="btn btn-action">Create Ticket</button>
   </form>
 </section>
 

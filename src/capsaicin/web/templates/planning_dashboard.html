@@ -10,10 +10,10 @@
 {# --- Create new epic --- #}
 <section id="create-epic">
   <h2>Create New Epic</h2>
-  <form action="{{ request.url_for('action_create_epic') }}" method="post">
+  <form action="{{ request.url_for('action_create_epic') }}" method="post" class="create-form">
     <label for="problem_statement">Problem Statement</label>
     <textarea id="problem_statement" name="problem_statement" rows="3" placeholder="Describe the problem to solve..." required></textarea>
-    <button type="submit">Create Epic</button>
+    <button type="submit" class="btn btn-action">Create Epic</button>
   </form>
 </section>
 

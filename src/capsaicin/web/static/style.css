@@ -540,6 +540,57 @@ details summary:hover { color: var(--link-hover); }
 .gate-context { margin: .4rem 0 1rem; color: var(--text-muted); font-size: .9em; }
 .gate-warning { color: var(--finding-warning); font-weight: 600; }
 
+/* ================================================================
+   Generic form inputs
+   ================================================================ */
+input[type="text"],
+textarea {
+  width: 100%;
+  font-family: inherit;
+  font-size: .88em;
+  padding: .4rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text);
+  transition: border-color var(--transition);
+  box-sizing: border-box;
+}
+input[type="text"]:focus,
+textarea:focus {
+  outline: none;
+  border-color: var(--link);
+}
+textarea { resize: vertical; }
+
+/* ================================================================
+   Create-form layout (create-epic, create-ticket)
+   ================================================================ */
+.create-form {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: .85rem;
+  max-width: 36rem;
+}
+.create-form label {
+  display: block;
+  font-size: .82em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: .25rem;
+}
+.create-form label + input,
+.create-form label + textarea {
+  margin-bottom: .65rem;
+}
+.create-form .btn {
+  margin-top: .35rem;
+}
+
+/* ================================================================
+   Action forms (human-gate panels)
+   ================================================================ */
 .action-forms { display: flex; flex-wrap: wrap; gap: 1rem; }
 .action-forms-inline { align-items: flex-start; }
 
@@ -554,19 +605,7 @@ details summary:hover { color: var(--link-hover); }
 
 .action-form label { display: block; font-size: .82em; color: var(--text-muted); margin-bottom: .25rem; }
 
-.action-form textarea {
-  width: 100%;
-  font-family: inherit;
-  font-size: .88em;
-  padding: .4rem .5rem;
-  border: 1px solid var(--border);
-  border-radius: var(--radius-sm);
-  resize: vertical;
-  background: var(--bg-surface);
-  color: var(--text);
-  transition: border-color var(--transition);
-}
-.action-form textarea:focus { outline: none; border-color: var(--link); }
+/* textarea and input[type=text] inherit generic rules above */
 
 .action-options { margin: .5rem 0; }
 .action-options label { font-size: .82em; color: var(--text-muted); cursor: pointer; }
