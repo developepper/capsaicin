@@ -671,9 +671,7 @@ def _build_plan_draft_dict(conn: sqlite3.Connection, epic: dict) -> dict:
                 ],
                 "dependencies": [],  # Not critical for revision prompt
                 "references": decode_text_list(t["references_"]),
-                "implementation_notes": decode_text_list(
-                    t["implementation_notes"]
-                ),
+                "implementation_notes": decode_text_list(t["implementation_notes"]),
             }
         )
 

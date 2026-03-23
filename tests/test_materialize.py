@@ -175,12 +175,7 @@ class TestMaterializeEpicDocs:
         materialize_epic(conn, "p1", epic_id, tmp_path)
 
         t01 = (
-            tmp_path
-            / "docs"
-            / "tickets"
-            / "generated"
-            / "build-auth-system"
-            / "T01.md"
+            tmp_path / "docs" / "tickets" / "generated" / "build-auth-system" / "T01.md"
         )
         content = t01.read_text()
         assert "scope item 1" in content
@@ -370,11 +365,58 @@ class TestMaterializeEpicDB:
         ).fetchall()
         assert [row["description"] for row in criteria] == ["Updated criterion"]
 
+    def test_rematerialization_picks_up_new_tickets(self, conn, tmp_path):
+        """Re-materialization creates impl tickets for newly added planned tickets."""
+        epic_id, planned_ids = _create_approved_epic(conn, num_tickets=2)
+        materialize_epic(conn, "p1", epic_id, tmp_path)
+
+        count_before = conn.execute(
+            "SELECT COUNT(*) as cnt FROM tickets WHERE project_id = 'p1'",
+        ).fetchone()["cnt"]
+        assert count_before == 2
+
+        # Add a third planned ticket
+        from capsaicin.queries import generate_id
+
+        new_tid = generate_id()
+        conn.execute(
+            "INSERT INTO planned_tickets "
+            "(id, epic_id, sequence, title, goal, scope, non_goals, "
+            "references_, implementation_notes) "
+            "VALUES (?, ?, 3, 'Ticket 3', 'Implement feature 3', "
+            "'[\"scope 3\"]', '[\"non-goal 3\"]', '[\"docs/ref3.md\"]', '[\"note 3\"]')",
+            (new_tid, epic_id),
+        )
+        conn.execute(
+            "INSERT INTO planned_ticket_criteria (id, planned_ticket_id, description) "
+            "VALUES (?, ?, 'Criterion for ticket 3')",
+            (generate_id(), new_tid),
+        )
+        conn.commit()
+
+        result = materialize_epic(conn, "p1", epic_id, tmp_path, force=True)
+
+        assert result.tickets_created == 1
+
+        count_after = conn.execute(
+            "SELECT COUNT(*) as cnt FROM tickets WHERE project_id = 'p1'",
+        ).fetchone()["cnt"]
+        assert count_after == 3
+
+        # Verify the new doc file was created
+        gen_dir = tmp_path / "docs" / "tickets" / "generated" / "build-auth-system"
+        assert (gen_dir / "T03.md").exists()
+        t03_content = (gen_dir / "T03.md").read_text()
+        assert "Ticket 3" in t03_content
+
     def test_rematerialization_replaces_dependency_rows(self, conn, tmp_path):
         epic_id, planned_ids = _create_approved_epic(conn)
         materialize_epic(conn, "p1", epic_id, tmp_path)
 
-        conn.execute("DELETE FROM planned_ticket_dependencies WHERE planned_ticket_id = ?", (planned_ids[1],))
+        conn.execute(
+            "DELETE FROM planned_ticket_dependencies WHERE planned_ticket_id = ?",
+            (planned_ids[1],),
+        )
         conn.commit()
 
         materialize_epic(conn, "p1", epic_id, tmp_path, force=True)
@@ -445,12 +487,7 @@ class TestHashGating:
             (planned_ids[0],),
         ).fetchone()
         t01_path = (
-            tmp_path
-            / "docs"
-            / "tickets"
-            / "generated"
-            / "build-auth-system"
-            / "T01.md"
+            tmp_path / "docs" / "tickets" / "generated" / "build-auth-system" / "T01.md"
         )
         t01_path.write_text("manually edited content")
 
@@ -628,14 +665,11 @@ class TestApproveWithMaterialization:
         )
         conn.commit()
 
-        materialize_epic(conn, "p1", epic_id, tmp_path, allowed_statuses=("human-gate",))
+        materialize_epic(
+            conn, "p1", epic_id, tmp_path, allowed_statuses=("human-gate",)
+        )
         t01_path = (
-            tmp_path
-            / "docs"
-            / "tickets"
-            / "generated"
-            / "build-auth-system"
-            / "T01.md"
+            tmp_path / "docs" / "tickets" / "generated" / "build-auth-system" / "T01.md"
         )
         t01_path.write_text("manually edited content")
 

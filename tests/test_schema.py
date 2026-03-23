@@ -264,6 +264,67 @@ class TestCheckConstraints:
                 "INSERT INTO decisions (id, ticket_id, decision) VALUES ('d1', 't1', 'invalid')"
             )
 
+    def test_agent_run_xor_both_set_rejected(self, conn):
+        """Cannot set both ticket_id and epic_id on agent_runs."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO agent_runs "
+                "(id, ticket_id, epic_id, role, mode, cycle_number, "
+                "exit_status, prompt, run_request, started_at) "
+                "VALUES ('r1', 't1', 'pe1', 'implementer', 'read-write', "
+                "1, 'running', 'p', '{}', datetime('now'))"
+            )
+
+    def test_agent_run_xor_both_null_rejected(self, conn):
+        """Cannot have both ticket_id and epic_id null on agent_runs."""
+        _insert_project(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO agent_runs "
+                "(id, ticket_id, epic_id, role, mode, cycle_number, "
+                "exit_status, prompt, run_request, started_at) "
+                "VALUES ('r1', NULL, NULL, 'implementer', 'read-write', "
+                "1, 'running', 'p', '{}', datetime('now'))"
+            )
+
+    def test_decision_xor_both_set_rejected(self, conn):
+        """Cannot set both ticket_id and epic_id on decisions."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO decisions (id, ticket_id, epic_id, decision) "
+                "VALUES ('d1', 't1', 'pe1', 'approve')"
+            )
+
+    def test_state_transition_xor_both_set_rejected(self, conn):
+        """Cannot set both ticket_id and epic_id on state_transitions."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO state_transitions "
+                "(ticket_id, epic_id, from_status, to_status, triggered_by) "
+                "VALUES ('t1', 'pe1', 'ready', 'implementing', 'system')"
+            )
+
     def test_self_dependency_rejected(self, conn):
         _insert_project(conn)
         _insert_ticket(conn)

@@ -33,8 +33,9 @@ The intended session-start workflow is:
 
 ## Archive
 
-| Epic                         | Directory                                                                             |
-|------------------------------|---------------------------------------------------------------------------------------|
-| Epic 01: Implementation Loop | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |
-| Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/) |
-| Epic 03: UI For Implementation Loop | [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/) |
+| Epic                                 | Directory                                                                             |
+|--------------------------------------|---------------------------------------------------------------------------------------|
+| Epic 01: Implementation Loop         | [archive/epic-01-implementation-loop-mvp](./archive/epic-01-implementation-loop-mvp/) |
+| Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)   |
+| Epic 03: UI For Implementation Loop  | [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)     |
+| Epic 04: Planning Loop Automation    | [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)         |

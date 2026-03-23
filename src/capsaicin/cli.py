@@ -593,6 +593,32 @@ def plan_defer_cmd(epic_id, rationale, repo_path, project_slug):
         click.echo(f"Epic {result.epic_id} -> {result.final_status}")
 
 
+@plan.command("unblock")
+@click.argument("epic_id", required=True)
+@click.option("--reason", default=None, help="Reason for unblocking.")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def plan_unblock_cmd(epic_id, reason, repo_path, project_slug):
+    """Unblock a blocked epic and return it to new."""
+    from capsaicin.app.commands.unblock_epic import unblock
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+
+        try:
+            result = unblock(
+                conn=app.conn,
+                project_id=app.project_id,
+                epic_id=epic_id,
+                reason=reason,
+                log_path=app.log_path,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Epic {result.epic_id} -> {result.final_status}")
+
+
 @plan.command("loop")
 @click.argument("epic_id", required=False, default=None)
 @click.option(

@@ -509,7 +509,9 @@ def materialize_epic(
 
     # Create implementation-ticket DB records
     new_ticket_count = _count_new_tickets(conn, tickets)
-    _create_impl_tickets(conn, project_id, epic_id, tickets, ticket_criteria, ticket_deps_ids)
+    _create_impl_tickets(
+        conn, project_id, epic_id, tickets, ticket_criteria, ticket_deps_ids
+    )
 
     # Store materialized_path on the epic
     conn.execute(

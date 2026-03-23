@@ -389,11 +389,15 @@ class TestPlanningLoopRevise:
         )
 
         assert final_status == "revise"
-        findings = env["conn"].execute(
-            "SELECT fingerprint, planned_ticket_id FROM planning_findings "
-            "WHERE epic_id = ? AND disposition = 'open' ORDER BY fingerprint",
-            (eid,),
-        ).fetchall()
+        findings = (
+            env["conn"]
+            .execute(
+                "SELECT fingerprint, planned_ticket_id FROM planning_findings "
+                "WHERE epic_id = ? AND disposition = 'open' ORDER BY fingerprint",
+                (eid,),
+            )
+            .fetchall()
+        )
         assert len(findings) == 2
         assert findings[0]["planned_ticket_id"] != findings[1]["planned_ticket_id"]
 
