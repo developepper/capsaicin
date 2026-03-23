@@ -25,8 +25,10 @@ from starlette.staticfiles import StaticFiles
 
 from capsaicin.web.middleware import DBConnectionMiddleware
 from capsaicin.web.routes.actions import (
+    action_add_dependency,
     action_approve,
     action_complete,
+    action_create_ticket,
     action_defer,
     action_loop,
     action_resume,
@@ -37,6 +39,7 @@ from capsaicin.web.routes.actions import (
     action_unblock,
 )
 from capsaicin.web.routes.dashboard import dashboard
+from capsaicin.web.routes.doctor import doctor_page
 from capsaicin.web.routes.events import (
     dashboard_events,
     epic_events,
@@ -55,6 +58,7 @@ from capsaicin.web.routes.partials import (
 from capsaicin.web.routes.planning import epic_detail, planning_dashboard
 from capsaicin.web.routes.planning_actions import (
     action_approve_epic,
+    action_create_epic,
     action_defer_epic,
     action_draft_epic,
     action_materialize_epic,
@@ -89,7 +93,20 @@ def create_app(
     """
     routes = [
         Route("/", dashboard, name="dashboard"),
+        Route("/doctor", doctor_page, name="doctor"),
+        Route(
+            "/tickets/new",
+            action_create_ticket,
+            methods=["POST"],
+            name="action_create_ticket",
+        ),
         Route("/tickets/{ticket_id}", ticket_detail, name="ticket_detail"),
+        Route(
+            "/tickets/{ticket_id}/dep",
+            action_add_dependency,
+            methods=["POST"],
+            name="action_add_dependency",
+        ),
         # Ticket action routes — POST only
         Route(
             "/tickets/{ticket_id}/approve",
@@ -171,6 +188,12 @@ def create_app(
         ),
         # Planning views
         Route("/planning", planning_dashboard, name="planning_dashboard"),
+        Route(
+            "/epics/new",
+            action_create_epic,
+            methods=["POST"],
+            name="action_create_epic",
+        ),
         Route("/epics/{epic_id}", epic_detail, name="epic_detail"),
         # Planning action routes — POST only
         Route(

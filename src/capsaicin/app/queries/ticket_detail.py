@@ -31,6 +31,7 @@ class TicketDetailData:
     ticket: dict
     criteria: list[dict] = field(default_factory=list)
     open_findings: dict[str, list[dict]] = field(default_factory=dict)
+    dependencies: list[dict] = field(default_factory=list)
     last_run: dict | None = None
     last_run_diagnostic: RunDiagnosticSummary | None = None
     run_history: list[dict] | None = None
@@ -132,10 +133,20 @@ def get_ticket_detail(
             diagnostic = None
         last_run_diag = _build_run_diagnostic_summary(last_run)
 
+    deps = conn.execute(
+        "SELECT td.depends_on_id, t.title, t.status "
+        "FROM ticket_dependencies td "
+        "JOIN tickets t ON t.id = td.depends_on_id "
+        "WHERE td.ticket_id = ? "
+        "ORDER BY t.title",
+        (ticket_id,),
+    ).fetchall()
+
     data = TicketDetailData(
         ticket=ticket,
         criteria=get_ticket_criteria(conn, ticket_id),
         open_findings=get_open_findings_by_severity(conn, ticket_id),
+        dependencies=[dict(d) for d in deps],
         last_run=last_run,
         last_run_diagnostic=last_run_diag,
         diagnostic=diagnostic,

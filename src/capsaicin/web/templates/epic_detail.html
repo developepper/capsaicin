@@ -9,13 +9,12 @@
 
 {% include "partials/epic_content.html" %}
 
-<p class="back-link"><a href="/planning">Back to planning dashboard</a></p>
+<p class="back-link"><a href="{{ request.url_for('planning_dashboard') }}">Back to planning dashboard</a></p>
 
 <script>
 (function() {
   if (typeof EventSource === 'undefined') return;
-  var epicId = '{{ data.epic.id }}';
-  var src = new EventSource('/events/epics/' + epicId);
+  var src = new EventSource('{{ request.url_for("epic_events", epic_id=data.epic.id) }}');
   src.addEventListener('epic-updated', function() {
     document.body.dispatchEvent(new CustomEvent('sse-epic'));
   });

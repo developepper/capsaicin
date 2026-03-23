@@ -1,5 +1,5 @@
 <div id="epic-content"
-     hx-get="/partials/epics/{{ data.epic.id }}"
+     hx-get="{{ request.url_for('partial_epic_content', epic_id=data.epic.id) }}"
      hx-trigger="sse-epic from:body"
      hx-swap="outerHTML">
 
@@ -67,7 +67,7 @@
 
   <div class="action-forms">
     {# --- Approve form --- #}
-    <form method="post" action="/epics/{{ data.epic.id }}/approve" class="action-form action-approve">
+    <form method="post" action="{{ request.url_for('action_approve_epic', epic_id=data.epic.id) }}" class="action-form action-approve">
       <h3>Approve</h3>
       <p class="action-description">Approve the plan and materialize implementation tickets.</p>
       <label for="approve-rationale">Rationale</label>
@@ -79,7 +79,7 @@
     </form>
 
     {# --- Revise form --- #}
-    <form method="post" action="/epics/{{ data.epic.id }}/revise" class="action-form action-revise">
+    <form method="post" action="{{ request.url_for('action_revise_epic', epic_id=data.epic.id) }}" class="action-form action-revise">
       <h3>Revise</h3>
       <p class="action-description">Send back for another planning pass.</p>
       <label for="revise-finding">Finding (optional)</label>
@@ -90,7 +90,7 @@
     {# --- Defer form --- #}
     <details class="action-detail">
       <summary>Defer</summary>
-      <form method="post" action="/epics/{{ data.epic.id }}/defer" class="action-form action-defer">
+      <form method="post" action="{{ request.url_for('action_defer_epic', epic_id=data.epic.id) }}" class="action-form action-defer">
         <h3>Defer</h3>
         <p class="action-description">Block this epic for later consideration.</p>
         <label for="defer-rationale">Rationale</label>
@@ -107,7 +107,7 @@
 <section class="action-panel planning-action-panel">
   <h2>Plan Approved</h2>
   <p class="gate-context">This plan is approved.{% if data.epic.materialized_path %} Implementation tickets have been materialized.{% endif %}</p>
-  <form method="post" action="/epics/{{ data.epic.id }}/materialize" class="action-form action-approve">
+  <form method="post" action="{{ request.url_for('action_materialize_epic', epic_id=data.epic.id) }}" class="action-form action-approve">
     <div class="action-options">
       <label><input type="checkbox" name="force"> Force (overwrite existing docs)</label>
     </div>
@@ -121,7 +121,7 @@
 <section class="action-panel planning-action-panel">
   <h2>Epic Blocked</h2>
   <p class="gate-context">This epic is blocked{% if data.epic.blocked_reason %}: {{ data.epic.blocked_reason }}{% endif %}.</p>
-  <form method="post" action="/epics/{{ data.epic.id }}/unblock" class="action-form">
+  <form method="post" action="{{ request.url_for('action_unblock_epic', epic_id=data.epic.id) }}" class="action-form">
     <button type="submit" class="btn btn-approve">Unblock</button>
   </form>
 </section>
@@ -132,10 +132,10 @@
 <section class="action-panel planning-action-panel">
   <h2>Actions</h2>
   <div class="action-forms action-forms-inline">
-    <form method="post" action="/epics/{{ data.epic.id }}/draft" class="action-form">
+    <form method="post" action="{{ request.url_for('action_draft_epic', epic_id=data.epic.id) }}" class="action-form">
       <button type="submit" class="btn btn-action">Run Draft <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
-    <form method="post" action="/epics/{{ data.epic.id }}/loop" class="action-form">
+    <form method="post" action="{{ request.url_for('action_plan_loop', epic_id=data.epic.id) }}" class="action-form">
       <button type="submit" class="btn btn-action">Run Plan Loop <span class="htmx-indicator spinner spinner-sm"></span></button>
     </form>
   </div>
@@ -145,7 +145,7 @@
 {% if data.epic.status == "drafting" %}
 <section class="action-panel planning-action-panel">
   <h2>Actions</h2>
-  <form method="post" action="/epics/{{ data.epic.id }}/review" class="action-form">
+  <form method="post" action="{{ request.url_for('action_review_epic', epic_id=data.epic.id) }}" class="action-form">
     <button type="submit" class="btn btn-action">Run Review <span class="htmx-indicator spinner spinner-sm"></span></button>
   </form>
 </section>

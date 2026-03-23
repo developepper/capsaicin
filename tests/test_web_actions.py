@@ -686,7 +686,8 @@ class TestResumeUI:
 
         resp = client.post("/actions/resume", follow_redirects=False)
         assert resp.status_code == 303
-        assert resp.headers["location"] in ("/", "/tickets/")
+        location = resp.headers["location"]
+        assert location.endswith("/") or "/tickets/" in location
 
     def test_resume_action_redirects_to_ticket(self, web_client):
         """Resume with awaiting_human redirects to the active ticket."""
@@ -699,7 +700,7 @@ class TestResumeUI:
         assert resp.status_code == 303
         location = resp.headers["location"]
         # Should redirect to the ticket or dashboard
-        assert f"/tickets/{tid}" in location or location == "/"
+        assert f"/tickets/{tid}" in location or location.endswith("/")
 
     def test_orchestrator_partial_shows_resume(self, web_client):
         """The orchestrator partial endpoint also renders the resume button."""
@@ -710,3 +711,223 @@ class TestResumeUI:
         assert resp.status_code == 200
         assert "/actions/resume" in resp.text
         assert "Resume" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Create ticket action
+# ---------------------------------------------------------------------------
+
+
+class TestCreateTicketAction:
+    def test_dashboard_shows_create_form(self, web_client):
+        client, env = web_client
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Create New Ticket" in resp.text
+        assert "/tickets/new" in resp.text
+
+    def test_create_redirects_to_ticket_detail(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "New Ticket", "description": "Do the thing", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "/tickets/" in resp.headers["location"]
+
+    def test_create_persists_ticket(self, web_client):
+        client, env = web_client
+        client.post(
+            "/tickets/new",
+            data={
+                "title": "Persisted Ticket",
+                "description": "Check persistence",
+                "criteria": "",
+            },
+        )
+        row = (
+            env["conn"]
+            .execute(
+                "SELECT title, description, status FROM tickets WHERE title = ?",
+                ("Persisted Ticket",),
+            )
+            .fetchone()
+        )
+        assert row is not None
+        assert row["description"] == "Check persistence"
+        assert row["status"] == "ready"
+
+    def test_create_with_criteria(self, web_client):
+        client, env = web_client
+        client.post(
+            "/tickets/new",
+            data={
+                "title": "Criteria Ticket",
+                "description": "Has criteria",
+                "criteria": "First criterion\nSecond criterion",
+            },
+        )
+        row = (
+            env["conn"]
+            .execute("SELECT id FROM tickets WHERE title = ?", ("Criteria Ticket",))
+            .fetchone()
+        )
+        criteria = (
+            env["conn"]
+            .execute(
+                "SELECT description FROM acceptance_criteria WHERE ticket_id = ? ORDER BY id",
+                (row["id"],),
+            )
+            .fetchall()
+        )
+        assert len(criteria) == 2
+        assert criteria[0]["description"] == "First criterion"
+        assert criteria[1]["description"] == "Second criterion"
+
+    def test_create_missing_title_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "", "description": "No title", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_create_missing_description_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/tickets/new",
+            data={"title": "Has title", "description": "", "criteria": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_error_banner_shown_on_dashboard(self, web_client):
+        client, env = web_client
+        resp = client.get("/?error=Something+went+wrong")
+        assert resp.status_code == 200
+        assert "Something went wrong" in resp.text
+        assert "error-banner" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Add dependency action
+# ---------------------------------------------------------------------------
+
+
+class TestAddDependencyAction:
+    def test_detail_page_shows_dependency_form(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Dep Form Ticket")
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "Add dependency" in resp.text
+        assert f"/tickets/{tid}/dep" in resp.text
+
+    def test_add_dependency_redirects(self, web_client):
+        client, env = web_client
+        tid_a = add_ticket(env, title="Ticket A")
+        tid_b = add_ticket(env, title="Ticket B")
+
+        resp = client.post(
+            f"/tickets/{tid_a}/dep",
+            data={"depends_on_id": tid_b},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert f"/tickets/{tid_a}" in resp.headers["location"]
+
+    def test_add_dependency_creates_row(self, web_client):
+        client, env = web_client
+        tid_a = add_ticket(env, title="Dep Source")
+        tid_b = add_ticket(env, title="Dep Target")
+
+        client.post(f"/tickets/{tid_a}/dep", data={"depends_on_id": tid_b})
+
+        row = (
+            env["conn"]
+            .execute(
+                "SELECT * FROM ticket_dependencies WHERE ticket_id = ? AND depends_on_id = ?",
+                (tid_a, tid_b),
+            )
+            .fetchone()
+        )
+        assert row is not None
+
+    def test_add_dependency_shown_on_page(self, web_client):
+        client, env = web_client
+        tid_a = add_ticket(env, title="Show Dep Source")
+        tid_b = add_ticket(env, title="Show Dep Target")
+
+        client.post(f"/tickets/{tid_a}/dep", data={"depends_on_id": tid_b})
+
+        resp = client.get(f"/tickets/{tid_a}")
+        assert resp.status_code == 200
+        assert tid_b in resp.text
+        assert "Show Dep Target" in resp.text
+
+    def test_add_dependency_invalid_id_shows_error(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Invalid Dep Ticket")
+
+        resp = client.post(
+            f"/tickets/{tid}/dep",
+            data={"depends_on_id": "NONEXISTENT"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_add_dependency_cycle_shows_error(self, web_client):
+        client, env = web_client
+        tid_a = add_ticket(env, title="Cycle A")
+        tid_b = add_ticket(env, title="Cycle B")
+
+        # A depends on B
+        client.post(f"/tickets/{tid_a}/dep", data={"depends_on_id": tid_b})
+
+        # B depends on A — should fail with cycle error
+        resp = client.post(
+            f"/tickets/{tid_b}/dep",
+            data={"depends_on_id": tid_a},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+        assert "cycle" in resp.headers["location"].lower()
+
+    def test_add_dependency_self_shows_error(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Self Dep")
+
+        resp = client.post(
+            f"/tickets/{tid}/dep",
+            data={"depends_on_id": tid},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_add_dependency_empty_id_shows_error(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Empty Dep")
+
+        resp = client.post(
+            f"/tickets/{tid}/dep",
+            data={"depends_on_id": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_no_dependencies_shows_none(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="No Deps")
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "Dependencies" in resp.text

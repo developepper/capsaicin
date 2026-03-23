@@ -4,8 +4,8 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>{% block title %}capsaicin{% endblock %}</title>
-  <link rel="stylesheet" href="/static/style.css">
-  <script src="/static/htmx.min.js"></script>
+  <link rel="stylesheet" href="{{ request.url_for('static', path='style.css') }}">
+  <script src="{{ request.url_for('static', path='htmx.min.js') }}"></script>
   <script>
   (function() {
     var saved = localStorage.getItem('capsaicin-theme');
@@ -16,15 +16,15 @@
 <body>
   <header>
     <nav>
-      <a href="/" class="brand" aria-label="capsaicin home">
-        <img src="/static/brand/capsaicin-logo.svg" alt="capsaicin">
+      <a href="{{ request.url_for('dashboard') }}" class="brand" aria-label="capsaicin home">
+        <img src="{{ request.url_for('static', path='brand/capsaicin-logo.svg') }}" alt="capsaicin">
       </a>
     </nav>
     <div style="display:flex;align-items:center;gap:.5rem">
       <button class="theme-toggle" onclick="toggleTheme()" title="Toggle light/dark mode">
         <span id="theme-icon"></span>
       </button>
-      <form method="post" action="/actions/shutdown" style="margin:0"
+      <form method="post" action="{{ request.url_for('action_shutdown') }}" style="margin:0"
             onsubmit="return confirm('Stop the capsaicin UI server?')">
         <button type="submit" class="theme-toggle" title="Stop server">Stop</button>
       </form>

@@ -9,13 +9,12 @@
 
 {% include "partials/ticket_content.html" %}
 
-<p class="back-link"><a href="/">Back to dashboard</a></p>
+<p class="back-link"><a href="{{ request.url_for('dashboard') }}">Back to dashboard</a></p>
 
 <script>
 (function() {
   if (typeof EventSource === 'undefined') return;
-  var ticketId = '{{ data.ticket.id }}';
-  var src = new EventSource('/events/tickets/' + ticketId);
+  var src = new EventSource('{{ request.url_for("ticket_events", ticket_id=data.ticket.id) }}');
   src.addEventListener('ticket-updated', function() {
     document.body.dispatchEvent(new CustomEvent('sse-ticket'));
   });

@@ -645,3 +645,34 @@ details summary:hover { color: var(--link-hover); }
    ================================================================ */
 .htmx-swapping { opacity: .5; transition: opacity 100ms ease-out; }
 .htmx-settling { transition: opacity 200ms ease-in; }
+
+
+/* ================================================================
+   Doctor / Health Check badges & summary
+   ================================================================ */
+.badge {
+  display: inline-block;
+  padding: .15rem .5rem;
+  border-radius: var(--radius-sm);
+  font-size: .78em;
+  font-weight: 700;
+  letter-spacing: .03em;
+  text-transform: uppercase;
+}
+
+.badge-pass { background: var(--status-active); color: var(--criteria-met); }
+.badge-warn { background: var(--status-revise); color: var(--finding-warning); }
+.badge-fail { background: var(--status-blocked); color: var(--criteria-unmet); }
+
+.doctor-summary { border: none; box-shadow: none; padding: .75rem 0; }
+
+.summary {
+  font-weight: 600;
+  font-size: 1.05em;
+  padding: .65rem 1rem;
+  border-radius: var(--radius);
+}
+
+.summary-pass { background: var(--status-active); color: var(--criteria-met); }
+.summary-warn { background: var(--status-revise); color: var(--finding-warning); }
+.summary-fail { background: var(--status-blocked); color: var(--criteria-unmet); }

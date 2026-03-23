@@ -29,6 +29,81 @@ _log = logging.getLogger(__name__)
 
 
 # ---------------------------------------------------------------------------
+# Ticket creation
+# ---------------------------------------------------------------------------
+
+
+async def action_create_ticket(request: Request) -> RedirectResponse:
+    """POST /tickets/new — create a new ticket from the dashboard form."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+    log_path = request.app.state.log_path
+
+    form = await request.form()
+    title = form.get("title", "").strip()
+    description = form.get("description", "").strip()
+    criteria_raw = form.get("criteria", "").strip()
+
+    if not title or not description:
+        error = "Title and description are required."
+        url = request.url_for("dashboard").include_query_params(error=error)
+        return RedirectResponse(str(url), status_code=303)
+
+    criteria = (
+        [c.strip() for c in criteria_raw.splitlines() if c.strip()]
+        if criteria_raw
+        else []
+    )
+
+    from capsaicin.ticket_add import add_ticket_inline
+
+    try:
+        ticket_id = add_ticket_inline(
+            conn=conn,
+            project_id=project_id,
+            title=title,
+            description=description,
+            criteria=criteria,
+            log_path=log_path,
+        )
+    except (ValueError, CapsaicinError) as exc:
+        url = request.url_for("dashboard").include_query_params(error=str(exc))
+        return RedirectResponse(str(url), status_code=303)
+
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
+
+
+# ---------------------------------------------------------------------------
+# Ticket dependencies
+# ---------------------------------------------------------------------------
+
+
+async def action_add_dependency(request: Request) -> RedirectResponse:
+    """POST /tickets/{ticket_id}/dep — add a dependency on another ticket."""
+    conn = request.state.conn
+    ticket_id = request.path_params["ticket_id"]
+
+    form = await request.form()
+    depends_on_id = form.get("depends_on_id", "").strip()
+
+    if not depends_on_id:
+        return _error_redirect(request, ticket_id, "Dependency ticket ID is required.")
+
+    from capsaicin.ticket_dep import add_dependency
+
+    try:
+        add_dependency(conn, ticket_id, depends_on_id)
+    except ValueError as exc:
+        return _error_redirect(request, ticket_id, str(exc))
+
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
+
+
+# ---------------------------------------------------------------------------
 # Human-gate actions
 # ---------------------------------------------------------------------------
 
@@ -67,7 +142,9 @@ async def action_approve(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_revise(request: Request) -> RedirectResponse | HTMLResponse:
@@ -96,7 +173,9 @@ async def action_revise(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_defer(request: Request) -> RedirectResponse | HTMLResponse:
@@ -124,7 +203,9 @@ async def action_defer(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_complete(request: Request) -> RedirectResponse | HTMLResponse:
@@ -150,7 +231,9 @@ async def action_complete(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
@@ -176,7 +259,9 @@ async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
     except (ValueError, CapsaicinError) as exc:
         return _error_redirect(request, ticket_id, str(exc))
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 # ---------------------------------------------------------------------------
@@ -194,7 +279,9 @@ async def action_run(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_run, db_path, project_id, config, ticket_id, log_path)
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_review(request: Request) -> RedirectResponse:
@@ -212,7 +299,9 @@ async def action_review(request: Request) -> RedirectResponse:
         _bg_review, db_path, project_id, config, ticket_id, allow_drift, log_path
     )
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_loop(request: Request) -> RedirectResponse:
@@ -225,7 +314,9 @@ async def action_loop(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_loop, db_path, project_id, config, ticket_id, log_path)
 
-    return RedirectResponse(f"/tickets/{ticket_id}", status_code=303)
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
 
 
 async def action_resume(request: Request) -> RedirectResponse:
@@ -237,7 +328,7 @@ async def action_resume(request: Request) -> RedirectResponse:
 
     _run_in_background(_bg_resume, db_path, project_id, config, log_path)
 
-    return RedirectResponse("/", status_code=303)
+    return RedirectResponse(str(request.url_for("dashboard")), status_code=303)
 
 
 # ---------------------------------------------------------------------------
@@ -271,11 +362,10 @@ async def action_shutdown(request: Request) -> HTMLResponse:
 
 def _error_redirect(request: Request, ticket_id: str, message: str) -> RedirectResponse:
     """Redirect back to the ticket with an error query parameter."""
-    from urllib.parse import quote
-
-    return RedirectResponse(
-        f"/tickets/{ticket_id}?error={quote(message)}", status_code=303
+    url = request.url_for("ticket_detail", ticket_id=ticket_id).include_query_params(
+        error=message
     )
+    return RedirectResponse(str(url), status_code=303)
 
 
 # ---------------------------------------------------------------------------

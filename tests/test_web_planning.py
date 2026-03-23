@@ -164,6 +164,18 @@ class TestPlanningDashboard:
         assert "Planning Queue" in resp.text
         assert "2 epics" in resp.text
 
+    def test_planning_dashboard_shows_create_form(self, web_client):
+        client, env = web_client
+        resp = client.get("/planning")
+        assert "Create New Epic" in resp.text
+        assert "problem_statement" in resp.text
+
+    def test_planning_dashboard_shows_error_banner(self, web_client):
+        client, env = web_client
+        resp = client.get("/planning?error=Something+went+wrong")
+        assert "Something went wrong" in resp.text
+        assert "error-banner" in resp.text
+
     def test_planning_dashboard_links_to_implementation(self, web_client):
         client, env = web_client
         resp = client.get("/planning")
@@ -174,6 +186,85 @@ class TestPlanningDashboard:
         resp = client.get("/")
         assert "Planning Dashboard" in resp.text
         assert "/planning" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Create epic action
+# ---------------------------------------------------------------------------
+
+
+class TestCreateEpicAction:
+    def test_create_epic_redirects_to_detail(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/epics/new",
+            data={"problem_statement": "New epic from web"},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "/epics/" in resp.headers["location"]
+        # Should not redirect back to /planning (that's the error case)
+        assert "error" not in resp.headers["location"]
+
+    def test_create_epic_persists_in_db(self, web_client):
+        client, env = web_client
+        client.post(
+            "/epics/new",
+            data={"problem_statement": "Persisted epic"},
+        )
+
+        row = (
+            env["conn"]
+            .execute(
+                "SELECT problem_statement, status FROM planned_epics "
+                "WHERE problem_statement = ?",
+                ("Persisted epic",),
+            )
+            .fetchone()
+        )
+        assert row is not None
+        assert row["status"] == "new"
+
+    def test_create_epic_empty_problem_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/epics/new",
+            data={"problem_statement": ""},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "/planning" in resp.headers["location"]
+        assert "error=" in resp.headers["location"]
+
+    def test_create_epic_whitespace_only_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/epics/new",
+            data={"problem_statement": "   "},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_create_epic_missing_field_returns_error(self, web_client):
+        client, env = web_client
+        resp = client.post(
+            "/epics/new",
+            data={},
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+    def test_create_epic_appears_in_dashboard(self, web_client):
+        client, env = web_client
+        client.post(
+            "/epics/new",
+            data={"problem_statement": "Dashboard visible epic"},
+        )
+
+        resp = client.get("/planning")
+        assert "Dashboard visible epic" in resp.text
 
 
 # ---------------------------------------------------------------------------

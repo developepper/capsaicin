@@ -10,7 +10,12 @@ from unittest.mock import patch
 import pytest
 
 from capsaicin.adapters.claude_code import ClaudeCodeAdapter
-from capsaicin.adapters.types import AcceptanceCriterion, RunRequest
+from capsaicin.adapters.types import (
+    AcceptanceCriterion,
+    PlannerResult,
+    PlanningReviewResult,
+    RunRequest,
+)
 
 FIXTURES = Path(__file__).parent / "fixtures"
 
@@ -40,6 +45,40 @@ def _reviewer_request(**overrides) -> RunRequest:
             AcceptanceCriterion(id="ac-1", description="Login returns JWT"),
         ],
         "adapter_config": {
+            "allowed_tools": ["Read", "Glob", "Grep", "Bash"],
+        },
+    }
+    defaults.update(overrides)
+    return RunRequest(**defaults)
+
+
+def _planner_request(**overrides) -> RunRequest:
+    defaults = {
+        "run_id": "run-plan-001",
+        "role": "planner",
+        "mode": "read-write",
+        "working_directory": "/tmp",
+        "prompt": "Plan the work",
+        "timeout_seconds": 60,
+        "adapter_config": {
+            "structured_output": "planner",
+        },
+    }
+    defaults.update(overrides)
+    return RunRequest(**defaults)
+
+
+def _planning_reviewer_request(**overrides) -> RunRequest:
+    defaults = {
+        "run_id": "run-prev-001",
+        "role": "reviewer",
+        "mode": "read-only",
+        "working_directory": "/tmp",
+        "prompt": "Review the plan",
+        "timeout_seconds": 60,
+        "adapter_config": {
+            "structured_output": "planning_review",
+            "valid_sequences": [1, 2],
             "allowed_tools": ["Read", "Glob", "Grep", "Bash"],
         },
     }
@@ -338,6 +377,16 @@ class TestReviewerCommand:
         assert "--json-schema" not in cmd
         assert "--allowed-tools" not in cmd
 
+    def test_planner_includes_json_schema(self):
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_planner_request())
+        assert "--json-schema" in cmd
+
+    def test_planning_reviewer_includes_json_schema(self):
+        adapter = ClaudeCodeAdapter()
+        cmd = adapter._build_command(_planning_reviewer_request())
+        assert "--json-schema" in cmd
+
 
 class TestReviewerFixtures:
     def test_pass_envelope(self):
@@ -542,3 +591,67 @@ class TestReviewerValidation:
         with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
             result = adapter.execute(_reviewer_request())
         assert result.exit_status == "parse_error"
+
+
+class TestPlanningStructuredOutput:
+    def test_planner_parses_fenced_json_from_result_text(self):
+        planner_data = {
+            "epic": {
+                "title": "Epic",
+                "summary": "Summary",
+                "success_outcome": "Outcome",
+            },
+            "tickets": [
+                {
+                    "sequence": 1,
+                    "title": "Ticket 1",
+                    "goal": "Goal",
+                    "scope": ["Scope"],
+                    "non_goals": ["Non-goal"],
+                    "acceptance_criteria": [{"description": "Criterion"}],
+                    "dependencies": [],
+                    "references": ["docs/x.md"],
+                    "implementation_notes": ["Note"],
+                }
+            ],
+            "sequencing_notes": "Do it first",
+            "open_questions": [],
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "result": "Here is the plan.\n```json\n"
+                + json.dumps(planner_data)
+                + "\n```",
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_planner_request())
+        assert result.exit_status == "success"
+        assert isinstance(result.structured_result, PlannerResult)
+        assert result.structured_result.epic.title == "Epic"
+
+    def test_planning_reviewer_uses_planning_schema(self):
+        review_data = {
+            "verdict": "pass",
+            "confidence": "high",
+            "findings": [],
+            "scope_reviewed": {
+                "epic_reviewed": True,
+                "tickets_reviewed": [1, 2],
+                "aspects_checked": ["scope"],
+            },
+        }
+        envelope = json.dumps(
+            {
+                "is_error": False,
+                "structured_output": review_data,
+            }
+        )
+        adapter = ClaudeCodeAdapter()
+        with patch("subprocess.run", side_effect=_mock_run(stdout=envelope)):
+            result = adapter.execute(_planning_reviewer_request())
+        assert result.exit_status == "success"
+        assert isinstance(result.structured_result, PlanningReviewResult)
+        assert result.structured_result.verdict == "pass"

@@ -1,4 +1,4 @@
-<section id="queue" hx-get="/partials/queue" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
+<section id="queue" hx-get="{{ request.url_for('partial_queue') }}" hx-trigger="every 30s, sse-queue from:body" hx-swap="outerHTML">
   <h2>Queue ({{ data.total_tickets }} ticket{{ "s" if data.total_tickets != 1 else "" }})</h2>
   {% if data.counts_by_status %}
   <table>
