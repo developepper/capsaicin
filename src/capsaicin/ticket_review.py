@@ -33,6 +33,7 @@ from capsaicin.queries import (
     TICKET_COLUMNS,
     generate_id,
     get_impl_run_id,
+    load_backend_evidence_for_epic,
     load_criteria,
     load_open_findings,
     load_ticket,
@@ -332,12 +333,18 @@ def _review_invoke_once(
     # Get the implementation diff for review context
     impl_diff = get_run_diff(conn, impl_run_id)
 
+    # Load evidence from parent epic when the ticket has lineage
+    evidence = None
+    if epic_id:
+        evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+
     # Assemble reviewer prompt
     prompt = build_reviewer_prompt(
         ticket={"title": ticket_row["title"], "description": ticket_row["description"]},
         criteria=criteria,
         diff_context=impl_diff.diff_text,
         prior_findings=prior_findings,
+        evidence=evidence,
     )
 
     resolved = resolve_adapter_config(

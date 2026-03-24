@@ -392,6 +392,27 @@ class PlannedEpicData:
 
 
 @dataclass
+class SuggestedEvidenceRequirement:
+    """A suggested evidence requirement from the planner."""
+
+    description: str
+    suggested_command: str
+
+    def to_dict(self) -> dict:
+        return {
+            "description": self.description,
+            "suggested_command": self.suggested_command,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> SuggestedEvidenceRequirement:
+        return cls(
+            description=data["description"],
+            suggested_command=data["suggested_command"],
+        )
+
+
+@dataclass
 class PlannerResult:
     """Structured result from a planner run."""
 
@@ -399,14 +420,22 @@ class PlannerResult:
     tickets: list[PlannedTicketData]
     sequencing_notes: str | None = None
     open_questions: list[str] = field(default_factory=list)
+    suggested_evidence_requirements: list[SuggestedEvidenceRequirement] = field(
+        default_factory=list
+    )
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "epic": self.epic.to_dict(),
             "tickets": [t.to_dict() for t in self.tickets],
             "sequencing_notes": self.sequencing_notes,
             "open_questions": self.open_questions,
         }
+        if self.suggested_evidence_requirements:
+            d["suggested_evidence_requirements"] = [
+                r.to_dict() for r in self.suggested_evidence_requirements
+            ]
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> PlannerResult:
@@ -415,6 +444,10 @@ class PlannerResult:
             tickets=[PlannedTicketData.from_dict(t) for t in data["tickets"]],
             sequencing_notes=data.get("sequencing_notes"),
             open_questions=data.get("open_questions", []),
+            suggested_evidence_requirements=[
+                SuggestedEvidenceRequirement.from_dict(r)
+                for r in data.get("suggested_evidence_requirements", [])
+            ],
         )
 
     def to_json(self) -> str:

@@ -12,7 +12,12 @@ from pathlib import Path
 
 from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
-from capsaicin.adapters.types import PlannerResult, PlanningFinding, RunRequest
+from capsaicin.adapters.types import (
+    EvidenceRequirement,
+    PlannerResult,
+    PlanningFinding,
+    RunRequest,
+)
 from capsaicin.config import Config
 from capsaicin.resolver import resolve_adapter_config
 from capsaicin.orchestrator import (
@@ -31,6 +36,8 @@ from capsaicin.prompts import build_planner_draft_prompt, build_planner_revise_p
 from capsaicin.queries import (
     decode_text_list,
     generate_id,
+    insert_evidence_requirement,
+    load_backend_evidence_for_epic,
     load_open_planning_findings,
     load_planned_epic,
     now_utc,
@@ -463,12 +470,14 @@ def _draft_invoke_once(
     # Load context
     epic = load_planned_epic(conn, epic_id)
     prior_findings = load_open_planning_findings(conn, epic_id)
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
 
     # Build prompt based on whether this is a fresh draft or revision
     if cycle_number == 1 and epic["title"] is None:
         # Fresh draft
         prompt = build_planner_draft_prompt(
             problem_statement=epic["problem_statement"],
+            evidence=evidence or None,
         )
     else:
         # Revision — load current plan draft for context
@@ -489,6 +498,7 @@ def _draft_invoke_once(
             prior_findings=finding_objects,
             cycle=cycle_number,
             max_cycles=config.limits.max_cycles,
+            evidence=evidence or None,
         )
 
     resolved = resolve_adapter_config(
@@ -640,6 +650,27 @@ def _handle_draft_result(
 
     # Persist
     persist_planner_result(conn, epic_id, planner_result)
+
+    # Persist suggested evidence requirements from the planner,
+    # skipping any that already exist as pending with the same
+    # description and command (avoids duplicates across cycles).
+    for ser in planner_result.suggested_evidence_requirements:
+        existing = conn.execute(
+            "SELECT id FROM evidence_requirements "
+            "WHERE epic_id = ? AND description = ? AND suggested_command = ? "
+            "AND status = 'pending'",
+            (epic_id, ser.description, ser.suggested_command),
+        ).fetchone()
+        if existing:
+            continue
+        req = EvidenceRequirement(
+            id=generate_id(),
+            epic_id=epic_id,
+            description=ser.description,
+            suggested_command=ser.suggested_command,
+            status="pending",
+        )
+        insert_evidence_requirement(conn, req)
 
     # Transition to in-review
     transition_planned_epic(

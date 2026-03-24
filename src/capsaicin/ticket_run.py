@@ -33,6 +33,7 @@ from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
     TICKET_COLUMNS,
     generate_id,
+    load_backend_evidence_for_epic,
     load_criteria,
     load_open_findings,
     load_ticket,
@@ -316,6 +317,11 @@ def _impl_invoke_once(
         (ticket_id,),
     ).fetchone()
 
+    # Load evidence from parent epic when the ticket has lineage
+    evidence = None
+    if epic_id:
+        evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+
     # Assemble prompt and request
     prompt = build_implementer_prompt(
         ticket={"title": ticket_row["title"], "description": ticket_row["description"]},
@@ -323,6 +329,7 @@ def _impl_invoke_once(
         prior_findings=prior_findings,
         cycle=cycle_number,
         max_cycles=config.limits.max_cycles,
+        evidence=evidence,
     )
 
     resolved = resolve_adapter_config(

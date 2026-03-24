@@ -28,6 +28,7 @@ from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planning_reviewer_prompt
 from capsaicin.queries import (
     generate_id,
+    load_backend_evidence_for_epic,
     load_open_planning_findings,
     load_planned_epic,
     load_planned_tickets,
@@ -345,10 +346,13 @@ def _planning_review_invoke_once(
         else None
     )
 
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
+
     prompt = build_planning_reviewer_prompt(
         problem_statement=epic["problem_statement"],
         plan_draft=plan_draft,
         prior_findings=prior_finding_objects,
+        evidence=evidence or None,
     )
 
     resolved = resolve_adapter_config(
