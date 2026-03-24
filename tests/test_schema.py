@@ -26,6 +26,8 @@ EXPECTED_TABLES = {
     "planned_ticket_dependencies",
     "planning_findings",
     "materialization_hashes",
+    "backend_evidence",
+    "evidence_requirements",
 }
 
 EXPECTED_INDEXES = {
@@ -48,6 +50,12 @@ EXPECTED_INDEXES = {
     "idx_planned_ticket_deps_depends_on",
     "idx_agent_runs_epic",
     "idx_state_transitions_epic",
+    "idx_backend_evidence_epic",
+    "idx_backend_evidence_ticket",
+    "idx_backend_evidence_type",
+    "idx_evidence_requirements_epic",
+    "idx_evidence_requirements_ticket",
+    "idx_evidence_requirements_status",
 }
 
 

@@ -30,6 +30,10 @@ VALID_EXIT_STATUSES = frozenset(
         "permission_denied",
     }
 )
+VALID_EVIDENCE_TYPES = frozenset(
+    {"command_output", "structured_result", "permission_denial", "behavioral_note"}
+)
+VALID_EVIDENCE_REQ_STATUSES = frozenset({"pending", "fulfilled"})
 VALID_CRITERION_STATUSES = frozenset({"pending", "met", "unmet", "disputed"})
 
 
@@ -412,6 +416,113 @@ class PlannerResult:
     @classmethod
     def from_json(cls, s: str) -> PlannerResult:
         return cls.from_dict(json.loads(s))
+
+
+# ---------------------------------------------------------------------------
+# Backend evidence types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BackendEvidence:
+    """A piece of backend validation evidence attached to an epic or planned ticket."""
+
+    id: str
+    epic_id: str
+    evidence_type: str
+    title: str
+    planned_ticket_id: str | None = None
+    body: str | None = None
+    command: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    structured_data: dict | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_enum(self.evidence_type, VALID_EVIDENCE_TYPES, "evidence_type")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "epic_id": self.epic_id,
+            "planned_ticket_id": self.planned_ticket_id,
+            "evidence_type": self.evidence_type,
+            "title": self.title,
+            "body": self.body,
+            "command": self.command,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "structured_data": self.structured_data,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BackendEvidence:
+        structured = data.get("structured_data")
+        if isinstance(structured, str):
+            structured = json.loads(structured)
+        return cls(
+            id=data["id"],
+            epic_id=data["epic_id"],
+            planned_ticket_id=data.get("planned_ticket_id"),
+            evidence_type=data["evidence_type"],
+            title=data["title"],
+            body=data.get("body"),
+            command=data.get("command"),
+            stdout=data.get("stdout"),
+            stderr=data.get("stderr"),
+            structured_data=structured,
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+
+@dataclass
+class EvidenceRequirement:
+    """A requirement for backend validation evidence."""
+
+    id: str
+    epic_id: str
+    description: str
+    planned_ticket_id: str | None = None
+    suggested_command: str | None = None
+    status: str = "pending"
+    fulfilled_by: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_enum(self.status, VALID_EVIDENCE_REQ_STATUSES, "status")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "epic_id": self.epic_id,
+            "planned_ticket_id": self.planned_ticket_id,
+            "description": self.description,
+            "suggested_command": self.suggested_command,
+            "status": self.status,
+            "fulfilled_by": self.fulfilled_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> EvidenceRequirement:
+        return cls(
+            id=data["id"],
+            epic_id=data["epic_id"],
+            planned_ticket_id=data.get("planned_ticket_id"),
+            description=data["description"],
+            suggested_command=data.get("suggested_command"),
+            status=data.get("status", "pending"),
+            fulfilled_by=data.get("fulfilled_by"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
 
 
 # ---------------------------------------------------------------------------

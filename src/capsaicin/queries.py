@@ -6,7 +6,12 @@ import json
 import sqlite3
 from datetime import datetime, timezone
 
-from capsaicin.adapters.types import AcceptanceCriterion, Finding
+from capsaicin.adapters.types import (
+    AcceptanceCriterion,
+    BackendEvidence,
+    EvidenceRequirement,
+    Finding,
+)
 from capsaicin.errors import PlannedEpicNotFoundError, TicketNotFoundError
 
 
@@ -189,3 +194,111 @@ def get_planning_run_id(conn: sqlite3.Connection, epic_id: str) -> str:
     if row is None:
         raise ValueError(f"No planner run found for epic '{epic_id}'.")
     return row["id"]
+
+
+# ---------------------------------------------------------------------------
+# Backend evidence helpers
+# ---------------------------------------------------------------------------
+
+
+def insert_backend_evidence(conn: sqlite3.Connection, evidence: BackendEvidence) -> str:
+    """Insert a new backend evidence record. Returns the evidence ID."""
+    now = now_utc()
+    conn.execute(
+        "INSERT INTO backend_evidence "
+        "(id, epic_id, planned_ticket_id, evidence_type, title, "
+        "body, command, stdout, stderr, structured_data, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            evidence.id,
+            evidence.epic_id,
+            evidence.planned_ticket_id,
+            evidence.evidence_type,
+            evidence.title,
+            evidence.body,
+            evidence.command,
+            evidence.stdout,
+            evidence.stderr,
+            json.dumps(evidence.structured_data) if evidence.structured_data else None,
+            now,
+            now,
+        ),
+    )
+    return evidence.id
+
+
+def load_backend_evidence_for_epic(
+    conn: sqlite3.Connection, epic_id: str
+) -> list[BackendEvidence]:
+    """Load all backend evidence for an epic."""
+    rows = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, evidence_type, title, "
+        "body, command, stdout, stderr, structured_data, created_at, updated_at "
+        "FROM backend_evidence WHERE epic_id = ? ORDER BY created_at",
+        (epic_id,),
+    ).fetchall()
+    return [BackendEvidence.from_dict(dict(r)) for r in rows]
+
+
+def load_backend_evidence_for_ticket(
+    conn: sqlite3.Connection, planned_ticket_id: str
+) -> list[BackendEvidence]:
+    """Load all backend evidence for a planned ticket."""
+    rows = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, evidence_type, title, "
+        "body, command, stdout, stderr, structured_data, created_at, updated_at "
+        "FROM backend_evidence WHERE planned_ticket_id = ? ORDER BY created_at",
+        (planned_ticket_id,),
+    ).fetchall()
+    return [BackendEvidence.from_dict(dict(r)) for r in rows]
+
+
+def insert_evidence_requirement(
+    conn: sqlite3.Connection, requirement: EvidenceRequirement
+) -> str:
+    """Insert a new evidence requirement. Returns the requirement ID."""
+    now = now_utc()
+    conn.execute(
+        "INSERT INTO evidence_requirements "
+        "(id, epic_id, planned_ticket_id, description, suggested_command, "
+        "status, fulfilled_by, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            requirement.id,
+            requirement.epic_id,
+            requirement.planned_ticket_id,
+            requirement.description,
+            requirement.suggested_command,
+            requirement.status,
+            requirement.fulfilled_by,
+            now,
+            now,
+        ),
+    )
+    return requirement.id
+
+
+def load_evidence_requirements_for_epic(
+    conn: sqlite3.Connection, epic_id: str
+) -> list[EvidenceRequirement]:
+    """Load all evidence requirements for an epic."""
+    rows = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, description, suggested_command, "
+        "status, fulfilled_by, created_at, updated_at "
+        "FROM evidence_requirements WHERE epic_id = ? ORDER BY created_at",
+        (epic_id,),
+    ).fetchall()
+    return [EvidenceRequirement.from_dict(dict(r)) for r in rows]
+
+
+def load_evidence_requirements_for_ticket(
+    conn: sqlite3.Connection, planned_ticket_id: str
+) -> list[EvidenceRequirement]:
+    """Load all evidence requirements for a planned ticket."""
+    rows = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, description, suggested_command, "
+        "status, fulfilled_by, created_at, updated_at "
+        "FROM evidence_requirements WHERE planned_ticket_id = ? ORDER BY created_at",
+        (planned_ticket_id,),
+    ).fetchall()
+    return [EvidenceRequirement.from_dict(dict(r)) for r in rows]
