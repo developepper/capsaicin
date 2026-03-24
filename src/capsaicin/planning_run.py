@@ -498,8 +498,8 @@ def _draft_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.implementer.backend,
-            "command": config.implementer.command,
+            "backend": config.resolved_planner.backend,
+            "command": config.resolved_planner.command,
             "structured_output": "planner",
         },
     )

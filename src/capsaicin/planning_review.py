@@ -358,9 +358,9 @@ def _planning_review_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.reviewer.backend,
-            "command": config.reviewer.command,
-            "allowed_tools": config.reviewer.allowed_tools,
+            "backend": config.resolved_planning_reviewer.backend,
+            "command": config.resolved_planning_reviewer.command,
+            "allowed_tools": config.resolved_planning_reviewer.allowed_tools,
             "structured_output": "planning_review",
             "valid_sequences": valid_sequences,
         },
