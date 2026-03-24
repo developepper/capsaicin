@@ -20,8 +20,10 @@ def _ensure_defaults() -> None:
         return
     _DEFAULTS_LOADED = True
     from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.adapters.codex import CodexAdapter
 
     _REGISTRY.setdefault("claude-code", ClaudeCodeAdapter)
+    _REGISTRY.setdefault("codex", CodexAdapter)
 
 
 def register_adapter(name: str, cls: type[BaseAdapter]) -> None:
