@@ -9,6 +9,7 @@ from capsaicin.app.queries.planning_detail import get_planning_detail
 from capsaicin.errors import PlannedEpicNotFoundError
 from capsaicin.app.queries.planning_summary import (
     get_active_epics,
+    get_approved_epics,
     get_blocked_epics,
     get_epic_counts_by_status,
     get_human_gate_epics,
@@ -49,6 +50,23 @@ async def partial_planning_active(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "partials/planning_active.html",
+        {"data": data},
+    )
+
+
+async def partial_planning_approved(request: Request) -> HTMLResponse:
+    """Return the approved epics section fragment."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+
+    data = PlanningSummaryData(
+        total_epics=0,
+        approved_epics=get_approved_epics(conn, project_id),
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/planning_approved.html",
         {"data": data},
     )
 

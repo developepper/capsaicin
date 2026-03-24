@@ -71,6 +71,7 @@ from capsaicin.web.routes.planning_actions import (
 from capsaicin.web.routes.planning_partials import (
     partial_epic_content,
     partial_planning_active,
+    partial_planning_approved,
     partial_planning_blocked,
     partial_planning_gate,
     partial_planning_queue,
@@ -261,6 +262,11 @@ def create_app(
             "/partials/planning/active",
             partial_planning_active,
             name="partial_planning_active",
+        ),
+        Route(
+            "/partials/planning/approved",
+            partial_planning_approved,
+            name="partial_planning_approved",
         ),
         Route(
             "/partials/planning/blocked",

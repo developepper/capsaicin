@@ -15,6 +15,7 @@ class PlanningSummaryData:
     human_gate_epics: list[dict] = field(default_factory=list)
     blocked_epics: list[dict] = field(default_factory=list)
     active_epics: list[dict] = field(default_factory=list)
+    approved_epics: list[dict] = field(default_factory=list)
 
 
 def get_epic_counts_by_status(
@@ -53,6 +54,18 @@ def get_blocked_epics(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     return [dict(r) for r in rows]
 
 
+def get_approved_epics(conn: sqlite3.Connection, project_id: str) -> list[dict]:
+    """Return planned epics in approved status."""
+    rows = conn.execute(
+        "SELECT id, problem_statement, title, materialized_path, status_changed_at "
+        "FROM planned_epics "
+        "WHERE project_id = ? AND status = 'approved' "
+        "ORDER BY status_changed_at DESC",
+        (project_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
 def get_active_epics(conn: sqlite3.Connection, project_id: str) -> list[dict]:
     """Return planned epics in active states (new, drafting, in-review, revise)."""
     rows = conn.execute(
@@ -78,4 +91,5 @@ def get_planning_summary(
         human_gate_epics=get_human_gate_epics(conn, project_id),
         blocked_epics=get_blocked_epics(conn, project_id),
         active_epics=get_active_epics(conn, project_id),
+        approved_epics=get_approved_epics(conn, project_id),
     )
