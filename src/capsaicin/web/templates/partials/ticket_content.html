@@ -20,6 +20,11 @@
   {% endif %}
 </dl>
 
+{# --- Role Assignments (implementer / reviewer) --- #}
+{% if role_assignments %}
+{% include "partials/role_assignments.html" %}
+{% endif %}
+
 {# --- Handoff Context (from planned ticket) --- #}
 {% if data.planned_ticket %}
 <details>

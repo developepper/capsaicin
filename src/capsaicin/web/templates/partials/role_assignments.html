@@ -1,0 +1,71 @@
+{# Role Assignments panel — included from epic and ticket content templates.
+   Parameters:
+     role_assignments: dict of role -> ResolvedAdapter (config + source)
+     roles: list of role names to display (e.g. ["planner", "planning_reviewer"])
+     overrides: list of RoleOverride objects for this scope
+     scope: "epic" or "ticket"
+     scope_id: epic_id or ticket_id
+     override_roles: list of roles allowed for override creation
+#}
+<section class="role-assignments-panel">
+  <h2>Role Assignments</h2>
+  {% if role_assignments %}
+  <div class="table-wrap"><table>
+    <thead><tr><th>Role</th><th>Backend</th><th>Command</th><th>Source</th><th></th></tr></thead>
+    <tbody>
+      {% for role_name in roles %}
+        {% set ra = role_assignments.get(role_name) %}
+        {% if ra %}
+        {% set override_match = [] %}
+        {% for ov in overrides %}
+          {% if ov.role == role_name %}
+            {% set _ = override_match.append(ov) %}
+          {% endif %}
+        {% endfor %}
+        <tr>
+          <td>{{ role_name | replace("_", " ") }}</td>
+          <td><code>{{ ra.config.backend }}</code></td>
+          <td><code>{{ ra.config.command }}</code></td>
+          <td><span class="status-badge source-{{ ra.source | replace(' ', '-') }}">{{ ra.source }}</span></td>
+          <td>
+            {% if override_match %}
+            <form method="post"
+                  action="{% if scope == 'epic' %}{{ request.url_for('action_delete_epic_override', epic_id=scope_id, override_id=override_match[0].id) }}{% else %}{{ request.url_for('action_delete_ticket_override', ticket_id=scope_id, override_id=override_match[0].id) }}{% endif %}"
+                  style="display: inline;">
+              <button type="submit" class="btn btn-defer btn-sm">Clear Override</button>
+            </form>
+            {% endif %}
+          </td>
+        </tr>
+        {% endif %}
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <p class="empty">No role assignment data available.</p>
+  {% endif %}
+
+  {# --- Override creation form --- #}
+  <details class="action-detail">
+    <summary>Set override</summary>
+    <form method="post"
+          action="{% if scope == 'epic' %}{{ request.url_for('action_set_epic_override', epic_id=scope_id) }}{% else %}{{ request.url_for('action_set_ticket_override', ticket_id=scope_id) }}{% endif %}"
+          class="action-form">
+      <label for="override-role-{{ scope_id }}">Role</label>
+      <select id="override-role-{{ scope_id }}" name="role" required>
+        {% for r in override_roles %}
+        <option value="{{ r }}">{{ r | replace("_", " ") }}</option>
+        {% endfor %}
+      </select>
+      <label for="override-backend-{{ scope_id }}">Backend</label>
+      <input type="text" id="override-backend-{{ scope_id }}" name="backend" required placeholder="e.g. claude-code, codex">
+      <label for="override-command-{{ scope_id }}">Command</label>
+      <input type="text" id="override-command-{{ scope_id }}" name="command" required placeholder="e.g. claude, codex">
+      <label for="override-model-{{ scope_id }}">Model (optional)</label>
+      <input type="text" id="override-model-{{ scope_id }}" name="model" placeholder="e.g. opus">
+      <label for="override-tools-{{ scope_id }}">Allowed tools (optional, comma-separated)</label>
+      <input type="text" id="override-tools-{{ scope_id }}" name="allowed_tools" placeholder="e.g. Read, Glob, Grep, Bash">
+      <button type="submit" class="btn btn-action btn-sm">Set Override</button>
+    </form>
+  </details>
+</section>

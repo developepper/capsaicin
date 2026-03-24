@@ -344,6 +344,83 @@ async def action_materialize_epic(request: Request) -> RedirectResponse:
 
 
 # ---------------------------------------------------------------------------
+# Role override actions
+# ---------------------------------------------------------------------------
+
+
+async def action_set_epic_override(request: Request) -> RedirectResponse:
+    """POST /epics/{epic_id}/overrides — set a role override for planner/planning_reviewer."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+    epic_id = request.path_params["epic_id"]
+
+    form = await request.form()
+    role = form.get("role", "").strip()
+    backend = form.get("backend", "").strip()
+    command = form.get("command", "").strip()
+    model = form.get("model", "").strip() or None
+    allowed_tools_raw = form.get("allowed_tools", "").strip()
+    allowed_tools = (
+        [t.strip() for t in allowed_tools_raw.split(",") if t.strip()]
+        if allowed_tools_raw
+        else None
+    )
+
+    if not role or not backend or not command:
+        return _error_redirect(
+            request, epic_id, "Role, backend, and command are required."
+        )
+
+    from ulid import ULID
+
+    from capsaicin.resolver import set_override
+
+    try:
+        set_override(
+            conn,
+            override_id=str(ULID()),
+            project_id=project_id,
+            role=role,
+            backend=backend,
+            command=command,
+            epic_id=epic_id,
+            model=model,
+            allowed_tools=allowed_tools,
+        )
+        conn.commit()
+    except ValueError as exc:
+        return _error_redirect(request, epic_id, str(exc))
+
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
+
+
+async def action_delete_epic_override(request: Request) -> RedirectResponse:
+    """POST /epics/{epic_id}/overrides/{override_id}/delete — clear an epic override."""
+    conn = request.state.conn
+    epic_id = request.path_params["epic_id"]
+    override_id = request.path_params["override_id"]
+
+    # Verify the override belongs to this epic before deleting.
+    row = conn.execute(
+        "SELECT id FROM role_overrides WHERE id = ? AND epic_id = ?",
+        (override_id, epic_id),
+    ).fetchone()
+    if row is None:
+        return _error_redirect(request, epic_id, "Override not found for this epic.")
+
+    from capsaicin.resolver import delete_override
+
+    delete_override(conn, override_id)
+    conn.commit()
+
+    return RedirectResponse(
+        str(request.url_for("epic_detail", epic_id=epic_id)), status_code=303
+    )
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
 

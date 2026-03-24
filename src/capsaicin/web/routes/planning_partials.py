@@ -6,7 +6,9 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.planning_detail import get_planning_detail
+from capsaicin.config import load_config
 from capsaicin.errors import PlannedEpicNotFoundError
+from capsaicin.resolver import get_overrides_for_epic, resolve_all_roles
 from capsaicin.app.queries.planning_summary import (
     get_active_epics,
     get_approved_epics,
@@ -123,8 +125,21 @@ async def partial_epic_content(request: Request) -> HTMLResponse:
 
     gate_display = get_epic_gate_display(data.epic.get("gate_reason"))
 
+    config = load_config(request.app.state.config_path)
+    role_assignments = resolve_all_roles(config, conn=conn, epic_id=epic_id)
+    overrides = get_overrides_for_epic(conn, epic_id)
+
     return templates.TemplateResponse(
         request,
         "partials/epic_content.html",
-        {"data": data, "gate_display": gate_display},
+        {
+            "data": data,
+            "gate_display": gate_display,
+            "role_assignments": role_assignments,
+            "roles": ["planner", "planning_reviewer"],
+            "overrides": overrides,
+            "scope": "epic",
+            "scope_id": epic_id,
+            "override_roles": ["planner", "planning_reviewer"],
+        },
     )

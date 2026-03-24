@@ -20,6 +20,11 @@
   {% endif %}
 </dl>
 
+{# --- Role Assignments (planner / planning_reviewer) --- #}
+{% if role_assignments %}
+{% include "partials/role_assignments.html" %}
+{% endif %}
+
 {# --- Problem statement --- #}
 {% if data.epic.problem_statement %}
 <section>

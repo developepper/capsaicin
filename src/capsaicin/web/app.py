@@ -30,11 +30,13 @@ from capsaicin.web.routes.actions import (
     action_complete,
     action_create_ticket,
     action_defer,
+    action_delete_ticket_override,
     action_loop,
     action_resume,
     action_review,
     action_revise,
     action_run,
+    action_set_ticket_override,
     action_shutdown,
     action_unblock,
 )
@@ -61,11 +63,13 @@ from capsaicin.web.routes.planning_actions import (
     action_continue_implementation,
     action_create_epic,
     action_defer_epic,
+    action_delete_epic_override,
     action_draft_epic,
     action_materialize_epic,
     action_plan_loop,
     action_review_epic,
     action_revise_epic,
+    action_set_epic_override,
     action_unblock_epic,
 )
 from capsaicin.web.routes.evidence_actions import (
@@ -166,6 +170,19 @@ def create_app(
             methods=["POST"],
             name="action_loop",
         ),
+        # Ticket override routes
+        Route(
+            "/tickets/{ticket_id}/overrides",
+            action_set_ticket_override,
+            methods=["POST"],
+            name="action_set_ticket_override",
+        ),
+        Route(
+            "/tickets/{ticket_id}/overrides/{override_id}/delete",
+            action_delete_ticket_override,
+            methods=["POST"],
+            name="action_delete_ticket_override",
+        ),
         Route(
             "/actions/resume",
             action_resume,
@@ -259,6 +276,19 @@ def create_app(
             action_continue_implementation,
             methods=["POST"],
             name="action_continue_implementation",
+        ),
+        # Epic override routes
+        Route(
+            "/epics/{epic_id}/overrides",
+            action_set_epic_override,
+            methods=["POST"],
+            name="action_set_epic_override",
+        ),
+        Route(
+            "/epics/{epic_id}/overrides/{override_id}/delete",
+            action_delete_epic_override,
+            methods=["POST"],
+            name="action_delete_epic_override",
         ),
         # Evidence action routes — POST only
         Route(
