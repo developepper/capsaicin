@@ -35,7 +35,6 @@ VALID_EVIDENCE_TYPES = frozenset(
         "command",
         "output_envelope",
         "structured_result_sample",
-        "command_output",
         "structured_result",
         "permission_denial",
         "behavioral_note",

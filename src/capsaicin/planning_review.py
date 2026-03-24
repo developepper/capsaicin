@@ -367,6 +367,7 @@ def _planning_review_invoke_once(
         adapter_config={
             "backend": resolved.backend,
             "command": resolved.command,
+            "model": resolved.model,
             "allowed_tools": resolved.allowed_tools,
             "structured_output": "planning_review",
             "valid_sequences": valid_sequences,

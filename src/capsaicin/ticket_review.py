@@ -360,6 +360,7 @@ def _review_invoke_once(
         adapter_config={
             "backend": resolved.backend,
             "command": resolved.command,
+            "model": resolved.model,
             "allowed_tools": resolved.allowed_tools,
         },
     )

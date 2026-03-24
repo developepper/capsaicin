@@ -359,6 +359,15 @@
   <details class="evidence-create-detail">
     <summary>Add requirement</summary>
     <form method="post" action="{{ request.url_for('action_create_requirement', epic_id=data.epic.id) }}" class="create-form">
+      {% if data.planned_tickets %}
+      <label for="req-planned-ticket">Planned ticket (optional)</label>
+      <select id="req-planned-ticket" name="planned_ticket_id">
+        <option value="">Epic-level</option>
+        {% for pt in data.planned_tickets %}
+        <option value="{{ pt.id }}">T{{ pt.sequence }}: {{ pt.title }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
       <label for="req-description">Description</label>
       <textarea id="req-description" name="description" rows="2" placeholder="What evidence is needed?" required></textarea>
       <label for="req-command">Suggested command (optional)</label>
@@ -379,7 +388,7 @@
     {% endif %}
     {% set _ = evidence_by_type[ev.evidence_type].append(ev) %}
   {% endfor %}
-  {% for etype in ["command", "output_envelope", "structured_result_sample", "command_output", "structured_result", "permission_denial", "behavioral_note"] %}
+  {% for etype in ["command", "output_envelope", "structured_result_sample", "structured_result", "permission_denial", "behavioral_note"] %}
     {% if etype in evidence_by_type %}
     <div class="evidence-type-group">
       <h3 class="evidence-type-label">{{ etype | replace("_", " ") | title }}</h3>
@@ -437,11 +446,19 @@
         <option value="command">Command</option>
         <option value="output_envelope">Output Envelope</option>
         <option value="structured_result_sample">Structured Result Sample</option>
-        <option value="command_output">Command Output</option>
         <option value="structured_result">Structured Result</option>
         <option value="permission_denial">Permission Denial</option>
         <option value="behavioral_note">Behavioral Note</option>
       </select>
+      {% if data.planned_tickets %}
+      <label for="ev-planned-ticket">Planned ticket (optional)</label>
+      <select id="ev-planned-ticket" name="planned_ticket_id">
+        <option value="">Epic-level</option>
+        {% for pt in data.planned_tickets %}
+        <option value="{{ pt.id }}">T{{ pt.sequence }}: {{ pt.title }}</option>
+        {% endfor %}
+      </select>
+      {% endif %}
       <label for="ev-title">Title</label>
       <input type="text" id="ev-title" name="title" placeholder="Brief description of this evidence" required>
       <label for="ev-body">Body (optional)</label>

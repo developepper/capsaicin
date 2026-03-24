@@ -344,6 +344,7 @@ def _impl_invoke_once(
         adapter_config={
             "backend": resolved.backend,
             "command": resolved.command,
+            "model": resolved.model,
         },
     )
 

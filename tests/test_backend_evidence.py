@@ -59,7 +59,7 @@ class TestBackendEvidenceDataclass:
         evidence = BackendEvidence(
             id="ev1",
             epic_id="e1",
-            evidence_type="command_output",
+            evidence_type="output_envelope",
             title="Test ls output",
             planned_ticket_id="pt1",
             body="Listed directory contents",
@@ -113,7 +113,6 @@ class TestBackendEvidenceDataclass:
             "command",
             "output_envelope",
             "structured_result_sample",
-            "command_output",
             "structured_result",
             "permission_denial",
             "behavioral_note",
@@ -205,7 +204,7 @@ class TestMigrationSchema:
                 "INSERT INTO backend_evidence "
                 "(id, epic_id, evidence_type, title) "
                 "VALUES (?, ?, ?, ?)",
-                ("ev_bad", "nonexistent", "command_output", "Bad"),
+                ("ev_bad", "nonexistent", "output_envelope", "Bad"),
             )
 
     def test_evidence_requirements_fk_to_epic(self, conn):
@@ -249,7 +248,7 @@ class TestInsertAndLoadEvidence:
         evidence = BackendEvidence(
             id=generate_id(),
             epic_id="e1",
-            evidence_type="command_output",
+            evidence_type="output_envelope",
             title="ls output",
             command="ls -la",
             stdout="file1\nfile2",
@@ -346,7 +345,7 @@ class TestInsertAndLoadRequirements:
             BackendEvidence(
                 id=ev_id,
                 epic_id="e1",
-                evidence_type="command_output",
+                evidence_type="output_envelope",
                 title="Health check output",
                 command="curl http://localhost:8000/health",
                 stdout='{"status": "ok"}',
@@ -379,7 +378,7 @@ class TestLoadByIdQueries:
             BackendEvidence(
                 id=ev_id,
                 epic_id="e1",
-                evidence_type="command_output",
+                evidence_type="output_envelope",
                 title="Test evidence",
                 command="echo hello",
                 stdout="hello",
@@ -430,7 +429,7 @@ class TestFulfillAndWaiveWorkflow:
             BackendEvidence(
                 id=ev_id,
                 epic_id="e1",
-                evidence_type="command_output",
+                evidence_type="output_envelope",
                 title="Output",
             ),
         )
@@ -538,7 +537,7 @@ class TestDeleteEvidenceWithRequirement:
         insert_backend_evidence(
             conn,
             BackendEvidence(
-                id=ev_id, epic_id="e1", evidence_type="command_output", title="Output"
+                id=ev_id, epic_id="e1", evidence_type="output_envelope", title="Output"
             ),
         )
         req_id = generate_id()
@@ -564,7 +563,7 @@ class TestDeleteEvidenceWithRequirement:
         insert_backend_evidence(
             conn,
             BackendEvidence(
-                id=ev_id, epic_id="e1", evidence_type="command_output", title="Output"
+                id=ev_id, epic_id="e1", evidence_type="output_envelope", title="Output"
             ),
         )
         req_id = generate_id()

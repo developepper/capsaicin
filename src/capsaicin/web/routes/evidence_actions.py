@@ -31,7 +31,6 @@ VALID_EVIDENCE_TYPES = {
     "command",
     "output_envelope",
     "structured_result_sample",
-    "command_output",
     "structured_result",
     "permission_denial",
     "behavioral_note",
@@ -76,9 +75,12 @@ async def action_create_evidence(request: Request) -> RedirectResponse:
                 request, epic_id, "structured_data must be valid JSON."
             )
 
+    planned_ticket_id = form.get("planned_ticket_id", "").strip() or None
+
     evidence = BackendEvidence(
         id=generate_id(),
         epic_id=epic_id,
+        planned_ticket_id=planned_ticket_id,
         evidence_type=evidence_type,
         title=title,
         body=body,
@@ -107,10 +109,12 @@ async def action_create_requirement(request: Request) -> RedirectResponse:
         return _error_redirect(request, epic_id, "Requirement description is required.")
 
     suggested_command = form.get("suggested_command", "").strip() or None
+    planned_ticket_id = form.get("planned_ticket_id", "").strip() or None
 
     requirement = EvidenceRequirement(
         id=generate_id(),
         epic_id=epic_id,
+        planned_ticket_id=planned_ticket_id,
         description=description,
         suggested_command=suggested_command,
     )
@@ -153,6 +157,12 @@ async def action_satisfy_requirement(request: Request) -> RedirectResponse:
         return _error_redirect(
             request, epic_id, "Evidence does not belong to this epic."
         )
+    if requirement.planned_ticket_id != evidence.planned_ticket_id:
+        return _error_redirect(
+            request,
+            epic_id,
+            "Evidence and requirement must belong to the same planned ticket scope.",
+        )
 
     fulfill_evidence_requirement(conn, req_id, evidence_id)
     conn.commit()
@@ -189,7 +199,7 @@ async def action_waive_requirement(request: Request) -> RedirectResponse:
 async def action_paste_output(request: Request) -> RedirectResponse:
     """POST /epics/{epic_id}/requirements/{req_id}/paste-output — paste CLI output to create evidence and auto-satisfy.
 
-    Creates a command_output evidence record from the pasted stdout/stderr/exit_code,
+    Creates an output_envelope evidence record from the pasted stdout/stderr/exit_code,
     then marks the requirement as fulfilled.
     """
     conn = request.state.conn
@@ -227,7 +237,8 @@ async def action_paste_output(request: Request) -> RedirectResponse:
     evidence = BackendEvidence(
         id=generate_id(),
         epic_id=epic_id,
-        evidence_type="command_output",
+        planned_ticket_id=requirement.planned_ticket_id,
+        evidence_type="output_envelope",
         title=title,
         command=command,
         stdout=stdout,

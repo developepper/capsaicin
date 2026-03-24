@@ -507,6 +507,7 @@ def _draft_invoke_once(
         adapter_config={
             "backend": resolved.backend,
             "command": resolved.command,
+            "model": resolved.model,
             "structured_output": "planner",
         },
     )

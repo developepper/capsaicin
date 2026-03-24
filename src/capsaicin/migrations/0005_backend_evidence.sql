@@ -12,8 +12,8 @@ CREATE TABLE IF NOT EXISTS backend_evidence (
     epic_id           TEXT NOT NULL REFERENCES planned_epics(id),
     planned_ticket_id TEXT REFERENCES planned_tickets(id),
     evidence_type     TEXT NOT NULL CHECK (evidence_type IN (
-                          'command_output','structured_result',
-                          'permission_denial','behavioral_note'
+                          'command','output_envelope','structured_result_sample',
+                          'structured_result','permission_denial','behavioral_note'
                       )),
     title             TEXT NOT NULL,
     body              TEXT,
