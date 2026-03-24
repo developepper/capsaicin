@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import PlanningReviewResult, RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.orchestrator import (
     await_planning_human,
     check_planning_cycle_limit,
@@ -350,6 +351,12 @@ def _planning_review_invoke_once(
         prior_findings=prior_finding_objects,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="planning_reviewer",
+        conn=conn,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="reviewer",
@@ -358,9 +365,9 @@ def _planning_review_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.resolved_planning_reviewer.backend,
-            "command": config.resolved_planning_reviewer.command,
-            "allowed_tools": config.resolved_planning_reviewer.allowed_tools,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "allowed_tools": resolved.allowed_tools,
             "structured_output": "planning_review",
             "valid_sequences": valid_sequences,
         },

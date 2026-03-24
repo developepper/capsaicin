@@ -21,12 +21,21 @@ def review(
 
     Returns a structured ``CommandResult`` with the final ticket status.
     """
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.adapters.registry import build_adapter_from_config
+    from capsaicin.resolver import lookup_epic_id_for_ticket, resolve_adapter_config
     from capsaicin.ticket_review import run_review_pipeline, select_review_ticket
 
     ticket = select_review_ticket(conn, ticket_id)
+    epic_id = lookup_epic_id_for_ticket(conn, ticket["id"])
 
-    adapter = ClaudeCodeAdapter(command=config.reviewer.command)
+    adapter_config = resolve_adapter_config(
+        config,
+        role="reviewer",
+        conn=conn,
+        ticket_id=ticket["id"],
+        epic_id=epic_id,
+    )
+    adapter = build_adapter_from_config(adapter_config)
     final_status = run_review_pipeline(
         conn=conn,
         project_id=project_id,
@@ -35,6 +44,7 @@ def review(
         adapter=adapter,
         allow_drift=allow_drift,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
     refreshed = conn.execute(

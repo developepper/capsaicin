@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import PlannerResult, PlanningFinding, RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.orchestrator import (
     await_planning_human,
     check_draft_retry_limit,
@@ -490,6 +491,12 @@ def _draft_invoke_once(
             max_cycles=config.limits.max_cycles,
         )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="planner",
+        conn=conn,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="planner",
@@ -498,8 +505,8 @@ def _draft_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.resolved_planner.backend,
-            "command": config.resolved_planner.command,
+            "backend": resolved.backend,
+            "command": resolved.command,
             "structured_output": "planner",
         },
     )

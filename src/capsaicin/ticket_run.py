@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.diff import capture_diff, persist_run_diff
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.orchestrator import (
@@ -158,6 +159,7 @@ def run_implementation_pipeline(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Execute the full implementation pipeline for a ticket.
 
@@ -223,6 +225,7 @@ def run_implementation_pipeline(
         config=config,
         adapter=adapter,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
 
@@ -235,6 +238,7 @@ def invoke_impl_with_retries(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Invoke the adapter, handling retries on failure/timeout.
 
@@ -257,6 +261,7 @@ def invoke_impl_with_retries(
             config=config,
             adapter=adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
 
         if not outcome.should_retry:
@@ -298,6 +303,7 @@ def _impl_invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> PipelineOutcome:
     """Single adapter invocation. Returns a PipelineOutcome."""
     run_id = generate_id()
@@ -319,6 +325,13 @@ def _impl_invoke_once(
         max_cycles=config.limits.max_cycles,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="implementer",
+        conn=conn,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="implementer",
@@ -329,8 +342,8 @@ def _impl_invoke_once(
         prior_findings=prior_findings,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.implementer.backend,
-            "command": config.implementer.command,
+            "backend": resolved.backend,
+            "command": resolved.command,
         },
     )
 

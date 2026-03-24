@@ -21,16 +21,32 @@ def loop(
 
     Returns a structured ``CommandResult`` with the final status and detail.
     """
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.adapters.registry import build_adapter_from_config
     from capsaicin.loop import run_loop, select_ticket_for_loop
+    from capsaicin.resolver import lookup_epic_id_for_ticket, resolve_adapter_config
 
     # Resolve the ticket before entering the loop so the identity is
     # captured regardless of whether the caller passed an explicit ID.
     selected = select_ticket_for_loop(conn, ticket_id)
     resolved_ticket_id = selected["id"]
+    epic_id = lookup_epic_id_for_ticket(conn, resolved_ticket_id)
 
-    impl_adapter = ClaudeCodeAdapter(command=config.implementer.command)
-    review_adapter = ClaudeCodeAdapter(command=config.reviewer.command)
+    impl_config = resolve_adapter_config(
+        config,
+        role="implementer",
+        conn=conn,
+        ticket_id=resolved_ticket_id,
+        epic_id=epic_id,
+    )
+    review_config = resolve_adapter_config(
+        config,
+        role="reviewer",
+        conn=conn,
+        ticket_id=resolved_ticket_id,
+        epic_id=epic_id,
+    )
+    impl_adapter = build_adapter_from_config(impl_config)
+    review_adapter = build_adapter_from_config(review_config)
 
     final_status, detail = run_loop(
         conn=conn,
@@ -41,6 +57,7 @@ def loop(
         ticket_id=resolved_ticket_id,
         max_cycles=max_cycles,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
     # Reload ticket for gate/blocked reasons

@@ -28,6 +28,7 @@ EXPECTED_TABLES = {
     "materialization_hashes",
     "backend_evidence",
     "evidence_requirements",
+    "role_overrides",
 }
 
 EXPECTED_INDEXES = {
@@ -56,6 +57,9 @@ EXPECTED_INDEXES = {
     "idx_evidence_requirements_epic",
     "idx_evidence_requirements_ticket",
     "idx_evidence_requirements_status",
+    "idx_role_overrides_epic",
+    "idx_role_overrides_ticket",
+    "idx_role_overrides_project",
 }
 
 

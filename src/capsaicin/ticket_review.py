@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.criteria import update_criteria_from_review
 from capsaicin.diff import get_run_diff
@@ -165,6 +166,7 @@ def run_review_pipeline(
     adapter: BaseAdapter,
     allow_drift: bool = False,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Execute the full review pipeline for a ticket.
 
@@ -187,6 +189,7 @@ def run_review_pipeline(
         config=config,
         adapter=adapter,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
 
@@ -211,6 +214,7 @@ def invoke_review_with_retries(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Invoke the reviewer adapter, handling retries on errors.
 
@@ -260,6 +264,7 @@ def invoke_review_with_retries(
             config=config,
             adapter=adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
 
         if not outcome.should_retry:
@@ -309,6 +314,7 @@ def _review_invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> PipelineOutcome:
     """Single reviewer invocation. Returns a PipelineOutcome."""
 
@@ -334,6 +340,13 @@ def _review_invoke_once(
         prior_findings=prior_findings,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="reviewer",
+        conn=conn,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="reviewer",
@@ -345,9 +358,9 @@ def _review_invoke_once(
         prior_findings=prior_findings,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.reviewer.backend,
-            "command": config.reviewer.command,
-            "allowed_tools": config.reviewer.allowed_tools,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "allowed_tools": resolved.allowed_tools,
         },
     )
 
