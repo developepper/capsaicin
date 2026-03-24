@@ -28,6 +28,19 @@ The current runtime is built around a local SQLite database, a `.capsaicin/` pro
 
 It is designed to orchestrate the workflow, not replace human judgment.
 
+## Project Status
+
+`capsaicin` is still in active development and the project is optimized for
+fast iteration over stability guarantees.
+
+Current policy:
+
+- backward compatibility is not required between in-flight epics
+- legacy behavior and migration preservation are not design constraints unless
+  a ticket explicitly says otherwise
+- refactors that improve maintainability, scalability, or architectural
+  clarity are preferred over compatibility-preserving workarounds
+
 ## Current Scope
 
 The local planning and implementation loops are available now.
