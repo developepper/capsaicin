@@ -5,6 +5,8 @@ from __future__ import annotations
 import sqlite3
 from dataclasses import dataclass, field
 
+from capsaicin.adapters.types import BackendEvidence, EvidenceRequirement
+
 
 @dataclass
 class PlanningDetailData:
@@ -17,6 +19,8 @@ class PlanningDetailData:
     impl_tickets: list[dict] = field(default_factory=list)
     last_run: dict | None = None
     transition_history: list[dict] | None = None
+    evidence: list[BackendEvidence] = field(default_factory=list)
+    evidence_requirements: list[EvidenceRequirement] = field(default_factory=list)
 
 
 def _load_impl_tickets(
@@ -82,6 +86,8 @@ def get_planning_detail(
     Raises ``PlannedEpicNotFoundError`` if the epic does not exist.
     """
     from capsaicin.queries import (
+        load_backend_evidence_for_epic,
+        load_evidence_requirements_for_epic,
         load_open_planning_findings,
         load_planned_epic,
         load_planned_ticket_criteria,
@@ -108,6 +114,9 @@ def get_planning_detail(
 
     impl_tickets = _load_impl_tickets(conn, epic_id)
 
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
+    evidence_requirements = load_evidence_requirements_for_epic(conn, epic_id)
+
     data = PlanningDetailData(
         epic=epic,
         planned_tickets=planned_tickets,
@@ -115,6 +124,8 @@ def get_planning_detail(
         open_findings=open_findings,
         impl_tickets=impl_tickets,
         last_run=last_run,
+        evidence=evidence,
+        evidence_requirements=evidence_requirements,
     )
 
     if verbose:

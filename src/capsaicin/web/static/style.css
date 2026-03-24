@@ -633,6 +633,110 @@ textarea { resize: vertical; }
 
 
 /* ================================================================
+   Evidence & requirements
+   ================================================================ */
+.evidence-status-summary { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: .5rem; }
+.evidence-status-pending { background: var(--status-gate); }
+.evidence-status-fulfilled { background: var(--status-active); }
+.evidence-status-waived { background: var(--status-done); }
+
+.evidence-requirement {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: .65rem .85rem;
+  margin-bottom: .5rem;
+}
+.evidence-req-pending { border-left: 3px solid #eab308; }
+.evidence-req-fulfilled { border-left: 3px solid var(--btn-approve); }
+.evidence-req-waived { border-left: 3px solid var(--btn-defer); }
+
+.evidence-req-header { display: flex; align-items: center; gap: .5rem; flex-wrap: wrap; }
+.evidence-req-description { font-weight: 500; }
+
+.evidence-req-actions { display: flex; align-items: flex-start; gap: .5rem; flex-wrap: wrap; margin-top: .5rem; }
+
+.evidence-command-block { margin-top: .35rem; }
+.evidence-command-block label { font-size: .78em; color: var(--text-muted); font-weight: 600; }
+.evidence-command-block .copyable-command {
+  margin-top: .15rem;
+  user-select: all;
+  cursor: text;
+}
+
+.evidence-paste-flow,
+.evidence-satisfy-flow { flex: 0 0 auto; }
+
+.evidence-paste-form,
+.evidence-satisfy-form {
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  padding: .65rem;
+  margin-top: .35rem;
+  max-width: 36rem;
+}
+.evidence-paste-form label,
+.evidence-satisfy-form label {
+  display: block;
+  font-size: .78em;
+  font-weight: 600;
+  color: var(--text-muted);
+  margin-bottom: .15rem;
+  margin-top: .35rem;
+}
+.evidence-paste-form label:first-child,
+.evidence-satisfy-form label:first-child { margin-top: 0; }
+.evidence-paste-form .btn,
+.evidence-satisfy-form .btn { margin-top: .5rem; }
+
+.evidence-waive-form { margin-top: 0; }
+
+.evidence-type-group { margin-bottom: .75rem; }
+.evidence-type-label {
+  text-transform: capitalize;
+  color: var(--text-muted);
+  font-size: .9em;
+  margin-bottom: .35rem;
+}
+
+.evidence-card {
+  background: var(--bg-surface-alt);
+  border: 1px solid var(--border-light);
+  border-radius: var(--radius-sm);
+  padding: .65rem .85rem;
+  margin-bottom: .35rem;
+}
+.evidence-card-header { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: .25rem; }
+.evidence-card-time { font-size: .78em; }
+.text-muted { color: var(--text-muted); }
+
+.evidence-create-detail { margin-top: .65rem; }
+.evidence-create-detail .create-form { margin-top: .35rem; }
+
+.evidence-satisfy-form select {
+  width: 100%;
+  font-family: inherit;
+  font-size: .88em;
+  padding: .4rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+select {
+  font-family: inherit;
+  font-size: .88em;
+  padding: .4rem .5rem;
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  background: var(--bg-surface);
+  color: var(--text);
+}
+
+
+/* ================================================================
    HTMX swap transition
    ================================================================ */
 .htmx-swapping { opacity: .5; transition: opacity 100ms ease-out; }

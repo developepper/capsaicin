@@ -68,6 +68,14 @@ from capsaicin.web.routes.planning_actions import (
     action_revise_epic,
     action_unblock_epic,
 )
+from capsaicin.web.routes.evidence_actions import (
+    action_create_evidence,
+    action_create_requirement,
+    action_delete_evidence,
+    action_paste_output,
+    action_satisfy_requirement,
+    action_waive_requirement,
+)
 from capsaicin.web.routes.planning_partials import (
     partial_epic_content,
     partial_planning_active,
@@ -251,6 +259,43 @@ def create_app(
             action_continue_implementation,
             methods=["POST"],
             name="action_continue_implementation",
+        ),
+        # Evidence action routes — POST only
+        Route(
+            "/epics/{epic_id}/evidence",
+            action_create_evidence,
+            methods=["POST"],
+            name="action_create_evidence",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements",
+            action_create_requirement,
+            methods=["POST"],
+            name="action_create_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/satisfy",
+            action_satisfy_requirement,
+            methods=["POST"],
+            name="action_satisfy_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/waive",
+            action_waive_requirement,
+            methods=["POST"],
+            name="action_waive_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/paste-output",
+            action_paste_output,
+            methods=["POST"],
+            name="action_paste_output",
+        ),
+        Route(
+            "/epics/{epic_id}/evidence/{evidence_id}/delete",
+            action_delete_evidence,
+            methods=["POST"],
+            name="action_delete_evidence",
         ),
         # Planning partials
         Route(

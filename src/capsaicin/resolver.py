@@ -55,12 +55,19 @@ def _lookup_ticket_override(
     ticket_id: str,
     role: str,
 ) -> AdapterConfig | None:
-    """Look up a ticket-level override for *role*."""
-    row = conn.execute(
-        "SELECT backend, command, model, allowed_tools "
-        "FROM role_overrides WHERE ticket_id = ? AND role = ?",
-        (ticket_id, role),
-    ).fetchone()
+    """Look up a ticket-level override for *role*.
+
+    Returns None gracefully if the role_overrides table does not exist
+    (older DBs that have not yet run migration 0006).
+    """
+    try:
+        row = conn.execute(
+            "SELECT backend, command, model, allowed_tools "
+            "FROM role_overrides WHERE ticket_id = ? AND role = ?",
+            (ticket_id, role),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
     if row is None:
         return None
     return _row_to_adapter_config(row)
@@ -71,12 +78,19 @@ def _lookup_epic_override(
     epic_id: str,
     role: str,
 ) -> AdapterConfig | None:
-    """Look up an epic-level override for *role*."""
-    row = conn.execute(
-        "SELECT backend, command, model, allowed_tools "
-        "FROM role_overrides WHERE epic_id = ? AND role = ?",
-        (epic_id, role),
-    ).fetchone()
+    """Look up an epic-level override for *role*.
+
+    Returns None gracefully if the role_overrides table does not exist
+    (older DBs that have not yet run migration 0006).
+    """
+    try:
+        row = conn.execute(
+            "SELECT backend, command, model, allowed_tools "
+            "FROM role_overrides WHERE epic_id = ? AND role = ?",
+            (epic_id, role),
+        ).fetchone()
+    except sqlite3.OperationalError:
+        return None
     if row is None:
         return None
     return _row_to_adapter_config(row)

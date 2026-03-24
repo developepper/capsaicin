@@ -302,3 +302,71 @@ def load_evidence_requirements_for_ticket(
         (planned_ticket_id,),
     ).fetchall()
     return [EvidenceRequirement.from_dict(dict(r)) for r in rows]
+
+
+def load_evidence_requirement_by_id(
+    conn: sqlite3.Connection, requirement_id: str
+) -> EvidenceRequirement | None:
+    """Load a single evidence requirement by ID, or None if not found."""
+    row = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, description, suggested_command, "
+        "status, fulfilled_by, created_at, updated_at "
+        "FROM evidence_requirements WHERE id = ?",
+        (requirement_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return EvidenceRequirement.from_dict(dict(row))
+
+
+def load_backend_evidence_by_id(
+    conn: sqlite3.Connection, evidence_id: str
+) -> BackendEvidence | None:
+    """Load a single backend evidence record by ID, or None if not found."""
+    row = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, evidence_type, title, "
+        "body, command, stdout, stderr, structured_data, created_at, updated_at "
+        "FROM backend_evidence WHERE id = ?",
+        (evidence_id,),
+    ).fetchone()
+    if row is None:
+        return None
+    return BackendEvidence.from_dict(dict(row))
+
+
+def clear_evidence_from_requirements(
+    conn: sqlite3.Connection, evidence_id: str
+) -> None:
+    """Reset any requirements fulfilled by this evidence back to pending."""
+    now = now_utc()
+    conn.execute(
+        "UPDATE evidence_requirements SET status = 'pending', "
+        "fulfilled_by = NULL, updated_at = ? WHERE fulfilled_by = ?",
+        (now, evidence_id),
+    )
+
+
+def delete_backend_evidence(conn: sqlite3.Connection, evidence_id: str) -> None:
+    """Delete a backend evidence record by ID."""
+    conn.execute("DELETE FROM backend_evidence WHERE id = ?", (evidence_id,))
+
+
+def fulfill_evidence_requirement(
+    conn: sqlite3.Connection, requirement_id: str, evidence_id: str
+) -> None:
+    """Mark a requirement as fulfilled by linking it to an evidence record."""
+    now = now_utc()
+    conn.execute(
+        "UPDATE evidence_requirements SET status = 'fulfilled', "
+        "fulfilled_by = ?, updated_at = ? WHERE id = ?",
+        (evidence_id, now, requirement_id),
+    )
+
+
+def waive_evidence_requirement(conn: sqlite3.Connection, requirement_id: str) -> None:
+    """Mark a requirement as waived."""
+    now = now_utc()
+    conn.execute(
+        "UPDATE evidence_requirements SET status = 'waived', updated_at = ? WHERE id = ?",
+        (now, requirement_id),
+    )

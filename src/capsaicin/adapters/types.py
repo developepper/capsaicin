@@ -31,9 +31,17 @@ VALID_EXIT_STATUSES = frozenset(
     }
 )
 VALID_EVIDENCE_TYPES = frozenset(
-    {"command_output", "structured_result", "permission_denial", "behavioral_note"}
+    {
+        "command",
+        "output_envelope",
+        "structured_result_sample",
+        "command_output",
+        "structured_result",
+        "permission_denial",
+        "behavioral_note",
+    }
 )
-VALID_EVIDENCE_REQ_STATUSES = frozenset({"pending", "fulfilled"})
+VALID_EVIDENCE_REQ_STATUSES = frozenset({"pending", "fulfilled", "waived"})
 VALID_CRITERION_STATUSES = frozenset({"pending", "met", "unmet", "disputed"})
 
 

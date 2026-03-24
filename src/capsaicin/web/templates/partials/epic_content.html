@@ -284,6 +284,181 @@
   {% endif %}
 </section>
 
+{# --- Evidence Requirements --- #}
+<section>
+  <h2>Evidence Requirements{% if data.evidence_requirements %} ({{ data.evidence_requirements|length }}){% endif %}</h2>
+  {% if data.evidence_requirements %}
+  {% set pending_reqs = data.evidence_requirements|selectattr("status", "equalto", "pending")|list %}
+  {% set fulfilled_reqs = data.evidence_requirements|selectattr("status", "equalto", "fulfilled")|list %}
+  {% set waived_reqs = data.evidence_requirements|selectattr("status", "equalto", "waived")|list %}
+  <p class="evidence-status-summary">
+    {% if pending_reqs %}<span class="status-badge evidence-status-pending">pending: {{ pending_reqs|length }}</span>{% endif %}
+    {% if fulfilled_reqs %}<span class="status-badge evidence-status-fulfilled">satisfied: {{ fulfilled_reqs|length }}</span>{% endif %}
+    {% if waived_reqs %}<span class="status-badge evidence-status-waived">waived: {{ waived_reqs|length }}</span>{% endif %}
+  </p>
+  {% for req in data.evidence_requirements %}
+  <div class="evidence-requirement evidence-req-{{ req.status }}">
+    <div class="evidence-req-header">
+      <span class="status-badge evidence-status-{{ req.status }}">{{ req.status }}</span>
+      <span class="evidence-req-description">{{ req.description }}</span>
+    </div>
+    {% if req.suggested_command %}
+    <div class="evidence-command-block">
+      <label>Suggested command:</label>
+      <pre class="agent-text copyable-command">{{ req.suggested_command }}</pre>
+    </div>
+    {% endif %}
+
+    {% if req.status == "pending" %}
+    <div class="evidence-req-actions">
+      {# --- Paste output flow --- #}
+      {% if req.suggested_command %}
+      <details class="evidence-paste-flow">
+        <summary>Paste output</summary>
+        <form method="post" action="{{ request.url_for('action_paste_output', epic_id=data.epic.id, req_id=req.id) }}" class="evidence-paste-form">
+          <label for="paste-stdout-{{ req.id }}">stdout</label>
+          <textarea id="paste-stdout-{{ req.id }}" name="stdout" rows="4" placeholder="Paste command stdout here"></textarea>
+          <label for="paste-stderr-{{ req.id }}">stderr</label>
+          <textarea id="paste-stderr-{{ req.id }}" name="stderr" rows="2" placeholder="Paste stderr (if any)"></textarea>
+          <label for="paste-exit-{{ req.id }}">exit code</label>
+          <input type="text" id="paste-exit-{{ req.id }}" name="exit_code" placeholder="0">
+          <button type="submit" class="btn btn-approve btn-sm">Submit Output</button>
+        </form>
+      </details>
+      {% endif %}
+
+      {# --- Satisfy by linking existing evidence --- #}
+      {% if data.evidence %}
+      <details class="evidence-satisfy-flow">
+        <summary>Satisfy with existing evidence</summary>
+        <form method="post" action="{{ request.url_for('action_satisfy_requirement', epic_id=data.epic.id, req_id=req.id) }}" class="evidence-satisfy-form">
+          <label for="satisfy-evidence-{{ req.id }}">Evidence</label>
+          <select id="satisfy-evidence-{{ req.id }}" name="evidence_id">
+            {% for ev in data.evidence %}
+            <option value="{{ ev.id }}">{{ ev.title }} ({{ ev.evidence_type }})</option>
+            {% endfor %}
+          </select>
+          <button type="submit" class="btn btn-approve btn-sm">Satisfy</button>
+        </form>
+      </details>
+      {% endif %}
+
+      {# --- Waive --- #}
+      <form method="post" action="{{ request.url_for('action_waive_requirement', epic_id=data.epic.id, req_id=req.id) }}" class="evidence-waive-form" style="display: inline;">
+        <button type="submit" class="btn btn-defer btn-sm">Waive</button>
+      </form>
+    </div>
+    {% endif %}
+  </div>
+  {% endfor %}
+  {% else %}
+  <p class="empty">No evidence requirements defined.</p>
+  {% endif %}
+
+  {# --- Create requirement form --- #}
+  <details class="evidence-create-detail">
+    <summary>Add requirement</summary>
+    <form method="post" action="{{ request.url_for('action_create_requirement', epic_id=data.epic.id) }}" class="create-form">
+      <label for="req-description">Description</label>
+      <textarea id="req-description" name="description" rows="2" placeholder="What evidence is needed?" required></textarea>
+      <label for="req-command">Suggested command (optional)</label>
+      <input type="text" id="req-command" name="suggested_command" placeholder="e.g. python -m pytest tests/ -v">
+      <button type="submit" class="btn btn-action btn-sm">Create Requirement</button>
+    </form>
+  </details>
+</section>
+
+{# --- Backend Evidence --- #}
+<section>
+  <h2>Backend Evidence{% if data.evidence %} ({{ data.evidence|length }}){% endif %}</h2>
+  {% if data.evidence %}
+  {% set evidence_by_type = {} %}
+  {% for ev in data.evidence %}
+    {% if ev.evidence_type not in evidence_by_type %}
+      {% set _ = evidence_by_type.__setitem__(ev.evidence_type, []) %}
+    {% endif %}
+    {% set _ = evidence_by_type[ev.evidence_type].append(ev) %}
+  {% endfor %}
+  {% for etype in ["command", "output_envelope", "structured_result_sample", "command_output", "structured_result", "permission_denial", "behavioral_note"] %}
+    {% if etype in evidence_by_type %}
+    <div class="evidence-type-group">
+      <h3 class="evidence-type-label">{{ etype | replace("_", " ") | title }}</h3>
+      {% for ev in evidence_by_type[etype] %}
+      <div class="evidence-card">
+        <div class="evidence-card-header">
+          <strong>{{ ev.title }}</strong>
+          <span class="text-muted evidence-card-time">{{ ev.created_at }}</span>
+          <form method="post" action="{{ request.url_for('action_delete_evidence', epic_id=data.epic.id, evidence_id=ev.id) }}" class="evidence-delete-form" style="display: inline; margin-left: auto;">
+            <button type="submit" class="btn btn-defer btn-sm" onclick="return confirm('Delete this evidence record?')">Delete</button>
+          </form>
+        </div>
+        {% if ev.body %}
+        <pre class="agent-text">{{ ev.body }}</pre>
+        {% endif %}
+        {% if ev.command %}
+        <div class="evidence-command-block">
+          <label>Command:</label>
+          <pre class="agent-text copyable-command">{{ ev.command }}</pre>
+        </div>
+        {% endif %}
+        {% if ev.stdout %}
+        <details>
+          <summary>stdout</summary>
+          <pre class="agent-text">{{ ev.stdout }}</pre>
+        </details>
+        {% endif %}
+        {% if ev.stderr %}
+        <details>
+          <summary>stderr</summary>
+          <pre class="agent-text">{{ ev.stderr }}</pre>
+        </details>
+        {% endif %}
+        {% if ev.structured_data %}
+        <details>
+          <summary>Structured data</summary>
+          <pre class="agent-text">{{ ev.structured_data | tojson(indent=2) }}</pre>
+        </details>
+        {% endif %}
+      </div>
+      {% endfor %}
+    </div>
+    {% endif %}
+  {% endfor %}
+  {% else %}
+  <p class="empty">No evidence recorded yet.</p>
+  {% endif %}
+
+  {# --- Create evidence form --- #}
+  <details class="evidence-create-detail">
+    <summary>Add evidence</summary>
+    <form method="post" action="{{ request.url_for('action_create_evidence', epic_id=data.epic.id) }}" class="create-form">
+      <label for="ev-type">Type</label>
+      <select id="ev-type" name="evidence_type" required>
+        <option value="command">Command</option>
+        <option value="output_envelope">Output Envelope</option>
+        <option value="structured_result_sample">Structured Result Sample</option>
+        <option value="command_output">Command Output</option>
+        <option value="structured_result">Structured Result</option>
+        <option value="permission_denial">Permission Denial</option>
+        <option value="behavioral_note">Behavioral Note</option>
+      </select>
+      <label for="ev-title">Title</label>
+      <input type="text" id="ev-title" name="title" placeholder="Brief description of this evidence" required>
+      <label for="ev-body">Body (optional)</label>
+      <textarea id="ev-body" name="body" rows="2" placeholder="Additional notes"></textarea>
+      <label for="ev-command">Command (optional)</label>
+      <input type="text" id="ev-command" name="command" placeholder="e.g. python -m pytest tests/">
+      <label for="ev-stdout">stdout (optional)</label>
+      <textarea id="ev-stdout" name="stdout" rows="3" placeholder="Command output"></textarea>
+      <label for="ev-stderr">stderr (optional)</label>
+      <textarea id="ev-stderr" name="stderr" rows="2" placeholder="Error output"></textarea>
+      <label for="ev-structured">Structured data JSON (optional)</label>
+      <textarea id="ev-structured" name="structured_data" rows="2" placeholder='{"key": "value"}'></textarea>
+      <button type="submit" class="btn btn-action btn-sm">Create Evidence</button>
+    </form>
+  </details>
+</section>
+
 {# --- Last run --- #}
 {% if data.last_run %}
 <section>

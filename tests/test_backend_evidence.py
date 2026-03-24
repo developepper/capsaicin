@@ -9,13 +9,19 @@ import pytest
 from capsaicin.adapters.types import BackendEvidence, EvidenceRequirement
 from capsaicin.db import get_connection, run_migrations
 from capsaicin.queries import (
+    clear_evidence_from_requirements,
+    delete_backend_evidence,
+    fulfill_evidence_requirement,
     generate_id,
     insert_backend_evidence,
     insert_evidence_requirement,
+    load_backend_evidence_by_id,
     load_backend_evidence_for_epic,
     load_backend_evidence_for_ticket,
+    load_evidence_requirement_by_id,
     load_evidence_requirements_for_epic,
     load_evidence_requirements_for_ticket,
+    waive_evidence_requirement,
 )
 
 
@@ -104,6 +110,9 @@ class TestBackendEvidenceDataclass:
 
     def test_all_evidence_types_valid(self):
         for etype in (
+            "command",
+            "output_envelope",
+            "structured_result_sample",
             "command_output",
             "structured_result",
             "permission_denial",
@@ -355,3 +364,221 @@ class TestInsertAndLoadRequirements:
         results = load_evidence_requirements_for_epic(conn, "e1")
         assert results[0].status == "fulfilled"
         assert results[0].fulfilled_by == ev_id
+
+
+# ---------------------------------------------------------------------------
+# By-ID lookup tests
+# ---------------------------------------------------------------------------
+
+
+class TestLoadByIdQueries:
+    def test_load_evidence_by_id(self, conn):
+        ev_id = generate_id()
+        insert_backend_evidence(
+            conn,
+            BackendEvidence(
+                id=ev_id,
+                epic_id="e1",
+                evidence_type="command_output",
+                title="Test evidence",
+                command="echo hello",
+                stdout="hello",
+            ),
+        )
+        result = load_backend_evidence_by_id(conn, ev_id)
+        assert result is not None
+        assert result.id == ev_id
+        assert result.title == "Test evidence"
+        assert result.stdout == "hello"
+
+    def test_load_evidence_by_id_not_found(self, conn):
+        result = load_backend_evidence_by_id(conn, "nonexistent")
+        assert result is None
+
+    def test_load_requirement_by_id(self, conn):
+        req_id = generate_id()
+        insert_evidence_requirement(
+            conn,
+            EvidenceRequirement(
+                id=req_id,
+                epic_id="e1",
+                description="Check something",
+                suggested_command="echo test",
+            ),
+        )
+        result = load_evidence_requirement_by_id(conn, req_id)
+        assert result is not None
+        assert result.id == req_id
+        assert result.description == "Check something"
+        assert result.status == "pending"
+
+    def test_load_requirement_by_id_not_found(self, conn):
+        result = load_evidence_requirement_by_id(conn, "nonexistent")
+        assert result is None
+
+
+# ---------------------------------------------------------------------------
+# Fulfill and waive workflow tests
+# ---------------------------------------------------------------------------
+
+
+class TestFulfillAndWaiveWorkflow:
+    def test_fulfill_requirement(self, conn):
+        ev_id = generate_id()
+        insert_backend_evidence(
+            conn,
+            BackendEvidence(
+                id=ev_id,
+                epic_id="e1",
+                evidence_type="command_output",
+                title="Output",
+            ),
+        )
+        req_id = generate_id()
+        insert_evidence_requirement(
+            conn,
+            EvidenceRequirement(id=req_id, epic_id="e1", description="Need output"),
+        )
+
+        req_before = load_evidence_requirement_by_id(conn, req_id)
+        assert req_before.status == "pending"
+        assert req_before.fulfilled_by is None
+
+        fulfill_evidence_requirement(conn, req_id, ev_id)
+
+        req_after = load_evidence_requirement_by_id(conn, req_id)
+        assert req_after.status == "fulfilled"
+        assert req_after.fulfilled_by == ev_id
+
+    def test_waive_requirement(self, conn):
+        req_id = generate_id()
+        insert_evidence_requirement(
+            conn,
+            EvidenceRequirement(id=req_id, epic_id="e1", description="Optional check"),
+        )
+
+        waive_evidence_requirement(conn, req_id)
+
+        req = load_evidence_requirement_by_id(conn, req_id)
+        assert req.status == "waived"
+
+    def test_waived_status_in_dataclass(self):
+        req = EvidenceRequirement(
+            id="req1",
+            epic_id="e1",
+            description="Waived requirement",
+            status="waived",
+        )
+        assert req.status == "waived"
+        d = req.to_dict()
+        restored = EvidenceRequirement.from_dict(d)
+        assert restored.status == "waived"
+
+    def test_waived_status_in_db_constraint(self, conn):
+        """Waived status is accepted by the DB CHECK constraint."""
+        conn.execute(
+            "INSERT INTO evidence_requirements (id, epic_id, description, status) "
+            "VALUES (?, ?, ?, ?)",
+            ("req_waived", "e1", "waived test", "waived"),
+        )
+        row = conn.execute(
+            "SELECT status FROM evidence_requirements WHERE id = ?", ("req_waived",)
+        ).fetchone()
+        assert row["status"] == "waived"
+
+
+# ---------------------------------------------------------------------------
+# Expanded evidence type tests
+# ---------------------------------------------------------------------------
+
+
+class TestExpandedEvidenceTypes:
+    def test_new_types_accepted_by_db(self, conn):
+        """The three new ticket-spec types are accepted by the CHECK constraint."""
+        for etype in ("command", "output_envelope", "structured_result_sample"):
+            eid = generate_id()
+            insert_backend_evidence(
+                conn,
+                BackendEvidence(
+                    id=eid, epic_id="e1", evidence_type=etype, title=f"test {etype}"
+                ),
+            )
+            result = load_backend_evidence_by_id(conn, eid)
+            assert result is not None
+            assert result.evidence_type == etype
+
+    def test_output_envelope_stores_stdout_stderr(self, conn):
+        eid = generate_id()
+        insert_backend_evidence(
+            conn,
+            BackendEvidence(
+                id=eid,
+                epic_id="e1",
+                evidence_type="output_envelope",
+                title="CLI capture",
+                stdout="OK",
+                stderr="warn: deprecated",
+                structured_data={"exit_code": 0},
+            ),
+        )
+        result = load_backend_evidence_by_id(conn, eid)
+        assert result.stdout == "OK"
+        assert result.stderr == "warn: deprecated"
+        assert result.structured_data == {"exit_code": 0}
+
+
+# ---------------------------------------------------------------------------
+# Delete evidence with fulfilled requirement tests
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteEvidenceWithRequirement:
+    def test_clear_evidence_resets_requirement_to_pending(self, conn):
+        ev_id = generate_id()
+        insert_backend_evidence(
+            conn,
+            BackendEvidence(
+                id=ev_id, epic_id="e1", evidence_type="command_output", title="Output"
+            ),
+        )
+        req_id = generate_id()
+        insert_evidence_requirement(
+            conn,
+            EvidenceRequirement(id=req_id, epic_id="e1", description="Need output"),
+        )
+        fulfill_evidence_requirement(conn, req_id, ev_id)
+
+        req = load_evidence_requirement_by_id(conn, req_id)
+        assert req.status == "fulfilled"
+        assert req.fulfilled_by == ev_id
+
+        clear_evidence_from_requirements(conn, ev_id)
+
+        req = load_evidence_requirement_by_id(conn, req_id)
+        assert req.status == "pending"
+        assert req.fulfilled_by is None
+
+    def test_delete_fulfilled_evidence_does_not_raise(self, conn):
+        """Deleting evidence that fulfills a requirement should not cause FK error."""
+        ev_id = generate_id()
+        insert_backend_evidence(
+            conn,
+            BackendEvidence(
+                id=ev_id, epic_id="e1", evidence_type="command_output", title="Output"
+            ),
+        )
+        req_id = generate_id()
+        insert_evidence_requirement(
+            conn,
+            EvidenceRequirement(id=req_id, epic_id="e1", description="Need output"),
+        )
+        fulfill_evidence_requirement(conn, req_id, ev_id)
+
+        # This mirrors the action_delete_evidence flow
+        clear_evidence_from_requirements(conn, ev_id)
+        delete_backend_evidence(conn, ev_id)
+
+        assert load_backend_evidence_by_id(conn, ev_id) is None
+        req = load_evidence_requirement_by_id(conn, req_id)
+        assert req.status == "pending"
+        assert req.fulfilled_by is None
