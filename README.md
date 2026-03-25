@@ -11,7 +11,7 @@ The intended workflow split is:
 - implementation loop: `Claude Code` as implementer, `Codex` as reviewer
 - planning loop: `Codex` as planner, `Claude Code` as planning reviewer
 
-The current runtime is built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and the `Claude Code` CLI as the only implemented adapter backend today.
+The current runtime is built around a local SQLite database, a `.capsaicin/` project directory inside your repo, and local CLI adapters for both `Claude Code` and `Codex`.
 
 ## What It Does
 
@@ -77,7 +77,6 @@ Not in scope yet:
 
 - GitHub issue creation
 - pull request creation
-- Codex adapter support
 - hosted sync
 
 ## Requirements
@@ -85,12 +84,13 @@ Not in scope yet:
 - Python `3.11+`
 - `git`
 - a git repository to run against
-- the `Claude Code` CLI installed and available on `PATH` as `claude`
+- the local agent CLIs you configure for the roles you want to run, such as
+  `claude` for `Claude Code` and `codex` for Codex
 
-Today that is the only implemented adapter backend. The current runtime uses
-the Claude adapter for planner, implementer, and reviewer runs. The intended
-long-term role split is `Claude Code` for implementation and plan review, with
-`Codex` for ticket review and planning once Codex adapter support lands.
+The runtime supports independent backend selection for planner,
+planning-reviewer, implementer, and reviewer roles. A common pairing is
+`Claude Code` for implementation and plan review, with `Codex` for ticket
+review and planning.
 
 The `capsaicin ui` command additionally pulls in `starlette`, `jinja2`, `uvicorn`, and `python-multipart` — all installed automatically via `pip install`.
 
@@ -570,13 +570,14 @@ Important points:
 
 - `config.toml` is the source of truth
 - repo paths are stored as absolute paths
-- current shipped defaults still assume the `claude` CLI for both adapter roles
-- planner runs currently use `[adapters.implementer]`
-- planning reviewer runs currently use `[adapters.reviewer]`
-- the intended implementation-loop pairing is `Claude Code` implementer plus
-  `Codex` reviewer
-- the intended planning-loop pairing is `Codex` planner plus `Claude Code`
-  reviewer
+- shipped defaults may still point core roles at `claude`, but planner and
+  planning-reviewer roles can now be configured independently as well
+- backend selection is role-specific: implementer, reviewer, planner, and
+  planning reviewer can each use different configured backends
+- if `[adapters.planner]` or `[adapters.planning_reviewer]` are omitted, they
+  fall back to the implementer and reviewer configs respectively
+- a common pairing is `Claude Code` implementer plus `Codex` reviewer
+- a common planning pairing is `Codex` planner plus `Claude Code` reviewer
 - reviewer runs are intended to be read-only
 
 ## Multi-Project Usage

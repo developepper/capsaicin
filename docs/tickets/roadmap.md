@@ -51,10 +51,9 @@ The expected evolution of the product is:
 2. reliability, diagnostics, and local UI
 3. planning-loop automation
 4. planning-to-implementation continuity
-5. adapter diversification and role-specialized agent pairings
-6. GitHub issue and PR handoff
-7. stronger verification, isolation, lineage, and policy controls
-8. later, multi-ticket orchestration and higher-level operational tooling
+5. GitHub issue and PR handoff
+6. stronger verification, isolation, lineage, and policy controls
+7. later, multi-ticket orchestration and higher-level operational tooling
 
 If the project evolves well, it should remain centered on:
 
@@ -77,6 +76,8 @@ Completed foundations:
 - planning-loop automation:
   [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)
 - planning-to-implementation continuity
+- adapter diversification and role-specialized agent pairings:
+  [adapter-diversification-with-evidence-driven-backend-validation](archive/adapter-diversification-with-evidence-driven-backend-validation/)
 
 ## Short-Term Priorities
 
@@ -85,9 +86,10 @@ long-term arc; this section is just the next set of work streams to keep in
 focus.
 
 1. GitHub handoff and PR automation
-2. workflow policy and capability modeling to support cleaner backend
-   diversification
-3. adapter diversification and role pairings
+2. workflow policy and capability modeling to support cleaner multi-backend
+   execution
+3. stronger verification, audit, and policy controls around planning and
+   implementation runs
 
 Multi-ticket orchestration remains later work.
 
@@ -118,7 +120,7 @@ Candidate areas:
 Make agent/runtime capabilities and workflow policy explicit instead of
 hard-coding them into adapter assumptions.
 
-This becomes more important before or alongside adapter diversification.
+This becomes more important now that multi-backend execution exists.
 
 Candidate areas:
 
@@ -128,31 +130,21 @@ Candidate areas:
 - support policy profiles for different repo types or risk levels
 - make reviewer, verifier, and human-gate requirements more configurable
 
-## Adapter Diversification And Role Pairings
+## Multi-Backend Follow-Ons
 
-Broaden adapter support beyond the current Claude Code-only runtime wiring.
-
-Current direction:
-
-- validate the adapter abstraction with at least one strong non-Claude backend
-- preserve role-specialized pairings rather than assuming one backend should do
-  everything
-- likely target pairings today are:
-  - implementation loop: `Claude Code` implementer and `Codex` reviewer
-  - planning loop: `Codex` planner and `Claude Code` planning reviewer
-- replace direct `ClaudeCodeAdapter` instantiation in command services with
-  backend-driven adapter selection from config
+The adapter diversification foundation is now in place. Remaining work is about
+operational polish, broader backend support, and clearer backend capability
+modeling rather than first-time multi-backend enablement.
 
 Candidate areas:
 
-- implement a second adapter backend against the existing `BaseAdapter`
-  contract, with Codex as the current likely target
-- add adapter-factory selection based on `[adapters.<role>].backend`
-- normalize non-Claude-specific run metadata and failure modes into the
-  existing `RunResult` shape
-- add tests for backend selection and role-specific execution paths
-- evaluate whether planning roles need contract extensions beyond the current
-  implementation-loop assumptions
+- add more adapter backends beyond the current Claude Code and Codex support
+- keep backend capability differences explicit in policy rather than hidden in
+  adapter-specific code paths
+- refine role-specific defaults and recommended pairings as backend behavior is
+  validated in real usage
+- extend backend validation and audit surfaces where operators still need more
+  inspectability
 
 ## Prompt Versioning And Reproducibility
 

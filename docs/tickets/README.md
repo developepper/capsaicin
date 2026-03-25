@@ -30,6 +30,8 @@ The intended session-start workflow is:
 
 - [roadmap.md](./roadmap.md): future work, sequencing, and open directions that
   are not yet scoped into an epic
+- materialized planning output: generated ticket breakdowns written under
+  `docs/tickets/generated/` when approved epics are materialized
 - [archive/](./archive/): completed epic plans retained for history
 
 ## Archive
@@ -40,3 +42,4 @@ The intended session-start workflow is:
 | Epic 02: Reliability And Diagnostics | [epic-02-reliability-and-diagnostics](archive/epic-02-reliability-and-diagnostics/)   |
 | Epic 03: UI For Implementation Loop  | [epic-03-ui-for-implementation-loop](archive/epic-03-ui-for-implementation-loop/)     |
 | Epic 04: Planning Loop Automation    | [epic-04-planning-loop-automation](archive/epic-04-planning-loop-automation/)         |
+| Adapter Diversification With Evidence-Driven Backend Validation | [archive/adapter-diversification-with-evidence-driven-backend-validation](./archive/adapter-diversification-with-evidence-driven-backend-validation/) |
