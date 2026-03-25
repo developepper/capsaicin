@@ -55,6 +55,47 @@
 
   <p class="gate-context{% if gate_display.is_warning %} gate-warning{% endif %}">{{ gate_display.display_text }}</p>
 
+  {# --- Missing-evidence banner (T08) --- #}
+  {% if data.epic.gate_reason == "missing_evidence" and data.evidence_requirements %}
+  {% set pending_reqs_gate = data.evidence_requirements|selectattr("status", "equalto", "pending")|list %}
+  {% if pending_reqs_gate %}
+  <div class="missing-evidence-banner">
+    <h3>Missing Evidence Requirements</h3>
+    <p>The following evidence must be supplied (or waived) before planning can proceed:</p>
+    {% for req in pending_reqs_gate %}
+    <div class="missing-evidence-item">
+      <p class="missing-evidence-description">{{ req.description }}</p>
+      {% if req.suggested_command %}
+      <div class="evidence-command-block">
+        <label>Run this command and paste the output below:</label>
+        <pre class="agent-text copyable-command">{{ req.suggested_command }}</pre>
+      </div>
+      {% endif %}
+      <div class="evidence-req-actions">
+        {% if req.suggested_command %}
+        <details class="evidence-paste-flow">
+          <summary>Paste output</summary>
+          <form method="post" action="{{ request.url_for('action_paste_output', epic_id=data.epic.id, req_id=req.id) }}" class="evidence-paste-form">
+            <label for="gate-paste-stdout-{{ req.id }}">stdout</label>
+            <textarea id="gate-paste-stdout-{{ req.id }}" name="stdout" rows="4" placeholder="Paste command stdout here"></textarea>
+            <label for="gate-paste-stderr-{{ req.id }}">stderr</label>
+            <textarea id="gate-paste-stderr-{{ req.id }}" name="stderr" rows="2" placeholder="Paste stderr (if any)"></textarea>
+            <label for="gate-paste-exit-{{ req.id }}">exit code</label>
+            <input type="text" id="gate-paste-exit-{{ req.id }}" name="exit_code" placeholder="0">
+            <button type="submit" class="btn btn-approve btn-sm">Submit Output</button>
+          </form>
+        </details>
+        {% endif %}
+        <form method="post" action="{{ request.url_for('action_waive_requirement', epic_id=data.epic.id, req_id=req.id) }}" class="evidence-waive-form" style="display: inline;">
+          <button type="submit" class="btn btn-defer btn-sm">Waive</button>
+        </form>
+      </div>
+    </div>
+    {% endfor %}
+  </div>
+  {% endif %}
+  {% endif %}
+
   <div class="action-forms">
     {# --- Approve form --- #}
     <form method="post" action="{{ request.url_for('action_approve_epic', epic_id=data.epic.id) }}" class="action-form action-approve">

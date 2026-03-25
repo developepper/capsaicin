@@ -34,6 +34,7 @@ from capsaicin.orchestrator import (
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planner_draft_prompt, build_planner_revise_prompt
 from capsaicin.queries import (
+    check_evidence_completeness,
     decode_text_list,
     generate_id,
     insert_evidence_requirement,
@@ -325,6 +326,32 @@ def run_draft_pipeline(
     """
     epic_id = epic["id"]
     from_status = epic["status"]
+
+    # --- Missing-evidence gate (T08) ---
+    pending_evidence = check_evidence_completeness(conn, epic_id)
+    if pending_evidence:
+        transition_planned_epic(
+            conn,
+            epic_id,
+            "human-gate",
+            "system",
+            reason="Pending evidence requirements must be satisfied before planning.",
+            gate_reason="missing_evidence",
+            log_path=log_path,
+        )
+        await_planning_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "MISSING_EVIDENCE_GATE",
+                project_id=project_id,
+                payload={
+                    "epic_id": epic_id,
+                    "pending_count": len(pending_evidence),
+                    "pending_descriptions": [r.description for r in pending_evidence],
+                },
+            )
+        return "human-gate"
 
     # --- Cycle-limit shortcut (revise only) ---
     if from_status == "revise":

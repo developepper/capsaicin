@@ -591,37 +591,85 @@ class TestSuggestedRequirementPersistence:
             ),
         ]
 
-        # Cycle 1: draft (with suggestion) -> review fail
-        # Cycle 2: revised draft (same suggestion) -> review pass
-        adapter = MockPlanningAdapter(
+        # Cycle 1: draft (with suggestion) -> review fail -> revise
+        # Then evidence gate fires -> human-gate
+        adapter1 = MockPlanningAdapter(
             results=[
                 _make_draft_success(suggestions),
                 _make_review_fail(),
-                _make_draft_success(suggestions),
-                _make_review_pass(),
             ]
         )
 
         from capsaicin.planning_loop import run_planning_loop
+        from capsaicin.queries import waive_evidence_requirement
+        from capsaicin.state_machine import transition_planned_epic
 
         run_planning_loop(
             env["conn"],
             env["project_id"],
             env["config"],
             epic_id=epic_id,
-            draft_adapter=adapter,
-            review_adapter=adapter,
+            draft_adapter=adapter1,
+            review_adapter=adapter1,
             log_path=env["log_path"],
             max_cycles=3,
         )
 
-        reqs = _get_pending_requirements(env["conn"], epic_id)
-        assert len(reqs) == 1
-        assert reqs[0] == ("Check codex --help", "codex --help")
+        # Waive the pending requirement so planning can proceed, then
+        # revise the epic back to allow re-drafting.
+        reqs_before = _get_pending_requirements(env["conn"], epic_id)
+        assert len(reqs_before) == 1
+        req_ids = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM evidence_requirements WHERE epic_id = ? AND status = 'pending'",
+                (epic_id,),
+            )
+            .fetchall()
+        )
+        for r in req_ids:
+            waive_evidence_requirement(env["conn"], r["id"])
+        env["conn"].commit()
+
+        transition_planned_epic(
+            env["conn"],
+            epic_id,
+            "revise",
+            "human",
+            reason="Resuming after evidence waive",
+        )
+
+        # Cycle 2: revised draft (same suggestion) -> review pass
+        adapter2 = MockPlanningAdapter(
+            results=[
+                _make_draft_success(suggestions),
+                _make_review_pass(),
+            ]
+        )
+
+        run_planning_loop(
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            epic_id=epic_id,
+            draft_adapter=adapter2,
+            review_adapter=adapter2,
+            log_path=env["log_path"],
+            max_cycles=3,
+        )
+
+        # The same suggestion should not create duplicates (waived ones
+        # are not pending, and the dedup check only skips pending matches).
+        # A new pending row is created because the waived one no longer
+        # matches the dedup query.
+        pending_reqs = _get_pending_requirements(env["conn"], epic_id)
+        assert len(pending_reqs) == 1
+        assert pending_reqs[0] == ("Check codex --help", "codex --help")
 
     def test_different_suggestions_across_cycles_all_kept(self, project_env):
         """When the planner suggests different requirements on different cycles,
-        all unique requirements are kept."""
+        all unique requirements are kept (waived ones from cycle 1 plus new
+        pending ones from cycle 2)."""
         env = project_env
         epic_id = _add_epic(env)
 
@@ -638,31 +686,82 @@ class TestSuggestedRequirementPersistence:
             ),
         ]
 
-        adapter = MockPlanningAdapter(
+        from capsaicin.planning_loop import run_planning_loop
+        from capsaicin.queries import waive_evidence_requirement
+        from capsaicin.state_machine import transition_planned_epic
+
+        # Cycle 1: draft (with suggestion) -> review fail -> revise
+        # Then evidence gate fires -> human-gate
+        adapter1 = MockPlanningAdapter(
             results=[
                 _make_draft_success(suggestions_cycle1),
                 _make_review_fail(),
-                _make_draft_success(suggestions_cycle2),
-                _make_review_pass(),
             ]
         )
-
-        from capsaicin.planning_loop import run_planning_loop
 
         run_planning_loop(
             env["conn"],
             env["project_id"],
             env["config"],
             epic_id=epic_id,
-            draft_adapter=adapter,
-            review_adapter=adapter,
+            draft_adapter=adapter1,
+            review_adapter=adapter1,
             log_path=env["log_path"],
             max_cycles=3,
         )
 
-        reqs = _get_pending_requirements(env["conn"], epic_id)
-        assert len(reqs) == 2
-        descs = {r[0] for r in reqs}
+        # Waive the cycle-1 requirement so planning can proceed
+        req_ids = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM evidence_requirements WHERE epic_id = ? AND status = 'pending'",
+                (epic_id,),
+            )
+            .fetchall()
+        )
+        for r in req_ids:
+            waive_evidence_requirement(env["conn"], r["id"])
+        env["conn"].commit()
+
+        transition_planned_epic(
+            env["conn"],
+            epic_id,
+            "revise",
+            "human",
+            reason="Resuming after evidence waive",
+        )
+
+        # Cycle 2: revised draft (new suggestion) -> review pass
+        adapter2 = MockPlanningAdapter(
+            results=[
+                _make_draft_success(suggestions_cycle2),
+                _make_review_pass(),
+            ]
+        )
+
+        run_planning_loop(
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            epic_id=epic_id,
+            draft_adapter=adapter2,
+            review_adapter=adapter2,
+            log_path=env["log_path"],
+            max_cycles=3,
+        )
+
+        # All requirements (waived + pending) should be preserved
+        all_reqs = (
+            env["conn"]
+            .execute(
+                "SELECT description, suggested_command FROM evidence_requirements "
+                "WHERE epic_id = ? ORDER BY created_at",
+                (epic_id,),
+            )
+            .fetchall()
+        )
+        assert len(all_reqs) == 2
+        descs = {r["description"] for r in all_reqs}
         assert "Check codex --help" in descs
         assert "Probe exec mode" in descs
 

@@ -27,6 +27,7 @@ from capsaicin.orchestrator import (
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planning_reviewer_prompt
 from capsaicin.queries import (
+    check_evidence_completeness,
     generate_id,
     load_backend_evidence_for_epic,
     load_open_planning_findings,
@@ -226,6 +227,31 @@ def run_planning_review_pipeline(
     Returns the final epic status after the pipeline completes.
     """
     epic_id = epic["id"]
+
+    # --- Missing-evidence gate (T08) ---
+    pending_evidence = check_evidence_completeness(conn, epic_id)
+    if pending_evidence:
+        transition_planned_epic(
+            conn,
+            epic_id,
+            "human-gate",
+            "system",
+            reason="Pending evidence requirements must be satisfied before planning review.",
+            gate_reason="missing_evidence",
+            log_path=log_path,
+        )
+        await_planning_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "MISSING_EVIDENCE_GATE",
+                project_id=project_id,
+                payload={
+                    "epic_id": epic_id,
+                    "pending_count": len(pending_evidence),
+                },
+            )
+        return "human-gate"
 
     return invoke_planning_review_with_retries(
         conn=conn,

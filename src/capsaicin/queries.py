@@ -370,3 +370,21 @@ def waive_evidence_requirement(conn: sqlite3.Connection, requirement_id: str) ->
         "UPDATE evidence_requirements SET status = 'waived', updated_at = ? WHERE id = ?",
         (now, requirement_id),
     )
+
+
+def check_evidence_completeness(
+    conn: sqlite3.Connection, epic_id: str
+) -> list[EvidenceRequirement]:
+    """Return pending (unsatisfied, un-waived) evidence requirements for an epic.
+
+    Returns an empty list if all requirements are satisfied or waived,
+    meaning the epic is not blocked by missing evidence.
+    """
+    rows = conn.execute(
+        "SELECT id, epic_id, planned_ticket_id, description, suggested_command, "
+        "status, fulfilled_by, created_at, updated_at "
+        "FROM evidence_requirements WHERE epic_id = ? AND status = 'pending' "
+        "ORDER BY created_at",
+        (epic_id,),
+    ).fetchall()
+    return [EvidenceRequirement.from_dict(dict(r)) for r in rows]

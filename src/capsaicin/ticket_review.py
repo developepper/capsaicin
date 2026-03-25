@@ -31,6 +31,7 @@ from capsaicin.prompts import build_reviewer_prompt
 from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
     TICKET_COLUMNS,
+    check_evidence_completeness,
     generate_id,
     get_impl_run_id,
     load_backend_evidence_for_epic,
@@ -335,8 +336,12 @@ def _review_invoke_once(
 
     # Load evidence from parent epic when the ticket has lineage
     evidence = None
+    pending_evidence_descriptions = None
     if epic_id:
         evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+        pending_reqs = check_evidence_completeness(conn, epic_id)
+        if pending_reqs:
+            pending_evidence_descriptions = [r.description for r in pending_reqs]
 
     # Assemble reviewer prompt
     prompt = build_reviewer_prompt(
@@ -345,6 +350,7 @@ def _review_invoke_once(
         diff_context=impl_diff.diff_text,
         prior_findings=prior_findings,
         evidence=evidence,
+        pending_evidence_descriptions=pending_evidence_descriptions,
     )
 
     resolved = resolve_adapter_config(

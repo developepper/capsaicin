@@ -32,6 +32,7 @@ from capsaicin.prompts import build_implementer_prompt
 from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
     TICKET_COLUMNS,
+    check_evidence_completeness,
     generate_id,
     load_backend_evidence_for_epic,
     load_criteria,
@@ -319,8 +320,12 @@ def _impl_invoke_once(
 
     # Load evidence from parent epic when the ticket has lineage
     evidence = None
+    pending_evidence_descriptions = None
     if epic_id:
         evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+        pending_reqs = check_evidence_completeness(conn, epic_id)
+        if pending_reqs:
+            pending_evidence_descriptions = [r.description for r in pending_reqs]
 
     # Assemble prompt and request
     prompt = build_implementer_prompt(
@@ -330,6 +335,7 @@ def _impl_invoke_once(
         cycle=cycle_number,
         max_cycles=config.limits.max_cycles,
         evidence=evidence,
+        pending_evidence_descriptions=pending_evidence_descriptions,
     )
 
     resolved = resolve_adapter_config(

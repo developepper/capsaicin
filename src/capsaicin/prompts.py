@@ -182,6 +182,7 @@ def build_implementer_prompt(
     cycle: int,
     max_cycles: int,
     evidence: list[BackendEvidence] | None = None,
+    pending_evidence_descriptions: list[str] | None = None,
 ) -> str:
     """Build a prompt for an implementer run.
 
@@ -254,6 +255,22 @@ def build_implementer_prompt(
             ]
         )
 
+    if pending_evidence_descriptions:
+        parts.extend(
+            [
+                "",
+                "# Warning: Unresolved Evidence Requirements",
+                "",
+                "The parent epic has pending backend validation evidence requirements "
+                "that have not yet been satisfied. The following behaviors are unverified. "
+                "Proceed with caution and avoid relying on assumptions about backend "
+                "behavior that is not backed by evidence:",
+                "",
+            ]
+        )
+        for desc in pending_evidence_descriptions:
+            parts.append(f"- {desc}")
+
     return "\n".join(parts)
 
 
@@ -263,6 +280,7 @@ def build_reviewer_prompt(
     diff_context: str,
     prior_findings: list[Finding],
     evidence: list[BackendEvidence] | None = None,
+    pending_evidence_descriptions: list[str] | None = None,
 ) -> str:
     """Build a prompt for a reviewer run.
 
@@ -337,6 +355,23 @@ def build_reviewer_prompt(
                 _format_evidence(evidence),
             ]
         )
+
+    if pending_evidence_descriptions:
+        parts.extend(
+            [
+                "",
+                "# Warning: Unresolved Evidence Requirements",
+                "",
+                "The parent epic has pending backend validation evidence requirements "
+                "that have not yet been satisfied. If the implementation relies on "
+                "backend behavior that is not backed by evidence, emit a finding with "
+                "category 'missing_evidence' to flag it. The following behaviors are "
+                "unverified:",
+                "",
+            ]
+        )
+        for desc in pending_evidence_descriptions:
+            parts.append(f"- {desc}")
 
     parts.extend(
         [
@@ -874,6 +909,8 @@ def build_planning_reviewer_prompt(
             "ticket's sequence number for ticket-level findings",
             "- Include all ticket sequence numbers you reviewed in `tickets_reviewed`",
             "- Set `epic_reviewed: true` if you reviewed the epic-level artifacts",
+            "- If the plan references backend behaviors that are not backed by supplied "
+            "evidence, emit a finding with `category: 'missing_evidence'` to flag it",
         ]
     )
 

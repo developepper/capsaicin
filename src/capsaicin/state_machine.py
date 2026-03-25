@@ -73,6 +73,7 @@ PLANNING_STATUSES = frozenset(PLANNING_STATUS_ORDER)
 
 PLANNING_LEGAL_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
     ("new", "drafting"): frozenset({"system"}),
+    ("new", "human-gate"): frozenset({"system"}),
     ("drafting", "in-review"): frozenset({"system"}),
     ("drafting", "human-gate"): frozenset({"system"}),
     ("drafting", "blocked"): frozenset({"system"}),
