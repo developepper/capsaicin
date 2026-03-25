@@ -18,9 +18,12 @@ class PlanningDetailData:
     open_findings: list[dict] = field(default_factory=list)
     impl_tickets: list[dict] = field(default_factory=list)
     last_run: dict | None = None
+    last_run_evidence: list[dict] = field(default_factory=list)
     transition_history: list[dict] | None = None
     evidence: list[BackendEvidence] = field(default_factory=list)
     evidence_requirements: list[EvidenceRequirement] = field(default_factory=list)
+    evidence_consumers: dict[str, list[dict]] = field(default_factory=dict)
+    evidence_timeline: list[dict] = field(default_factory=list)
 
 
 def _load_impl_tickets(
@@ -87,11 +90,14 @@ def get_planning_detail(
     """
     from capsaicin.queries import (
         load_backend_evidence_for_epic,
+        load_evidence_for_run,
         load_evidence_requirements_for_epic,
+        load_evidence_timeline,
         load_open_planning_findings,
         load_planned_epic,
         load_planned_ticket_criteria,
         load_planned_tickets,
+        load_runs_for_evidence,
     )
 
     epic = load_planned_epic(conn, epic_id)
@@ -117,6 +123,21 @@ def get_planning_detail(
     evidence = load_backend_evidence_for_epic(conn, epic_id)
     evidence_requirements = load_evidence_requirements_for_epic(conn, epic_id)
 
+    # Load evidence consumed by last run (T09)
+    last_run_evidence: list[dict] = []
+    if last_run:
+        last_run_evidence = load_evidence_for_run(conn, last_run["id"])
+
+    # Load which runs consumed each evidence record (T09)
+    evidence_consumers: dict[str, list[dict]] = {}
+    for ev in evidence:
+        consumers = load_runs_for_evidence(conn, ev.id)
+        if consumers:
+            evidence_consumers[ev.id] = consumers
+
+    # Load evidence timeline (T09)
+    evidence_timeline = load_evidence_timeline(conn, epic_id)
+
     data = PlanningDetailData(
         epic=epic,
         planned_tickets=planned_tickets,
@@ -124,8 +145,11 @@ def get_planning_detail(
         open_findings=open_findings,
         impl_tickets=impl_tickets,
         last_run=last_run,
+        last_run_evidence=last_run_evidence,
         evidence=evidence,
         evidence_requirements=evidence_requirements,
+        evidence_consumers=evidence_consumers,
+        evidence_timeline=evidence_timeline,
     )
 
     if verbose:

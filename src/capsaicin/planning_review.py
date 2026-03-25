@@ -34,6 +34,7 @@ from capsaicin.queries import (
     load_planned_epic,
     load_planned_tickets,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.state_machine import transition_planned_epic
 from capsaicin.validation import validate_planning_review_result
@@ -414,6 +415,11 @@ def _planning_review_invoke_once(
         prompt,
         run_request.to_json(),
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Update orchestrator state
     start_planning_run(conn, project_id, epic_id, run_id)

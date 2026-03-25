@@ -275,6 +275,7 @@ def insert_evidence_requirement(
             now,
         ),
     )
+    _record_requirement_event(conn, requirement.id, "created")
     return requirement.id
 
 
@@ -339,15 +340,30 @@ def clear_evidence_from_requirements(
 ) -> None:
     """Reset any requirements fulfilled by this evidence back to pending."""
     now = now_utc()
+    # Find affected requirements before updating
+    affected = conn.execute(
+        "SELECT id FROM evidence_requirements WHERE fulfilled_by = ?",
+        (evidence_id,),
+    ).fetchall()
     conn.execute(
         "UPDATE evidence_requirements SET status = 'pending', "
         "fulfilled_by = NULL, updated_at = ? WHERE fulfilled_by = ?",
         (now, evidence_id),
     )
+    for row in affected:
+        _record_requirement_event(conn, row["id"], "reset_to_pending")
 
 
 def delete_backend_evidence(conn: sqlite3.Connection, evidence_id: str) -> None:
-    """Delete a backend evidence record by ID."""
+    """Delete a backend evidence record by ID.
+
+    Resets any requirements fulfilled by this evidence back to pending
+    (clearing the FK reference). Audit trail rows in agent_run_evidence
+    and evidence_requirement_events are preserved (their evidence_id
+    columns have no FK constraint) so the audit trail remains durable
+    even after evidence deletion.
+    """
+    clear_evidence_from_requirements(conn, evidence_id)
     conn.execute("DELETE FROM backend_evidence WHERE id = ?", (evidence_id,))
 
 
@@ -361,6 +377,9 @@ def fulfill_evidence_requirement(
         "fulfilled_by = ?, updated_at = ? WHERE id = ?",
         (evidence_id, now, requirement_id),
     )
+    _record_requirement_event(
+        conn, requirement_id, "satisfied", evidence_id=evidence_id
+    )
 
 
 def waive_evidence_requirement(conn: sqlite3.Connection, requirement_id: str) -> None:
@@ -370,6 +389,156 @@ def waive_evidence_requirement(conn: sqlite3.Connection, requirement_id: str) ->
         "UPDATE evidence_requirements SET status = 'waived', updated_at = ? WHERE id = ?",
         (now, requirement_id),
     )
+    _record_requirement_event(conn, requirement_id, "waived")
+
+
+def _record_requirement_event(
+    conn: sqlite3.Connection,
+    requirement_id: str,
+    event_type: str,
+    evidence_id: str | None = None,
+) -> None:
+    """Insert an audit event for an evidence requirement status change."""
+    conn.execute(
+        "INSERT INTO evidence_requirement_events "
+        "(id, requirement_id, event_type, evidence_id, created_at) "
+        "VALUES (?, ?, ?, ?, ?)",
+        (generate_id(), requirement_id, event_type, evidence_id, now_utc()),
+    )
+
+
+def record_run_evidence(
+    conn: sqlite3.Connection,
+    run_id: str,
+    evidence_ids: list[str],
+) -> None:
+    """Record which evidence records were included in an agent run's prompt."""
+    for eid in evidence_ids:
+        conn.execute(
+            "INSERT OR IGNORE INTO agent_run_evidence (run_id, evidence_id) "
+            "VALUES (?, ?)",
+            (run_id, eid),
+        )
+
+
+def load_evidence_for_run(conn: sqlite3.Connection, run_id: str) -> list[dict]:
+    """Load evidence records that were included in an agent run's prompt.
+
+    Uses LEFT JOIN so that orphaned audit rows (evidence deleted after
+    the run) still appear with a placeholder title.
+    """
+    rows = conn.execute(
+        "SELECT are_.evidence_id AS id, "
+        "COALESCE(be.title, '(deleted evidence)') AS title, "
+        "COALESCE(be.evidence_type, 'unknown') AS evidence_type "
+        "FROM agent_run_evidence are_ "
+        "LEFT JOIN backend_evidence be ON be.id = are_.evidence_id "
+        "WHERE are_.run_id = ? ORDER BY COALESCE(be.created_at, '')",
+        (run_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def load_runs_for_evidence(conn: sqlite3.Connection, evidence_id: str) -> list[dict]:
+    """Load agent runs that consumed a given evidence record."""
+    rows = conn.execute(
+        "SELECT ar.id, ar.role, ar.exit_status, ar.started_at, "
+        "ar.cycle_number, ar.attempt_number "
+        "FROM agent_run_evidence are_ "
+        "JOIN agent_runs ar ON ar.id = are_.run_id "
+        "WHERE are_.evidence_id = ? ORDER BY ar.started_at",
+        (evidence_id,),
+    ).fetchall()
+    return [dict(r) for r in rows]
+
+
+def load_evidence_timeline(conn: sqlite3.Connection, epic_id: str) -> list[dict]:
+    """Build a chronological evidence timeline for an epic.
+
+    Returns a list of timeline events sorted by timestamp, combining:
+    - Evidence creation events
+    - Requirement status-change events
+    - Evidence consumption by agent runs
+    """
+    events: list[dict] = []
+
+    # Evidence creation
+    ev_rows = conn.execute(
+        "SELECT id, title, evidence_type, created_at "
+        "FROM backend_evidence WHERE epic_id = ? ORDER BY created_at",
+        (epic_id,),
+    ).fetchall()
+    for r in ev_rows:
+        events.append(
+            {
+                "timestamp": r["created_at"],
+                "event_type": "evidence_added",
+                "title": r["title"],
+                "detail": r["evidence_type"].replace("_", " "),
+                "evidence_id": r["id"],
+            }
+        )
+
+    # Requirement status-change events
+    req_rows = conn.execute(
+        "SELECT ere.event_type, ere.evidence_id, ere.created_at, "
+        "er.description AS req_description "
+        "FROM evidence_requirement_events ere "
+        "JOIN evidence_requirements er ON er.id = ere.requirement_id "
+        "WHERE er.epic_id = ? ORDER BY ere.created_at",
+        (epic_id,),
+    ).fetchall()
+    for r in req_rows:
+        events.append(
+            {
+                "timestamp": r["created_at"],
+                "event_type": f"requirement_{r['event_type']}",
+                "title": r["req_description"],
+                "detail": r["event_type"],
+                "evidence_id": r["evidence_id"],
+            }
+        )
+
+    # Evidence consumed by runs — planning runs (epic_id on agent_runs)
+    # and implementation runs (ticket_id -> planned_tickets -> epic).
+    # LEFT JOIN backend_evidence so orphaned audit rows (deleted evidence)
+    # still appear on the timeline.
+    run_rows = conn.execute(
+        "SELECT ar.started_at, ar.role, ar.id AS run_id, "
+        "COALESCE(be.title, '(deleted evidence)') AS evidence_title, "
+        "are_.evidence_id AS evidence_id "
+        "FROM agent_run_evidence are_ "
+        "JOIN agent_runs ar ON ar.id = are_.run_id "
+        "LEFT JOIN backend_evidence be ON be.id = are_.evidence_id "
+        "WHERE ar.epic_id = ? "
+        "UNION "
+        "SELECT ar.started_at, ar.role, ar.id AS run_id, "
+        "COALESCE(be.title, '(deleted evidence)') AS evidence_title, "
+        "are_.evidence_id AS evidence_id "
+        "FROM agent_run_evidence are_ "
+        "JOIN agent_runs ar ON ar.id = are_.run_id "
+        "LEFT JOIN backend_evidence be ON be.id = are_.evidence_id "
+        "JOIN tickets t ON t.id = ar.ticket_id "
+        "JOIN planned_tickets pt ON pt.id = t.planned_ticket_id "
+        "WHERE pt.epic_id = ? "
+        "ORDER BY started_at",
+        (epic_id, epic_id),
+    ).fetchall()
+    for r in run_rows:
+        events.append(
+            {
+                "timestamp": r["started_at"],
+                "event_type": "evidence_consumed",
+                "title": r["evidence_title"],
+                "detail": f"consumed by {r['role']} run",
+                "evidence_id": r["evidence_id"],
+                "run_id": r["run_id"],
+            }
+        )
+
+    # Sort by timestamp
+    events.sort(key=lambda e: e["timestamp"])
+    return events
 
 
 def check_evidence_completeness(

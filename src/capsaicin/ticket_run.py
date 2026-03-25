@@ -39,6 +39,7 @@ from capsaicin.queries import (
     load_open_findings,
     load_ticket,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.state_machine import transition_ticket
 
@@ -371,6 +372,11 @@ def _impl_invoke_once(
         prompt,
         run_request.to_json(),
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Update orchestrator state
     start_run(conn, project_id, ticket_id, run_id)

@@ -29,6 +29,8 @@ EXPECTED_TABLES = {
     "backend_evidence",
     "evidence_requirements",
     "role_overrides",
+    "agent_run_evidence",
+    "evidence_requirement_events",
 }
 
 EXPECTED_INDEXES = {
@@ -60,6 +62,8 @@ EXPECTED_INDEXES = {
     "idx_role_overrides_epic",
     "idx_role_overrides_ticket",
     "idx_role_overrides_project",
+    "idx_agent_run_evidence_evidence",
+    "idx_evidence_requirement_events_req",
 }
 
 

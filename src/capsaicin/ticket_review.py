@@ -39,6 +39,7 @@ from capsaicin.queries import (
     load_open_findings,
     load_ticket,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.reconciliation import reconcile_findings
 from capsaicin.review_baseline import (
@@ -389,6 +390,11 @@ def _review_invoke_once(
         run_request.to_json(),
         impl_diff.diff_text,
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Capture review baseline (T16) — immediately before adapter invocation
     capture_review_baseline(conn, config.project.repo_path, run_id)

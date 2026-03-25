@@ -474,6 +474,16 @@
           <pre class="agent-text">{{ ev.structured_data | tojson(indent=2) }}</pre>
         </details>
         {% endif %}
+        {% if data.evidence_consumers.get(ev.id) %}
+        <details>
+          <summary>Consumed by {{ data.evidence_consumers[ev.id]|length }} run{{ "s" if data.evidence_consumers[ev.id]|length != 1 else "" }}</summary>
+          <ul class="evidence-consumer-list">
+            {% for run in data.evidence_consumers[ev.id] %}
+            <li>{{ run.role }} run (cycle {{ run.cycle_number }}.{{ run.attempt_number }}) — {{ run.exit_status }} — {{ run.started_at }}</li>
+            {% endfor %}
+          </ul>
+        </details>
+        {% endif %}
       </div>
       {% endfor %}
     </div>
@@ -522,6 +532,41 @@
   </details>
 </section>
 
+{# --- Evidence Timeline (T09) --- #}
+{% if data.evidence_timeline %}
+<section>
+  <h2>Evidence Timeline</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Time</th><th>Event</th><th>Detail</th></tr></thead>
+    <tbody>
+      {% for evt in data.evidence_timeline %}
+      <tr>
+        <td>{{ evt.timestamp }}</td>
+        <td>
+          {% if evt.event_type == "evidence_added" %}
+            <span class="status-badge evidence-status-fulfilled">added</span>
+          {% elif evt.event_type == "evidence_consumed" %}
+            <span class="status-badge planning-status-in-review">consumed</span>
+          {% elif evt.event_type == "requirement_created" %}
+            <span class="status-badge evidence-status-pending">requirement created</span>
+          {% elif evt.event_type == "requirement_satisfied" %}
+            <span class="status-badge evidence-status-fulfilled">requirement satisfied</span>
+          {% elif evt.event_type == "requirement_waived" %}
+            <span class="status-badge evidence-status-waived">requirement waived</span>
+          {% elif evt.event_type == "requirement_reset_to_pending" %}
+            <span class="status-badge evidence-status-pending">requirement reset</span>
+          {% else %}
+            <span class="status-badge">{{ evt.event_type }}</span>
+          {% endif %}
+        </td>
+        <td>{{ evt.title }}{% if evt.detail %} — {{ evt.detail }}{% endif %}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+</section>
+{% endif %}
+
 {# --- Last run --- #}
 {% if data.last_run %}
 <section>
@@ -533,6 +578,14 @@
     <dt>Verdict</dt><dd>{{ data.last_run.verdict or "n/a" }}</dd>
     <dt>Cycle</dt><dd>{{ data.last_run.cycle_number }}.{{ data.last_run.attempt_number }}</dd>
   </dl>
+  {% if data.last_run_evidence %}
+  <h3>Evidence Provided</h3>
+  <ul class="evidence-run-list">
+    {% for ev in data.last_run_evidence %}
+    <li><strong>{{ ev.title }}</strong> <span class="text-muted">({{ ev.evidence_type | replace("_", " ") }})</span></li>
+    {% endfor %}
+  </ul>
+  {% endif %}
 </section>
 {% endif %}
 
