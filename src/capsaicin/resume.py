@@ -104,9 +104,12 @@ def _handle_interrupted_run(
     retries by invoking the adapter again or blocks at the retry limit.
     Returns the final ticket status.
     """
+    from capsaicin.resolver import lookup_epic_id_for_ticket
+
     ticket_id = run["ticket_id"]
     role = run["role"]
     run_id = run["id"]
+    epic_id = lookup_epic_id_for_ticket(conn, ticket_id) if ticket_id else None
 
     _mark_run_failed(conn, run_id)
     finish_run(conn, project_id)
@@ -150,6 +153,7 @@ def _handle_interrupted_run(
             config=config,
             adapter=impl_adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
     elif role == "reviewer":
         increment_review_attempt(conn, ticket_id)
@@ -176,6 +180,7 @@ def _handle_interrupted_run(
             config=config,
             adapter=review_adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
     else:
         # Unknown role — just clean up
@@ -406,6 +411,10 @@ def _resume_from_context(
         set_idle(conn, project_id)
         return ("suspended", f"Ticket '{ticket_id}' not found. Reset to idle.")
 
+    from capsaicin.resolver import lookup_epic_id_for_ticket
+
+    epic_id = lookup_epic_id_for_ticket(conn, ticket_id)
+
     # Clear suspended state before continuing
     conn.execute(
         "UPDATE orchestrator_state SET status = 'idle', "
@@ -430,6 +439,7 @@ def _resume_from_context(
             config=config,
             adapter=impl_adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
         return ("resumed_run", f"Ticket {ticket_id} -> {final_status}")
 
@@ -450,6 +460,7 @@ def _resume_from_context(
             adapter=review_adapter,
             allow_drift=ctx.get("allow_drift", False),
             log_path=log_path,
+            epic_id=epic_id,
         )
         return ("resumed_review", f"Ticket {ticket_id} -> {final_status}")
 
@@ -486,11 +497,14 @@ def resume_pipeline(
 
     # --- idle: behave like ticket run ---
     if orch_status == "idle":
+        from capsaicin.resolver import lookup_epic_id_for_ticket
+
         try:
             ticket = select_ticket(conn)
         except (ValueError, CapsaicinError) as e:
             return ("idle", str(e))
 
+        epic_id = lookup_epic_id_for_ticket(conn, ticket["id"])
         final_status = run_implementation_pipeline(
             conn=conn,
             project_id=project_id,
@@ -498,6 +512,7 @@ def resume_pipeline(
             config=config,
             adapter=impl_adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
         return ("run", f"Ticket {ticket['id']} -> {final_status}")
 

@@ -21,6 +21,7 @@ from capsaicin.activity_log import log_event
 from capsaicin.queries import (
     decode_text_list,
     generate_id,
+    load_backend_evidence_for_epic,
     load_planned_epic,
     load_planned_ticket_criteria,
     load_planned_tickets,
@@ -121,6 +122,7 @@ def _render_ticket_doc(
     ticket: dict,
     criteria: list[dict],
     dep_sequences: list[int],
+    evidence: list | None = None,
 ) -> str:
     """Render a single implementation-ticket markdown doc."""
     seq = ticket["sequence"]
@@ -186,6 +188,20 @@ def _render_ticket_doc(
         lines.append("")
         for note in impl_notes:
             lines.append(f"- {note}")
+        lines.append("")
+
+    # Evidence References (T09)
+    if evidence:
+        lines.append("## Evidence References")
+        lines.append("")
+        lines.append(
+            "The following backend validation evidence from the parent epic "
+            "informed this ticket's plan:"
+        )
+        lines.append("")
+        for ev in evidence:
+            etype = ev.evidence_type.replace("_", " ")
+            lines.append(f"- **{ev.title}** ({etype})")
         lines.append("")
 
     return "\n".join(lines)
@@ -453,6 +469,9 @@ def materialize_epic(
         if dep_seq is not None:
             ticket_deps_seqs.setdefault(ptid, []).append(dep_seq)
 
+    # Load evidence from the parent epic for inclusion in ticket docs (T09)
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
+
     # Determine output directory
     slug = _slugify(epic["title"])
     output_dir = repo_root / "docs" / "tickets" / "generated" / slug
@@ -472,7 +491,9 @@ def materialize_epic(
     for t in tickets:
         criteria = ticket_criteria.get(t["id"], [])
         dep_seqs = ticket_deps_seqs.get(t["id"], [])
-        content = _render_ticket_doc(epic, t, criteria, dep_seqs)
+        content = _render_ticket_doc(
+            epic, t, criteria, dep_seqs, evidence=evidence or None
+        )
 
         label = f"T{t['sequence']:02d}"
         file_path = output_dir / f"{label}.md"

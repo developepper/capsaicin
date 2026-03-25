@@ -65,6 +65,11 @@ class ClaudeCodeAdapter(BaseAdapter):
                 ]
             )
 
+        # Model override
+        model = request.adapter_config.get("model")
+        if model:
+            cmd.extend(["--model", model])
+
         # Reviewer mode: add --allowed-tools
         if request.role == "reviewer":
             allowed_tools = request.adapter_config.get("allowed_tools", [])

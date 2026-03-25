@@ -93,6 +93,14 @@ _EPIC_GATE_DISPLAY: dict[str, GateDisplayInfo] = {
     "human_requested": GateDisplayInfo(
         display_text="Human review was explicitly requested.",
     ),
+    "missing_evidence": GateDisplayInfo(
+        display_text=(
+            "Backend validation evidence is required before planning can proceed. "
+            "Run the suggested commands below and paste the results into the "
+            "evidence panel."
+        ),
+        is_warning=True,
+    ),
 }
 
 _EPIC_GATE_DEFAULT = GateDisplayInfo(

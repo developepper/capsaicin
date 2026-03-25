@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.criteria import update_criteria_from_review
 from capsaicin.diff import get_run_diff
@@ -30,12 +31,15 @@ from capsaicin.prompts import build_reviewer_prompt
 from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
     TICKET_COLUMNS,
+    check_evidence_completeness,
     generate_id,
     get_impl_run_id,
+    load_backend_evidence_for_epic,
     load_criteria,
     load_open_findings,
     load_ticket,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.reconciliation import reconcile_findings
 from capsaicin.review_baseline import (
@@ -165,6 +169,7 @@ def run_review_pipeline(
     adapter: BaseAdapter,
     allow_drift: bool = False,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Execute the full review pipeline for a ticket.
 
@@ -187,6 +192,7 @@ def run_review_pipeline(
         config=config,
         adapter=adapter,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
 
@@ -211,6 +217,7 @@ def invoke_review_with_retries(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Invoke the reviewer adapter, handling retries on errors.
 
@@ -260,6 +267,7 @@ def invoke_review_with_retries(
             config=config,
             adapter=adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
 
         if not outcome.should_retry:
@@ -309,6 +317,7 @@ def _review_invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> PipelineOutcome:
     """Single reviewer invocation. Returns a PipelineOutcome."""
 
@@ -326,14 +335,32 @@ def _review_invoke_once(
     # Get the implementation diff for review context
     impl_diff = get_run_diff(conn, impl_run_id)
 
+    # Load evidence from parent epic when the ticket has lineage
+    evidence = None
+    pending_evidence_descriptions = None
+    if epic_id:
+        evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+        pending_reqs = check_evidence_completeness(conn, epic_id)
+        if pending_reqs:
+            pending_evidence_descriptions = [r.description for r in pending_reqs]
+
     # Assemble reviewer prompt
     prompt = build_reviewer_prompt(
         ticket={"title": ticket_row["title"], "description": ticket_row["description"]},
         criteria=criteria,
         diff_context=impl_diff.diff_text,
         prior_findings=prior_findings,
+        evidence=evidence,
+        pending_evidence_descriptions=pending_evidence_descriptions,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="reviewer",
+        conn=conn,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="reviewer",
@@ -345,9 +372,10 @@ def _review_invoke_once(
         prior_findings=prior_findings,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.reviewer.backend,
-            "command": config.reviewer.command,
-            "allowed_tools": config.reviewer.allowed_tools,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "model": resolved.model,
+            "allowed_tools": resolved.allowed_tools,
         },
     )
 
@@ -362,6 +390,11 @@ def _review_invoke_once(
         run_request.to_json(),
         impl_diff.diff_text,
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Capture review baseline (T16) — immediately before adapter invocation
     capture_review_baseline(conn, config.project.repo_path, run_id)

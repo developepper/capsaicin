@@ -60,6 +60,22 @@ class Config:
     reviewer_policy: ReviewerConfig
     ticket_selection: TicketSelectionConfig
     paths: PathsConfig
+    planner: AdapterConfig | None = None
+    planning_reviewer: AdapterConfig | None = None
+
+    @property
+    def resolved_planner(self) -> AdapterConfig:
+        """Return planner config, falling back to implementer."""
+        return self.planner if self.planner is not None else self.implementer
+
+    @property
+    def resolved_planning_reviewer(self) -> AdapterConfig:
+        """Return planning_reviewer config, falling back to reviewer."""
+        return (
+            self.planning_reviewer
+            if self.planning_reviewer is not None
+            else self.reviewer
+        )
 
 
 def load_config(config_path: str | Path) -> Config:
@@ -104,6 +120,17 @@ def load_config(config_path: str | Path) -> Config:
     implementer = _parse_adapter(adapters["implementer"], "implementer")
     reviewer = _parse_adapter(adapters["reviewer"], "reviewer")
 
+    planner = (
+        _parse_adapter(adapters["planner"], "planner")
+        if "planner" in adapters
+        else None
+    )
+    planning_reviewer = (
+        _parse_adapter(adapters["planning_reviewer"], "planning_reviewer")
+        if "planning_reviewer" in adapters
+        else None
+    )
+
     # Limits (with defaults)
     lim = raw["limits"]
     limits = LimitsConfig(
@@ -134,6 +161,8 @@ def load_config(config_path: str | Path) -> Config:
         reviewer_policy=reviewer_policy,
         ticket_selection=ticket_selection,
         paths=paths,
+        planner=planner,
+        planning_reviewer=planning_reviewer,
     )
 
 
@@ -156,6 +185,18 @@ def config_to_snapshot(config: Config) -> dict:
                 "command": config.reviewer.command,
                 "model": config.reviewer.model,
                 "allowed_tools": config.reviewer.allowed_tools,
+            },
+            "planner": {
+                "backend": config.resolved_planner.backend,
+                "command": config.resolved_planner.command,
+                "model": config.resolved_planner.model,
+                "allowed_tools": config.resolved_planner.allowed_tools,
+            },
+            "planning_reviewer": {
+                "backend": config.resolved_planning_reviewer.backend,
+                "command": config.resolved_planning_reviewer.command,
+                "model": config.resolved_planning_reviewer.model,
+                "allowed_tools": config.resolved_planning_reviewer.allowed_tools,
             },
         },
         "limits": {

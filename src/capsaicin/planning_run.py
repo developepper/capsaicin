@@ -12,8 +12,14 @@ from pathlib import Path
 
 from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
-from capsaicin.adapters.types import PlannerResult, PlanningFinding, RunRequest
+from capsaicin.adapters.types import (
+    EvidenceRequirement,
+    PlannerResult,
+    PlanningFinding,
+    RunRequest,
+)
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.orchestrator import (
     await_planning_human,
     check_draft_retry_limit,
@@ -28,11 +34,15 @@ from capsaicin.orchestrator import (
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planner_draft_prompt, build_planner_revise_prompt
 from capsaicin.queries import (
+    check_evidence_completeness,
     decode_text_list,
     generate_id,
+    insert_evidence_requirement,
+    load_backend_evidence_for_epic,
     load_open_planning_findings,
     load_planned_epic,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.state_machine import transition_planned_epic
 from capsaicin.validation import validate_planner_result
@@ -318,6 +328,32 @@ def run_draft_pipeline(
     epic_id = epic["id"]
     from_status = epic["status"]
 
+    # --- Missing-evidence gate (T08) ---
+    pending_evidence = check_evidence_completeness(conn, epic_id)
+    if pending_evidence:
+        transition_planned_epic(
+            conn,
+            epic_id,
+            "human-gate",
+            "system",
+            reason="Pending evidence requirements must be satisfied before planning.",
+            gate_reason="missing_evidence",
+            log_path=log_path,
+        )
+        await_planning_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "MISSING_EVIDENCE_GATE",
+                project_id=project_id,
+                payload={
+                    "epic_id": epic_id,
+                    "pending_count": len(pending_evidence),
+                    "pending_descriptions": [r.description for r in pending_evidence],
+                },
+            )
+        return "human-gate"
+
     # --- Cycle-limit shortcut (revise only) ---
     if from_status == "revise":
         if check_planning_cycle_limit(conn, epic_id, config.limits.max_cycles):
@@ -462,12 +498,14 @@ def _draft_invoke_once(
     # Load context
     epic = load_planned_epic(conn, epic_id)
     prior_findings = load_open_planning_findings(conn, epic_id)
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
 
     # Build prompt based on whether this is a fresh draft or revision
     if cycle_number == 1 and epic["title"] is None:
         # Fresh draft
         prompt = build_planner_draft_prompt(
             problem_statement=epic["problem_statement"],
+            evidence=evidence or None,
         )
     else:
         # Revision — load current plan draft for context
@@ -488,8 +526,15 @@ def _draft_invoke_once(
             prior_findings=finding_objects,
             cycle=cycle_number,
             max_cycles=config.limits.max_cycles,
+            evidence=evidence or None,
         )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="planner",
+        conn=conn,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="planner",
@@ -498,8 +543,9 @@ def _draft_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.implementer.backend,
-            "command": config.implementer.command,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "model": resolved.model,
             "structured_output": "planner",
         },
     )
@@ -514,6 +560,11 @@ def _draft_invoke_once(
         prompt,
         run_request.to_json(),
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Update orchestrator state
     start_planning_run(conn, project_id, epic_id, run_id)
@@ -632,6 +683,27 @@ def _handle_draft_result(
 
     # Persist
     persist_planner_result(conn, epic_id, planner_result)
+
+    # Persist suggested evidence requirements from the planner,
+    # skipping any that already exist as pending with the same
+    # description and command (avoids duplicates across cycles).
+    for ser in planner_result.suggested_evidence_requirements:
+        existing = conn.execute(
+            "SELECT id FROM evidence_requirements "
+            "WHERE epic_id = ? AND description = ? AND suggested_command = ? "
+            "AND status = 'pending'",
+            (epic_id, ser.description, ser.suggested_command),
+        ).fetchone()
+        if existing:
+            continue
+        req = EvidenceRequirement(
+            id=generate_id(),
+            epic_id=epic_id,
+            description=ser.description,
+            suggested_command=ser.suggested_command,
+            status="pending",
+        )
+        insert_evidence_requirement(conn, req)
 
     # Transition to in-review
     transition_planned_epic(

@@ -21,17 +21,30 @@ def plan_loop(
 
     Returns a structured ``PlanningCommandResult`` with the final status and detail.
     """
-    from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+    from capsaicin.adapters.registry import build_adapter_from_config
     from capsaicin.planning_loop import run_planning_loop
     from capsaicin.planning_run import select_epic_for_draft
+    from capsaicin.resolver import resolve_adapter_config
 
     # Resolve the epic before entering the loop so the identity is
     # captured regardless of whether the caller passed an explicit ID.
     selected = select_epic_for_draft(conn, project_id, epic_id)
     resolved_epic_id = selected["id"]
 
-    draft_adapter = ClaudeCodeAdapter(command=config.implementer.command)
-    review_adapter = ClaudeCodeAdapter(command=config.reviewer.command)
+    draft_config = resolve_adapter_config(
+        config,
+        role="planner",
+        conn=conn,
+        epic_id=resolved_epic_id,
+    )
+    review_config = resolve_adapter_config(
+        config,
+        role="planning_reviewer",
+        conn=conn,
+        epic_id=resolved_epic_id,
+    )
+    draft_adapter = build_adapter_from_config(draft_config)
+    review_adapter = build_adapter_from_config(review_config)
 
     final_status, detail = run_planning_loop(
         conn=conn,

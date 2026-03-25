@@ -1,4 +1,4 @@
-"""Prompt assembly for implementer, reviewer, and planning runs (T11, T02).
+"""Prompt assembly for implementer, reviewer, and planning runs (T11, T02, T07).
 
 Builds structured prompts from ticket/planning context for adapter invocation.
 """
@@ -7,7 +7,12 @@ from __future__ import annotations
 
 import json
 
-from capsaicin.adapters.types import AcceptanceCriterion, Finding, PlanningFinding
+from capsaicin.adapters.types import (
+    AcceptanceCriterion,
+    BackendEvidence,
+    Finding,
+    PlanningFinding,
+)
 
 # Full JSON Schema for the Review Result, used in reviewer prompts and
 # passed to Claude Code via --json-schema in T13.
@@ -100,12 +105,84 @@ def _format_findings(findings: list[Finding]) -> str:
     return "\n".join(lines)
 
 
+def _format_evidence(evidence: list[BackendEvidence]) -> str:
+    """Format backend validation evidence for inclusion in prompts.
+
+    Each evidence type is rendered in its natural format:
+    - commands as shell code blocks
+    - outputs with labeled stdout/stderr and exit code
+    - structured results as JSON code blocks
+    - permission denials describe denied tool/action
+    - behavioral notes as quoted prose
+    """
+    if not evidence:
+        return ""
+
+    parts: list[str] = []
+    for ev in evidence:
+        header = f"### {ev.title} ({ev.evidence_type.replace('_', ' ')})"
+        parts.append(header)
+
+        if ev.evidence_type == "command":
+            if ev.command:
+                parts.append(f"\n```bash\n{ev.command}\n```")
+            if ev.body:
+                parts.append(f"\n{ev.body}")
+
+        elif ev.evidence_type == "output_envelope":
+            if ev.command:
+                parts.append(f"\nCommand: `{ev.command}`")
+            if ev.stdout:
+                parts.append(f"\n**stdout:**\n```\n{ev.stdout}\n```")
+            if ev.stderr:
+                parts.append(f"\n**stderr:**\n```\n{ev.stderr}\n```")
+            if ev.body:
+                parts.append(f"\n{ev.body}")
+
+        elif ev.evidence_type in ("structured_result", "structured_result_sample"):
+            if ev.structured_data:
+                parts.append(
+                    f"\n```json\n{json.dumps(ev.structured_data, indent=2)}\n```"
+                )
+            if ev.command:
+                parts.append(f"\nCommand: `{ev.command}`")
+            if ev.body:
+                parts.append(f"\n{ev.body}")
+
+        elif ev.evidence_type == "permission_denial":
+            if ev.command:
+                parts.append(f"\nDenied command: `{ev.command}`")
+            if ev.body:
+                parts.append(f"\n{ev.body}")
+            if ev.stdout:
+                parts.append(f"\n**stdout:**\n```\n{ev.stdout}\n```")
+            if ev.stderr:
+                parts.append(f"\n**stderr:**\n```\n{ev.stderr}\n```")
+
+        elif ev.evidence_type == "behavioral_note":
+            if ev.body:
+                parts.append(f"\n> {ev.body}")
+
+        else:
+            # Fallback for unknown types
+            if ev.body:
+                parts.append(f"\n{ev.body}")
+            if ev.command:
+                parts.append(f"\nCommand: `{ev.command}`")
+
+        parts.append("")
+
+    return "\n".join(parts)
+
+
 def build_implementer_prompt(
     ticket: dict,
     criteria: list[AcceptanceCriterion],
     prior_findings: list[Finding],
     cycle: int,
     max_cycles: int,
+    evidence: list[BackendEvidence] | None = None,
+    pending_evidence_descriptions: list[str] | None = None,
 ) -> str:
     """Build a prompt for an implementer run.
 
@@ -164,6 +241,36 @@ def build_implementer_prompt(
             ]
         )
 
+    if evidence:
+        parts.extend(
+            [
+                "",
+                "# Backend Context",
+                "",
+                "The following backend validation evidence has been captured by the "
+                "operator. Use this to understand observed backend behavior and "
+                "ensure your implementation aligns with it:",
+                "",
+                _format_evidence(evidence),
+            ]
+        )
+
+    if pending_evidence_descriptions:
+        parts.extend(
+            [
+                "",
+                "# Warning: Unresolved Evidence Requirements",
+                "",
+                "The parent epic has pending backend validation evidence requirements "
+                "that have not yet been satisfied. The following behaviors are unverified. "
+                "Proceed with caution and avoid relying on assumptions about backend "
+                "behavior that is not backed by evidence:",
+                "",
+            ]
+        )
+        for desc in pending_evidence_descriptions:
+            parts.append(f"- {desc}")
+
     return "\n".join(parts)
 
 
@@ -172,6 +279,8 @@ def build_reviewer_prompt(
     criteria: list[AcceptanceCriterion],
     diff_context: str,
     prior_findings: list[Finding],
+    evidence: list[BackendEvidence] | None = None,
+    pending_evidence_descriptions: list[str] | None = None,
 ) -> str:
     """Build a prompt for a reviewer run.
 
@@ -232,6 +341,37 @@ def build_reviewer_prompt(
                 _format_findings(prior_findings),
             ]
         )
+
+    if evidence:
+        parts.extend(
+            [
+                "",
+                "# Backend Context",
+                "",
+                "The following backend validation evidence has been captured by the "
+                "operator. Verify that the implementation aligns with observed "
+                "backend behavior:",
+                "",
+                _format_evidence(evidence),
+            ]
+        )
+
+    if pending_evidence_descriptions:
+        parts.extend(
+            [
+                "",
+                "# Warning: Unresolved Evidence Requirements",
+                "",
+                "The parent epic has pending backend validation evidence requirements "
+                "that have not yet been satisfied. If the implementation relies on "
+                "backend behavior that is not backed by evidence, emit a finding with "
+                "category 'missing_evidence' to flag it. The following behaviors are "
+                "unverified:",
+                "",
+            ]
+        )
+        for desc in pending_evidence_descriptions:
+            parts.append(f"- {desc}")
 
     parts.extend(
         [
@@ -330,6 +470,18 @@ PLANNER_RESULT_SCHEMA: dict = {
         "open_questions": {
             "type": "array",
             "items": {"type": "string"},
+        },
+        "suggested_evidence_requirements": {
+            "type": "array",
+            "items": {
+                "type": "object",
+                "required": ["description", "suggested_command"],
+                "additionalProperties": False,
+                "properties": {
+                    "description": {"type": "string"},
+                    "suggested_command": {"type": "string"},
+                },
+            },
         },
     },
 }
@@ -471,12 +623,14 @@ def _format_plan_draft(plan_draft: dict) -> str:
 def build_planner_draft_prompt(
     problem_statement: str,
     context_files: list[str] | None = None,
+    evidence: list[BackendEvidence] | None = None,
 ) -> str:
     """Build a prompt for an initial planner draft run.
 
     Args:
         problem_statement: The problem to decompose into an epic and tickets.
         context_files: Optional list of file paths to reference.
+        evidence: Backend validation evidence captured by the operator.
     """
     parts = [
         "# Role",
@@ -495,11 +649,29 @@ def build_planner_draft_prompt(
         "- Do not generate IDs — the orchestrator assigns them at persistence time.",
         "- References should list specific file paths or doc paths that the "
         "implementer must read.",
+        "- When the epic involves a backend you have not seen evidence for, suggest "
+        "evidence requirements with exact CLI commands the operator should run. "
+        "Include these in the `suggested_evidence_requirements` array in your "
+        "response.",
         "",
         "# Problem Statement",
         "",
         problem_statement,
     ]
+
+    if evidence:
+        parts.extend(
+            [
+                "",
+                "# Backend Validation Evidence",
+                "",
+                "The following backend validation evidence has been captured by the "
+                "operator. Ground your plan in this observed behavior rather than "
+                "assumptions:",
+                "",
+                _format_evidence(evidence),
+            ]
+        )
 
     if context_files:
         parts.extend(
@@ -540,6 +712,7 @@ def build_planner_revise_prompt(
     cycle: int,
     max_cycles: int,
     context_files: list[str] | None = None,
+    evidence: list[BackendEvidence] | None = None,
 ) -> str:
     """Build a prompt for a planner revision pass.
 
@@ -550,6 +723,7 @@ def build_planner_revise_prompt(
         cycle: Current cycle number.
         max_cycles: Maximum allowed cycles.
         context_files: Optional list of file paths to reference.
+        evidence: Backend validation evidence captured by the operator.
     """
     parts = [
         "# Role",
@@ -568,6 +742,10 @@ def build_planner_revise_prompt(
         "- Do not generate IDs — the orchestrator assigns them at persistence time.",
         "- References should list specific file paths or doc paths that the "
         "implementer must read.",
+        "- When the epic involves a backend you have not seen evidence for, suggest "
+        "evidence requirements with exact CLI commands the operator should run. "
+        "Include these in the `suggested_evidence_requirements` array in your "
+        "response.",
         "",
         "# Problem Statement",
         "",
@@ -592,6 +770,19 @@ def build_planner_revise_prompt(
                 "review. Address all blocking findings:",
                 "",
                 _format_planning_findings(prior_findings),
+            ]
+        )
+
+    if evidence:
+        parts.extend(
+            [
+                "",
+                "# Backend Validation Evidence",
+                "",
+                "The following backend validation evidence has been captured by the "
+                "operator. Ground your revised plan in this observed behavior:",
+                "",
+                _format_evidence(evidence),
             ]
         )
 
@@ -629,6 +820,7 @@ def build_planning_reviewer_prompt(
     problem_statement: str,
     plan_draft: dict,
     prior_findings: list[PlanningFinding] | None = None,
+    evidence: list[BackendEvidence] | None = None,
 ) -> str:
     """Build a prompt for a planning reviewer run.
 
@@ -636,6 +828,7 @@ def build_planning_reviewer_prompt(
         problem_statement: The original problem statement.
         plan_draft: The current plan draft as a dict (PlannerResult shape).
         prior_findings: Findings from prior review cycles with dispositions.
+        evidence: Backend validation evidence captured by the operator.
     """
     parts = [
         "# Role",
@@ -676,6 +869,20 @@ def build_planning_reviewer_prompt(
             ]
         )
 
+    if evidence:
+        parts.extend(
+            [
+                "",
+                "# Backend Validation Evidence",
+                "",
+                "The following backend validation evidence has been captured by the "
+                "operator. Verify that the plan references and aligns with this "
+                "observed behavior:",
+                "",
+                _format_evidence(evidence),
+            ]
+        )
+
     parts.extend(
         [
             "",
@@ -702,6 +909,8 @@ def build_planning_reviewer_prompt(
             "ticket's sequence number for ticket-level findings",
             "- Include all ticket sequence numbers you reviewed in `tickets_reviewed`",
             "- Set `epic_reviewed: true` if you reviewed the epic-level artifacts",
+            "- If the plan references backend behaviors that are not backed by supplied "
+            "evidence, emit a finding with `category: 'missing_evidence'` to flag it",
         ]
     )
 

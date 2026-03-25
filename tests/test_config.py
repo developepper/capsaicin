@@ -5,8 +5,10 @@ from __future__ import annotations
 import pytest
 
 from capsaicin.config import (
+    AdapterConfig,
     Config,
     ConfigError,
+    config_to_snapshot,
     load_config,
     resolve_project,
     write_default_config,
@@ -58,6 +60,33 @@ order = "priority"
 [paths]
 renders_dir = "output/renders"
 exports_dir = "output/exports"
+"""
+
+FOUR_ROLE_TOML = """\
+[project]
+name = "four-role"
+repo_path = "/tmp/repo"
+
+[adapters.implementer]
+backend = "claude-code"
+command = "claude-impl"
+
+[adapters.reviewer]
+backend = "claude-code"
+command = "claude-rev"
+allowed_tools = ["Read"]
+
+[adapters.planner]
+backend = "claude-code"
+command = "claude-plan"
+model = "sonnet"
+
+[adapters.planning_reviewer]
+backend = "claude-code"
+command = "claude-planrev"
+allowed_tools = ["Read", "Grep"]
+
+[limits]
 """
 
 
@@ -231,3 +260,156 @@ class TestWriteDefaultConfig:
         write_default_config(cfg_path, "line1\nline2", "/repo")
         cfg = load_config(cfg_path)
         assert cfg.project.name == "line1\nline2"
+
+
+class TestFourRoleConfig:
+    def test_planner_and_planning_reviewer_parsed(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FOUR_ROLE_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.planner is not None
+        assert cfg.planner.command == "claude-plan"
+        assert cfg.planner.model == "sonnet"
+        assert cfg.planning_reviewer is not None
+        assert cfg.planning_reviewer.command == "claude-planrev"
+        assert cfg.planning_reviewer.allowed_tools == ["Read", "Grep"]
+
+    def test_resolved_planner_returns_explicit_when_set(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FOUR_ROLE_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.resolved_planner.command == "claude-plan"
+
+    def test_resolved_planning_reviewer_returns_explicit_when_set(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FOUR_ROLE_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.resolved_planning_reviewer.command == "claude-planrev"
+
+    def test_planner_defaults_to_implementer_when_absent(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(MINIMAL_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.planner is None
+        assert cfg.resolved_planner is cfg.implementer
+
+    def test_planning_reviewer_defaults_to_reviewer_when_absent(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(MINIMAL_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.planning_reviewer is None
+        assert cfg.resolved_planning_reviewer is cfg.reviewer
+
+    def test_existing_configs_work_unchanged(self, tmp_path):
+        """Configs without planner/planning_reviewer sections still load."""
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FULL_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.planner is None
+        assert cfg.planning_reviewer is None
+        assert cfg.resolved_planner.command == "claude"
+        assert cfg.resolved_planning_reviewer.command == "claude"
+
+
+class TestConfigToSnapshotFourRoles:
+    def test_snapshot_includes_all_four_roles_explicit(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FOUR_ROLE_TOML)
+        cfg = load_config(cfg_path)
+        snap = config_to_snapshot(cfg)
+        assert snap["adapters"]["implementer"]["command"] == "claude-impl"
+        assert snap["adapters"]["reviewer"]["command"] == "claude-rev"
+        assert snap["adapters"]["planner"]["command"] == "claude-plan"
+        assert snap["adapters"]["planner"]["model"] == "sonnet"
+        assert snap["adapters"]["planning_reviewer"]["command"] == "claude-planrev"
+        assert snap["adapters"]["planning_reviewer"]["allowed_tools"] == [
+            "Read",
+            "Grep",
+        ]
+
+    def test_snapshot_fallback_planner_matches_implementer(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(MINIMAL_TOML)
+        cfg = load_config(cfg_path)
+        snap = config_to_snapshot(cfg)
+        assert snap["adapters"]["planner"] == snap["adapters"]["implementer"]
+        assert snap["adapters"]["planning_reviewer"] == snap["adapters"]["reviewer"]
+
+    def test_snapshot_round_trips_all_four(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(FOUR_ROLE_TOML)
+        cfg = load_config(cfg_path)
+        snap = config_to_snapshot(cfg)
+        assert set(snap["adapters"].keys()) == {
+            "implementer",
+            "reviewer",
+            "planner",
+            "planning_reviewer",
+        }
+        for role in ("implementer", "reviewer", "planner", "planning_reviewer"):
+            adapter_snap = snap["adapters"][role]
+            assert "backend" in adapter_snap
+            assert "command" in adapter_snap
+            assert "model" in adapter_snap
+            assert "allowed_tools" in adapter_snap
+
+
+class TestResolveAdapter:
+    def setup_method(self):
+        """Reset registry state between tests."""
+        from capsaicin.adapters import registry
+
+        registry._REGISTRY.clear()
+        registry._DEFAULTS_LOADED = False
+
+    def test_resolves_claude_code(self):
+        from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+        from capsaicin.adapters.registry import resolve_adapter
+
+        cls = resolve_adapter("claude-code")
+        assert cls is ClaudeCodeAdapter
+
+    def test_unknown_backend_raises(self):
+        from capsaicin.adapters.registry import resolve_adapter
+
+        with pytest.raises(ValueError, match="Unknown adapter backend"):
+            resolve_adapter("nonexistent")
+
+    def test_build_adapter_from_config(self):
+        from capsaicin.adapters.claude_code import ClaudeCodeAdapter
+        from capsaicin.adapters.registry import build_adapter_from_config
+
+        ac = AdapterConfig(backend="claude-code", command="my-claude")
+        adapter = build_adapter_from_config(ac)
+        assert isinstance(adapter, ClaudeCodeAdapter)
+
+    def test_register_adapter(self):
+        from capsaicin.adapters.base import BaseAdapter
+        from capsaicin.adapters.registry import register_adapter, resolve_adapter
+        from capsaicin.adapters.types import RunRequest, RunResult
+
+        class FakeAdapter(BaseAdapter):
+            def __init__(self, command="fake"):
+                self.command = command
+
+            def execute(self, request: RunRequest) -> RunResult:
+                return RunResult(run_id=request.run_id, exit_status="success")
+
+        register_adapter("fake", FakeAdapter)
+        assert resolve_adapter("fake") is FakeAdapter
+
+    def test_register_adapter_duplicate_raises(self):
+        from capsaicin.adapters.base import BaseAdapter
+        from capsaicin.adapters.registry import register_adapter
+        from capsaicin.adapters.types import RunRequest, RunResult
+
+        class FakeAdapter(BaseAdapter):
+            def __init__(self, command="fake"):
+                self.command = command
+
+            def execute(self, request: RunRequest) -> RunResult:
+                return RunResult(run_id=request.run_id, exit_status="success")
+
+        register_adapter("fake", FakeAdapter)
+        with pytest.raises(ValueError, match="Adapter already registered"):
+            register_adapter("fake", FakeAdapter)

@@ -34,6 +34,7 @@ class TicketDetailData:
     dependencies: list[dict] = field(default_factory=list)
     last_run: dict | None = None
     last_run_diagnostic: RunDiagnosticSummary | None = None
+    last_run_evidence: list[dict] = field(default_factory=list)
     run_history: list[dict] | None = None
     transition_history: list[dict] | None = None
     diagnostic: str | None = None
@@ -156,14 +157,18 @@ def get_ticket_detail(
     if ticket is None:
         raise ValueError(f"Ticket '{ticket_id}' not found.")
 
+    from capsaicin.queries import load_evidence_for_run
+
     last_run = get_last_run(conn, ticket_id)
     diagnostic = None
     last_run_diag = None
+    last_run_evidence: list[dict] = []
     if last_run:
         diagnostic = build_run_outcome_message(conn, ticket_id, last_run["id"])
         if not diagnostic:
             diagnostic = None
         last_run_diag = _build_run_diagnostic_summary(last_run)
+        last_run_evidence = load_evidence_for_run(conn, last_run["id"])
 
     deps = conn.execute(
         "SELECT td.depends_on_id, t.title, t.status "
@@ -181,6 +186,7 @@ def get_ticket_detail(
         dependencies=[dict(d) for d in deps],
         last_run=last_run,
         last_run_diagnostic=last_run_diag,
+        last_run_evidence=last_run_evidence,
         diagnostic=diagnostic,
         diff_summary=_get_diff_summary(conn, ticket_id),
     )

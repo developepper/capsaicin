@@ -1,0 +1,20 @@
+<section id="planning-approved" hx-get="{{ request.url_for('partial_planning_approved') }}" hx-trigger="every 30s, sse-planning-queue from:body" hx-swap="outerHTML">
+  {% if data.approved_epics %}
+  <h2>Approved ({{ data.approved_epics|length }})</h2>
+  <div class="table-wrap"><table>
+    <thead><tr><th>Epic</th><th>Materialized</th><th>Since</th></tr></thead>
+    <tbody>
+      {% for e in data.approved_epics %}
+      <tr>
+        <td><a href="{{ request.url_for('epic_detail', epic_id=e.id) }}">{{ e.title or e.problem_statement[:80] }}</a></td>
+        <td>{{ "yes" if e.materialized_path else "no" }}</td>
+        <td>{{ e.status_changed_at or "" }}</td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table></div>
+  {% else %}
+  <h2>Approved</h2>
+  <p class="empty">No approved epics.</p>
+  {% endif %}
+</section>

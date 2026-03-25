@@ -30,11 +30,13 @@ from capsaicin.web.routes.actions import (
     action_complete,
     action_create_ticket,
     action_defer,
+    action_delete_ticket_override,
     action_loop,
     action_resume,
     action_review,
     action_revise,
     action_run,
+    action_set_ticket_override,
     action_shutdown,
     action_unblock,
 )
@@ -61,16 +63,27 @@ from capsaicin.web.routes.planning_actions import (
     action_continue_implementation,
     action_create_epic,
     action_defer_epic,
+    action_delete_epic_override,
     action_draft_epic,
     action_materialize_epic,
     action_plan_loop,
     action_review_epic,
     action_revise_epic,
+    action_set_epic_override,
     action_unblock_epic,
+)
+from capsaicin.web.routes.evidence_actions import (
+    action_create_evidence,
+    action_create_requirement,
+    action_delete_evidence,
+    action_paste_output,
+    action_satisfy_requirement,
+    action_waive_requirement,
 )
 from capsaicin.web.routes.planning_partials import (
     partial_epic_content,
     partial_planning_active,
+    partial_planning_approved,
     partial_planning_blocked,
     partial_planning_gate,
     partial_planning_queue,
@@ -156,6 +169,19 @@ def create_app(
             action_loop,
             methods=["POST"],
             name="action_loop",
+        ),
+        # Ticket override routes
+        Route(
+            "/tickets/{ticket_id}/overrides",
+            action_set_ticket_override,
+            methods=["POST"],
+            name="action_set_ticket_override",
+        ),
+        Route(
+            "/tickets/{ticket_id}/overrides/{override_id}/delete",
+            action_delete_ticket_override,
+            methods=["POST"],
+            name="action_delete_ticket_override",
         ),
         Route(
             "/actions/resume",
@@ -251,6 +277,56 @@ def create_app(
             methods=["POST"],
             name="action_continue_implementation",
         ),
+        # Epic override routes
+        Route(
+            "/epics/{epic_id}/overrides",
+            action_set_epic_override,
+            methods=["POST"],
+            name="action_set_epic_override",
+        ),
+        Route(
+            "/epics/{epic_id}/overrides/{override_id}/delete",
+            action_delete_epic_override,
+            methods=["POST"],
+            name="action_delete_epic_override",
+        ),
+        # Evidence action routes — POST only
+        Route(
+            "/epics/{epic_id}/evidence",
+            action_create_evidence,
+            methods=["POST"],
+            name="action_create_evidence",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements",
+            action_create_requirement,
+            methods=["POST"],
+            name="action_create_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/satisfy",
+            action_satisfy_requirement,
+            methods=["POST"],
+            name="action_satisfy_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/waive",
+            action_waive_requirement,
+            methods=["POST"],
+            name="action_waive_requirement",
+        ),
+        Route(
+            "/epics/{epic_id}/requirements/{req_id}/paste-output",
+            action_paste_output,
+            methods=["POST"],
+            name="action_paste_output",
+        ),
+        Route(
+            "/epics/{epic_id}/evidence/{evidence_id}/delete",
+            action_delete_evidence,
+            methods=["POST"],
+            name="action_delete_evidence",
+        ),
         # Planning partials
         Route(
             "/partials/planning/gate",
@@ -261,6 +337,11 @@ def create_app(
             "/partials/planning/active",
             partial_planning_active,
             name="partial_planning_active",
+        ),
+        Route(
+            "/partials/planning/approved",
+            partial_planning_approved,
+            name="partial_planning_approved",
         ),
         Route(
             "/partials/planning/blocked",

@@ -6,9 +6,12 @@ from starlette.requests import Request
 from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.planning_detail import get_planning_detail
+from capsaicin.config import load_config
 from capsaicin.errors import PlannedEpicNotFoundError
+from capsaicin.resolver import get_overrides_for_epic, resolve_all_roles
 from capsaicin.app.queries.planning_summary import (
     get_active_epics,
+    get_approved_epics,
     get_blocked_epics,
     get_epic_counts_by_status,
     get_human_gate_epics,
@@ -49,6 +52,23 @@ async def partial_planning_active(request: Request) -> HTMLResponse:
     return templates.TemplateResponse(
         request,
         "partials/planning_active.html",
+        {"data": data},
+    )
+
+
+async def partial_planning_approved(request: Request) -> HTMLResponse:
+    """Return the approved epics section fragment."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+
+    data = PlanningSummaryData(
+        total_epics=0,
+        approved_epics=get_approved_epics(conn, project_id),
+    )
+
+    return templates.TemplateResponse(
+        request,
+        "partials/planning_approved.html",
         {"data": data},
     )
 
@@ -105,8 +125,21 @@ async def partial_epic_content(request: Request) -> HTMLResponse:
 
     gate_display = get_epic_gate_display(data.epic.get("gate_reason"))
 
+    config = load_config(request.app.state.config_path)
+    role_assignments = resolve_all_roles(config, conn=conn, epic_id=epic_id)
+    overrides = get_overrides_for_epic(conn, epic_id)
+
     return templates.TemplateResponse(
         request,
         "partials/epic_content.html",
-        {"data": data, "gate_display": gate_display},
+        {
+            "data": data,
+            "gate_display": gate_display,
+            "role_assignments": role_assignments,
+            "roles": ["planner", "planning_reviewer"],
+            "overrides": overrides,
+            "scope": "epic",
+            "scope_id": epic_id,
+            "override_roles": ["planner", "planning_reviewer"],
+        },
     )

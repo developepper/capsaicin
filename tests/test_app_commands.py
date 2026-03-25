@@ -254,6 +254,7 @@ class TestLoopCommand:
             ticket_id=None,
             max_cycles=None,
             log_path=None,
+            epic_id=None,
         ):
             captured["ticket_id"] = ticket_id
             return ("human-gate", "stopped")
@@ -292,6 +293,7 @@ class TestLoopCommand:
             ticket_id=None,
             max_cycles=None,
             log_path=None,
+            epic_id=None,
         ):
             return ("human-gate", "stopped")
 
@@ -327,6 +329,7 @@ class TestLoopCommand:
             ticket_id=None,
             max_cycles=None,
             log_path=None,
+            epic_id=None,
         ):
             # Simulate the loop moving the ticket to human-gate
             conn.execute(

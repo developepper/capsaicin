@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import PlanningReviewResult, RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.orchestrator import (
     await_planning_human,
     check_planning_cycle_limit,
@@ -26,11 +27,14 @@ from capsaicin.orchestrator import (
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.prompts import build_planning_reviewer_prompt
 from capsaicin.queries import (
+    check_evidence_completeness,
     generate_id,
+    load_backend_evidence_for_epic,
     load_open_planning_findings,
     load_planned_epic,
     load_planned_tickets,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.state_machine import transition_planned_epic
 from capsaicin.validation import validate_planning_review_result
@@ -225,6 +229,31 @@ def run_planning_review_pipeline(
     """
     epic_id = epic["id"]
 
+    # --- Missing-evidence gate (T08) ---
+    pending_evidence = check_evidence_completeness(conn, epic_id)
+    if pending_evidence:
+        transition_planned_epic(
+            conn,
+            epic_id,
+            "human-gate",
+            "system",
+            reason="Pending evidence requirements must be satisfied before planning review.",
+            gate_reason="missing_evidence",
+            log_path=log_path,
+        )
+        await_planning_human(conn, project_id)
+        if log_path:
+            log_event(
+                log_path,
+                "MISSING_EVIDENCE_GATE",
+                project_id=project_id,
+                payload={
+                    "epic_id": epic_id,
+                    "pending_count": len(pending_evidence),
+                },
+            )
+        return "human-gate"
+
     return invoke_planning_review_with_retries(
         conn=conn,
         project_id=project_id,
@@ -344,12 +373,21 @@ def _planning_review_invoke_once(
         else None
     )
 
+    evidence = load_backend_evidence_for_epic(conn, epic_id)
+
     prompt = build_planning_reviewer_prompt(
         problem_statement=epic["problem_statement"],
         plan_draft=plan_draft,
         prior_findings=prior_finding_objects,
+        evidence=evidence or None,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="planning_reviewer",
+        conn=conn,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="reviewer",
@@ -358,9 +396,10 @@ def _planning_review_invoke_once(
         prompt=prompt,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.reviewer.backend,
-            "command": config.reviewer.command,
-            "allowed_tools": config.reviewer.allowed_tools,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "model": resolved.model,
+            "allowed_tools": resolved.allowed_tools,
             "structured_output": "planning_review",
             "valid_sequences": valid_sequences,
         },
@@ -376,6 +415,11 @@ def _planning_review_invoke_once(
         prompt,
         run_request.to_json(),
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Update orchestrator state
     start_planning_run(conn, project_id, epic_id, run_id)

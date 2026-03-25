@@ -14,6 +14,7 @@ from capsaicin.activity_log import build_run_end_payload, log_event
 from capsaicin.adapters.base import BaseAdapter
 from capsaicin.adapters.types import RunRequest
 from capsaicin.config import Config
+from capsaicin.resolver import resolve_adapter_config
 from capsaicin.diff import capture_diff, persist_run_diff
 from capsaicin.pipeline_outcome import PipelineOutcome
 from capsaicin.orchestrator import (
@@ -31,11 +32,14 @@ from capsaicin.prompts import build_implementer_prompt
 from capsaicin.errors import InvalidStatusError, NoEligibleTicketError
 from capsaicin.queries import (
     TICKET_COLUMNS,
+    check_evidence_completeness,
     generate_id,
+    load_backend_evidence_for_epic,
     load_criteria,
     load_open_findings,
     load_ticket,
     now_utc,
+    record_run_evidence,
 )
 from capsaicin.state_machine import transition_ticket
 
@@ -158,6 +162,7 @@ def run_implementation_pipeline(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Execute the full implementation pipeline for a ticket.
 
@@ -223,6 +228,7 @@ def run_implementation_pipeline(
         config=config,
         adapter=adapter,
         log_path=log_path,
+        epic_id=epic_id,
     )
 
 
@@ -235,6 +241,7 @@ def invoke_impl_with_retries(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> str:
     """Invoke the adapter, handling retries on failure/timeout.
 
@@ -257,6 +264,7 @@ def invoke_impl_with_retries(
             config=config,
             adapter=adapter,
             log_path=log_path,
+            epic_id=epic_id,
         )
 
         if not outcome.should_retry:
@@ -298,6 +306,7 @@ def _impl_invoke_once(
     config: Config,
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> PipelineOutcome:
     """Single adapter invocation. Returns a PipelineOutcome."""
     run_id = generate_id()
@@ -310,6 +319,15 @@ def _impl_invoke_once(
         (ticket_id,),
     ).fetchone()
 
+    # Load evidence from parent epic when the ticket has lineage
+    evidence = None
+    pending_evidence_descriptions = None
+    if epic_id:
+        evidence = load_backend_evidence_for_epic(conn, epic_id) or None
+        pending_reqs = check_evidence_completeness(conn, epic_id)
+        if pending_reqs:
+            pending_evidence_descriptions = [r.description for r in pending_reqs]
+
     # Assemble prompt and request
     prompt = build_implementer_prompt(
         ticket={"title": ticket_row["title"], "description": ticket_row["description"]},
@@ -317,8 +335,17 @@ def _impl_invoke_once(
         prior_findings=prior_findings,
         cycle=cycle_number,
         max_cycles=config.limits.max_cycles,
+        evidence=evidence,
+        pending_evidence_descriptions=pending_evidence_descriptions,
     )
 
+    resolved = resolve_adapter_config(
+        config,
+        role="implementer",
+        conn=conn,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
     run_request = RunRequest(
         run_id=run_id,
         role="implementer",
@@ -329,8 +356,9 @@ def _impl_invoke_once(
         prior_findings=prior_findings,
         timeout_seconds=config.limits.timeout_seconds,
         adapter_config={
-            "backend": config.implementer.backend,
-            "command": config.implementer.command,
+            "backend": resolved.backend,
+            "command": resolved.command,
+            "model": resolved.model,
         },
     )
 
@@ -344,6 +372,11 @@ def _impl_invoke_once(
         prompt,
         run_request.to_json(),
     )
+
+    # Record which evidence was included in this run's prompt (T09)
+    if evidence:
+        record_run_evidence(conn, run_id, [e.id for e in evidence])
+        conn.commit()
 
     # Update orchestrator state
     start_run(conn, project_id, ticket_id, run_id)

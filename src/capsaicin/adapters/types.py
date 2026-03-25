@@ -30,6 +30,17 @@ VALID_EXIT_STATUSES = frozenset(
         "permission_denied",
     }
 )
+VALID_EVIDENCE_TYPES = frozenset(
+    {
+        "command",
+        "output_envelope",
+        "structured_result_sample",
+        "structured_result",
+        "permission_denial",
+        "behavioral_note",
+    }
+)
+VALID_EVIDENCE_REQ_STATUSES = frozenset({"pending", "fulfilled", "waived"})
 VALID_CRITERION_STATUSES = frozenset({"pending", "met", "unmet", "disputed"})
 
 
@@ -381,6 +392,27 @@ class PlannedEpicData:
 
 
 @dataclass
+class SuggestedEvidenceRequirement:
+    """A suggested evidence requirement from the planner."""
+
+    description: str
+    suggested_command: str
+
+    def to_dict(self) -> dict:
+        return {
+            "description": self.description,
+            "suggested_command": self.suggested_command,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> SuggestedEvidenceRequirement:
+        return cls(
+            description=data["description"],
+            suggested_command=data["suggested_command"],
+        )
+
+
+@dataclass
 class PlannerResult:
     """Structured result from a planner run."""
 
@@ -388,14 +420,22 @@ class PlannerResult:
     tickets: list[PlannedTicketData]
     sequencing_notes: str | None = None
     open_questions: list[str] = field(default_factory=list)
+    suggested_evidence_requirements: list[SuggestedEvidenceRequirement] = field(
+        default_factory=list
+    )
 
     def to_dict(self) -> dict:
-        return {
+        d: dict = {
             "epic": self.epic.to_dict(),
             "tickets": [t.to_dict() for t in self.tickets],
             "sequencing_notes": self.sequencing_notes,
             "open_questions": self.open_questions,
         }
+        if self.suggested_evidence_requirements:
+            d["suggested_evidence_requirements"] = [
+                r.to_dict() for r in self.suggested_evidence_requirements
+            ]
+        return d
 
     @classmethod
     def from_dict(cls, data: dict) -> PlannerResult:
@@ -404,6 +444,10 @@ class PlannerResult:
             tickets=[PlannedTicketData.from_dict(t) for t in data["tickets"]],
             sequencing_notes=data.get("sequencing_notes"),
             open_questions=data.get("open_questions", []),
+            suggested_evidence_requirements=[
+                SuggestedEvidenceRequirement.from_dict(r)
+                for r in data.get("suggested_evidence_requirements", [])
+            ],
         )
 
     def to_json(self) -> str:
@@ -412,6 +456,113 @@ class PlannerResult:
     @classmethod
     def from_json(cls, s: str) -> PlannerResult:
         return cls.from_dict(json.loads(s))
+
+
+# ---------------------------------------------------------------------------
+# Backend evidence types
+# ---------------------------------------------------------------------------
+
+
+@dataclass
+class BackendEvidence:
+    """A piece of backend validation evidence attached to an epic or planned ticket."""
+
+    id: str
+    epic_id: str
+    evidence_type: str
+    title: str
+    planned_ticket_id: str | None = None
+    body: str | None = None
+    command: str | None = None
+    stdout: str | None = None
+    stderr: str | None = None
+    structured_data: dict | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_enum(self.evidence_type, VALID_EVIDENCE_TYPES, "evidence_type")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "epic_id": self.epic_id,
+            "planned_ticket_id": self.planned_ticket_id,
+            "evidence_type": self.evidence_type,
+            "title": self.title,
+            "body": self.body,
+            "command": self.command,
+            "stdout": self.stdout,
+            "stderr": self.stderr,
+            "structured_data": self.structured_data,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> BackendEvidence:
+        structured = data.get("structured_data")
+        if isinstance(structured, str):
+            structured = json.loads(structured)
+        return cls(
+            id=data["id"],
+            epic_id=data["epic_id"],
+            planned_ticket_id=data.get("planned_ticket_id"),
+            evidence_type=data["evidence_type"],
+            title=data["title"],
+            body=data.get("body"),
+            command=data.get("command"),
+            stdout=data.get("stdout"),
+            stderr=data.get("stderr"),
+            structured_data=structured,
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
+
+
+@dataclass
+class EvidenceRequirement:
+    """A requirement for backend validation evidence."""
+
+    id: str
+    epic_id: str
+    description: str
+    planned_ticket_id: str | None = None
+    suggested_command: str | None = None
+    status: str = "pending"
+    fulfilled_by: str | None = None
+    created_at: str | None = None
+    updated_at: str | None = None
+
+    def __post_init__(self) -> None:
+        _check_enum(self.status, VALID_EVIDENCE_REQ_STATUSES, "status")
+
+    def to_dict(self) -> dict:
+        return {
+            "id": self.id,
+            "epic_id": self.epic_id,
+            "planned_ticket_id": self.planned_ticket_id,
+            "description": self.description,
+            "suggested_command": self.suggested_command,
+            "status": self.status,
+            "fulfilled_by": self.fulfilled_by,
+            "created_at": self.created_at,
+            "updated_at": self.updated_at,
+        }
+
+    @classmethod
+    def from_dict(cls, data: dict) -> EvidenceRequirement:
+        return cls(
+            id=data["id"],
+            epic_id=data["epic_id"],
+            planned_ticket_id=data.get("planned_ticket_id"),
+            description=data["description"],
+            suggested_command=data.get("suggested_command"),
+            status=data.get("status", "pending"),
+            fulfilled_by=data.get("fulfilled_by"),
+            created_at=data.get("created_at"),
+            updated_at=data.get("updated_at"),
+        )
 
 
 # ---------------------------------------------------------------------------

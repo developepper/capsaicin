@@ -67,6 +67,7 @@ def run_loop(
     ticket_id: str | None = None,
     max_cycles: int | None = None,
     log_path: str | Path | None = None,
+    epic_id: str | None = None,
 ) -> tuple[str, str]:
     """Run the implement-review-revise loop.
 
@@ -104,6 +105,7 @@ def run_loop(
                 config=config,
                 adapter=impl_adapter,
                 log_path=log_path,
+                epic_id=epic_id,
             )
             # Reload and continue — next iteration handles the result
             continue
@@ -118,6 +120,7 @@ def run_loop(
                 config=config,
                 adapter=review_adapter,
                 log_path=log_path,
+                epic_id=epic_id,
             )
             # Reload and continue — next iteration handles the result
             continue

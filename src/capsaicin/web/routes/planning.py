@@ -7,7 +7,9 @@ from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.planning_detail import get_planning_detail
 from capsaicin.app.queries.planning_summary import get_planning_summary
+from capsaicin.config import load_config
 from capsaicin.errors import PlannedEpicNotFoundError
+from capsaicin.resolver import get_overrides_for_epic, resolve_all_roles
 from capsaicin.state_machine import PLANNING_STATUS_ORDER
 from capsaicin.web.gate_display import get_epic_gate_display
 from capsaicin.web.templating import templates
@@ -46,8 +48,23 @@ async def epic_detail(request: Request) -> HTMLResponse:
     error = request.query_params.get("error")
     gate_display = get_epic_gate_display(data.epic.get("gate_reason"))
 
+    # Resolve role assignments for planner/planning_reviewer display
+    config = load_config(request.app.state.config_path)
+    role_assignments = resolve_all_roles(config, conn=conn, epic_id=epic_id)
+    overrides = get_overrides_for_epic(conn, epic_id)
+
     return templates.TemplateResponse(
         request,
         "epic_detail.html",
-        {"data": data, "error": error, "gate_display": gate_display},
+        {
+            "data": data,
+            "error": error,
+            "gate_display": gate_display,
+            "role_assignments": role_assignments,
+            "roles": ["planner", "planning_reviewer"],
+            "overrides": overrides,
+            "scope": "epic",
+            "scope_id": epic_id,
+            "override_roles": ["planner", "planning_reviewer"],
+        },
     )
