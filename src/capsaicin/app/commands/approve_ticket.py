@@ -37,6 +37,7 @@ def approve(
         rationale=rationale,
         force=force,
         log_path=log_path,
+        config=config,
     )
 
     return CommandResult(

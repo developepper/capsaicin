@@ -32,6 +32,8 @@ EXPECTED_TABLES = {
     "agent_run_evidence",
     "evidence_requirement_events",
     "workspaces",
+    "workspace_divergences",
+    "approval_metadata",
 }
 
 EXPECTED_INDEXES = {
@@ -69,6 +71,7 @@ EXPECTED_INDEXES = {
     "idx_workspaces_ticket",
     "idx_workspaces_epic",
     "idx_agent_runs_workspace",
+    "idx_workspace_divergences_ticket",
 }
 
 
