@@ -86,9 +86,10 @@ long-term arc; this section is just the next set of work streams to keep in
 focus.
 
 1. GitHub handoff and PR automation
-2. workflow policy and capability modeling to support cleaner multi-backend
+2. operator experience and workspace isolation for safer day-to-day execution
+3. workflow policy and capability modeling to support cleaner multi-backend
    execution
-3. stronger verification, audit, and policy controls around planning and
+4. stronger verification, audit, and policy controls around planning and
    implementation runs
 
 Multi-ticket orchestration remains later work.
@@ -96,23 +97,69 @@ Multi-ticket orchestration remains later work.
 ## Planning Loop Follow-Ons
 
 The base planning loop is now shipped. The remaining work is around smoother
-handoff, stronger exports, and operational polish around the planning surfaces.
+handoff and operational polish around the planning surfaces.
 
 Key areas:
 
+- smoother plan authoring and revision flows, including stronger operator
+  support for drafting and editing planning briefs
 - better issue-body and export generation from approved plans
 - richer operator views around plan history and materialization state
 - stronger auditability and policy controls around planning decisions
+
+## Operator Experience And Workflow Surfaces
+
+The workflow engine is ahead of the operator experience. A focused round of UX
+work should make the existing model easier to run confidently without reducing
+the strictness of review and human gates.
+
+Candidate areas:
+
+- tighter UI controls for start, pause, resume, and explicit handoff actions
+- richer live views for logs, diffs, findings, and recent transitions
+- clearer queue navigation across epics, materialized tickets, and blocked work
+- guided onboarding such as `capsaicin new` or `capsaicin quickstart` that can
+  walk an operator from problem statement through initial planning and loop
+  setup
+- better visibility into branch, commit, and workspace state while a loop is
+  running
+
+## Workspace Isolation And Execution Safety
+
+Reduce the risk of workflow interference from unrelated local changes and
+prepare the system for stronger automation.
+
+This is a near-term operational priority because GitHub handoff, PR
+preparation, and safer automation all depend on stronger isolation than the
+current shared-worktree model.
+
+Candidate areas:
+
+- branch or worktree management per ticket or approved implementation batch
+- configurable workspace setup commands for isolated execution environments
+- naming and lifecycle rules for branches and worktrees so cleanup is reliable
+- disposable or isolated execution environments for agent runs
+- better drift handling and workspace cleanliness checks before execution
+- safer recovery paths when local state and repo state diverge
+- explicit coupling between isolated workspaces and downstream handoff actions
 
 ## GitHub Handoff And PR Automation
 
 Automate the work that currently begins at `pr-ready`.
 
+Workspace isolation is a prerequisite for reliable branch-aware handoff and PR
+automation.
+
 Candidate areas:
 
 - export PR summaries and issue bodies
 - branch and commit preparation
+- automatic commit creation after successful implementation runs, with commit
+  messages derived from ticket metadata and workflow context
+- branch-aware handoff that can carry ticket or epic context through to PR
+  preparation
 - `gh` integration for PR creation
+- merge, cleanup, and completion flows after human approval
 - explicit completion flow from `pr-ready` to `done`
 
 ## Workflow Policy And Capability Modeling
@@ -194,21 +241,6 @@ Candidate areas:
 - distinguish reviewer judgment from mechanical verification evidence
 - surface verification failures clearly in CLI/UI status and history views
 
-## Workspace Isolation And Execution Safety
-
-Reduce the risk of workflow interference from unrelated local changes and
-prepare the system for stronger automation.
-
-This becomes more important once automation expands beyond a single local loop
-and into handoff or parallel work.
-
-Candidate areas:
-
-- branch or worktree management per ticket
-- disposable or isolated execution environments for agent runs
-- better drift handling and workspace cleanliness checks before execution
-- safer recovery paths when local state and repo state diverge
-
 ## Import, Export, And Handoff Boundaries
 
 Make it easier to move work into and out of `capsaicin` without losing
@@ -225,6 +257,37 @@ Candidate areas:
 - keep local canonical state while improving interoperability with external
   systems
 
+## Generated Continuity Artifacts
+
+Generate compact, human-readable continuity artifacts from canonical state
+without making those artifacts the source of truth.
+
+This should serve both planning and implementation flows while giving operators
+and agents a stable summary of the current situation.
+
+Candidate areas:
+
+- generate progress-oriented summaries of approved scope, open findings, recent
+  decisions, and current execution status
+- make continuity artifacts available for operator inspection, prompt assembly,
+  and handoff surfaces without duplicating workflow authority
+- define refresh rules so generated summaries stay aligned with database state
+- keep the mechanism shared across planning, implementation, and export
+  surfaces so the artifacts do not drift by audience
+
+## Distribution And Installation
+
+Reduce adoption friction by making the tool easier to install, upgrade, and
+validate on a fresh machine.
+
+Candidate areas:
+
+- package and publish installable releases through a stable distribution path
+- provide a one-command install or bootstrap flow for common local setups
+- add environment and dependency checks that can validate agent CLI and git
+  readiness early
+- document and automate upgrade paths for both stable users and contributors
+
 ## Observability, Analytics, And Cost Controls
 
 Improve trust, diagnosability, and operational feedback as usage scales.
@@ -238,6 +301,7 @@ Candidate areas:
 - aggregated cost and usage reporting by project, ticket, and loop stage
 - review-quality and retry-loop analytics
 - operator-facing diagnostics explaining stuck or inefficient workflows
+- timeline views that connect runs, diffs, commits, and decisions in one place
 - budget policies and spend-aware workflow controls
 
 ## Post-Materialization Plan Evolution
