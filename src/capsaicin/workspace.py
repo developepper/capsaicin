@@ -13,7 +13,7 @@ import subprocess
 from dataclasses import dataclass
 from pathlib import Path
 
-from capsaicin.config import WorkspaceConfig
+from capsaicin.config import Config, WorkspaceConfig
 from capsaicin.queries import generate_id, now_utc
 
 
@@ -70,6 +70,16 @@ class WorkspaceReady:
 
 # Union-style result: callers check isinstance.
 WorkspaceResult = WorkspaceReady | WorkspaceRecovery
+
+
+class WorkspaceBlockedError(Exception):
+    """Raised when workspace acquisition fails and the pipeline must stop."""
+
+    def __init__(self, recovery: WorkspaceRecovery) -> None:
+        self.recovery = recovery
+        super().__init__(
+            f"Workspace blocked ({recovery.failure_reason}): {recovery.detail}"
+        )
 
 
 # ---------------------------------------------------------------------------
@@ -406,6 +416,79 @@ def acquire_workspace(
         ticket_id=ticket_id,
         epic_id=epic_id,
     )
+
+
+def resolve_execution_path(
+    conn: sqlite3.Connection,
+    config: Config,
+    *,
+    ticket_id: str | None = None,
+    epic_id: str | None = None,
+) -> str:
+    """Return the effective working directory for a pipeline run.
+
+    When workspace isolation is enabled (``config.workspace.enabled``),
+    acquires or validates an isolated worktree and returns its path.
+    When disabled, returns ``config.project.repo_path`` unchanged.
+
+    Raises ``WorkspaceBlockedError`` if the workspace cannot be acquired
+    (missing, stale, or diverged), giving the caller a deterministic
+    signal to stop the pipeline with a blocked or human-gate outcome.
+    """
+    if not config.workspace.enabled:
+        return config.project.repo_path
+
+    # Look up the project_id from the DB.
+    row = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()
+    project_id = row["id"]
+
+    result = acquire_workspace(
+        conn,
+        config.project.repo_path,
+        project_id,
+        config.workspace,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
+    if isinstance(result, WorkspaceRecovery):
+        raise WorkspaceBlockedError(result)
+
+    return result.worktree_path
+
+
+def resolve_or_block(
+    conn: sqlite3.Connection,
+    config: Config,
+    ticket_id: str,
+    log_path: str | Path | None = None,
+) -> str | None:
+    """Resolve the execution path, blocking the ticket on workspace failure.
+
+    Convenience wrapper around :func:`resolve_execution_path` that catches
+    ``WorkspaceBlockedError`` and transitions the ticket to ``blocked``
+    with the appropriate reason.
+
+    Returns the working directory string on success, or ``None`` if the
+    ticket was blocked.  When ``None`` is returned the caller is
+    responsible for any remaining orchestrator cleanup (e.g.
+    ``finish_run`` / ``set_idle``) before returning ``"blocked"``.
+    """
+    from capsaicin.state_machine import transition_ticket
+
+    try:
+        return resolve_execution_path(conn, config, ticket_id=ticket_id)
+    except WorkspaceBlockedError as exc:
+        blocked_reason = "workspace_" + exc.recovery.failure_reason
+        transition_ticket(
+            conn,
+            ticket_id,
+            "blocked",
+            "system",
+            reason=f"Workspace unavailable: {exc.recovery.detail}",
+            blocked_reason=blocked_reason,
+            log_path=log_path,
+        )
+        return None
 
 
 def run_setup_commands(

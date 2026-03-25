@@ -49,6 +49,7 @@ from capsaicin.review_baseline import (
     handle_drift,
 )
 from capsaicin.state_machine import transition_ticket
+from capsaicin.workspace import resolve_or_block
 
 
 # ---------------------------------------------------------------------------
@@ -177,11 +178,17 @@ def run_review_pipeline(
     """
     ticket_id = ticket["id"]
 
+    # --- Resolve workspace path (isolation routing) ---
+    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
+    if working_dir is None:
+        set_idle(conn, project_id)
+        return "blocked"
+
     # --- Find the implementation run for drift/baseline checks ---
     impl_run_id = get_impl_run_id(conn, ticket_id)
 
     # --- Workspace drift check (T16) ---
-    handle_drift(conn, impl_run_id, config.project.repo_path, allow_drift)
+    handle_drift(conn, impl_run_id, working_dir, allow_drift)
 
     # --- Invoke with retries ---
     return invoke_review_with_retries(
@@ -193,6 +200,7 @@ def run_review_pipeline(
         adapter=adapter,
         log_path=log_path,
         epic_id=epic_id,
+        working_dir=working_dir,
     )
 
 
@@ -218,11 +226,14 @@ def invoke_review_with_retries(
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
     epic_id: str | None = None,
+    working_dir: str | Path | None = None,
 ) -> str:
     """Invoke the reviewer adapter, handling retries on errors.
 
     Returns the final ticket status.
     """
+    if working_dir is None:
+        working_dir = config.project.repo_path
     is_retry = False
     while True:
         # On retries, re-check workspace drift — but skip the check if the
@@ -244,7 +255,7 @@ def invoke_review_with_retries(
                 from capsaicin.diff import get_run_diff as _get_diff
 
                 stored = _get_diff(conn, impl_run_id)
-                current = _cap_diff(config.project.repo_path)
+                current = _cap_diff(working_dir)
                 if not diffs_match(stored.diff_text, current.diff_text):
                     raise WorkspaceDriftError(
                         "Workspace drifted between review retries. "
@@ -268,6 +279,7 @@ def invoke_review_with_retries(
             adapter=adapter,
             log_path=log_path,
             epic_id=epic_id,
+            working_dir=working_dir,
         )
 
         if not outcome.should_retry:
@@ -318,8 +330,11 @@ def _review_invoke_once(
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
     epic_id: str | None = None,
+    working_dir: str | Path | None = None,
 ) -> PipelineOutcome:
     """Single reviewer invocation. Returns a PipelineOutcome."""
+    if working_dir is None:
+        working_dir = config.project.repo_path
 
     run_id = generate_id()
 
@@ -365,7 +380,7 @@ def _review_invoke_once(
         run_id=run_id,
         role="reviewer",
         mode="read-only",
-        working_directory=config.project.repo_path,
+        working_directory=str(working_dir),
         prompt=prompt,
         diff_context=impl_diff.diff_text,
         acceptance_criteria=criteria,
@@ -397,7 +412,7 @@ def _review_invoke_once(
         conn.commit()
 
     # Capture review baseline (T16) — immediately before adapter invocation
-    capture_review_baseline(conn, config.project.repo_path, run_id)
+    capture_review_baseline(conn, working_dir, run_id)
 
     # Update orchestrator state
     start_run(conn, project_id, ticket_id, run_id)
@@ -450,6 +465,7 @@ def _review_invoke_once(
         result=result,
         config=config,
         log_path=log_path,
+        working_dir=working_dir,
     )
 
     if log_path:
@@ -487,14 +503,17 @@ def handle_review_result(
     result,
     config: Config,
     log_path: str | Path | None = None,
+    working_dir: str | Path | None = None,
 ) -> PipelineOutcome:
     """Process the reviewer result and transition the ticket.
 
     Returns a ``PipelineOutcome`` — either a terminal status or a retry signal.
     """
+    if working_dir is None:
+        working_dir = config.project.repo_path
     # --- Contract violation check (T16) ---
     if result.exit_status == "success":
-        violation = check_review_violation(conn, config.project.repo_path, run_id)
+        violation = check_review_violation(conn, working_dir, run_id)
         if violation:
             # Reviewer modified tracked files — contract violation
             _update_reviewer_run(

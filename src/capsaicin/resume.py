@@ -35,6 +35,7 @@ from capsaicin.ticket_run import (
     run_implementation_pipeline,
     select_ticket,
 )
+from capsaicin.workspace import resolve_or_block
 
 
 def get_active_run(conn: sqlite3.Connection, run_id: str) -> dict | None:
@@ -124,6 +125,12 @@ def _handle_interrupted_run(
             payload={"role": role, "action": "marked_failure"},
         )
 
+    # Resolve workspace path for retry invocations.
+    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
+    if working_dir is None:
+        set_idle(conn, project_id)
+        return "blocked"
+
     if role == "implementer":
         increment_impl_attempt(conn, ticket_id)
         if check_impl_retry_limit(conn, ticket_id, config.limits.max_impl_retries):
@@ -154,6 +161,7 @@ def _handle_interrupted_run(
             adapter=impl_adapter,
             log_path=log_path,
             epic_id=epic_id,
+            working_dir=working_dir,
         )
     elif role == "reviewer":
         increment_review_attempt(conn, ticket_id)
@@ -181,6 +189,7 @@ def _handle_interrupted_run(
             adapter=review_adapter,
             log_path=log_path,
             epic_id=epic_id,
+            working_dir=working_dir,
         )
     else:
         # Unknown role — just clean up
@@ -210,6 +219,13 @@ def _handle_finished_impl_run(
         set_idle(conn, project_id)
         return ticket["status"]
 
+    # Resolve workspace path so diff capture uses the isolated worktree.
+    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
+    if working_dir is None:
+        finish_run(conn, project_id)
+        set_idle(conn, project_id)
+        return "blocked"
+
     outcome = handle_run_result(
         conn=conn,
         project_id=project_id,
@@ -218,6 +234,7 @@ def _handle_finished_impl_run(
         exit_status=run["exit_status"],
         config=config,
         log_path=log_path,
+        working_dir=working_dir,
     )
 
     # Retry outcomes in resume context mean we need a fresh run
@@ -265,6 +282,13 @@ def _handle_finished_review_run(
         set_idle(conn, project_id)
         return ticket["status"]
 
+    # Resolve workspace path so contract-violation check uses the isolated worktree.
+    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
+    if working_dir is None:
+        finish_run(conn, project_id)
+        set_idle(conn, project_id)
+        return "blocked"
+
     impl_run_id = get_impl_run_id(conn, ticket_id)
     result = _reconstruct_run_result(run)
 
@@ -277,6 +301,7 @@ def _handle_finished_review_run(
         result=result,
         config=config,
         log_path=log_path,
+        working_dir=working_dir,
     )
 
     # Retry outcomes in resume context mean we need a fresh review
