@@ -13,8 +13,10 @@ Key differences from the Claude Code adapter:
 - ``codex exec`` with ``--sandbox read-only`` does **not** emit a distinct
   machine-readable permission-denied signal; refusals appear as ordinary
   assistant text and the process may still exit 0.
-- ``--output-schema`` requires ``"additionalProperties": false`` at the
-  top level of the schema object.
+- ``--output-schema`` requires stricter object schemas than the shared
+  adapter contracts. In practice every declared object property must be listed
+  in ``required`` and object schemas must set
+  ``"additionalProperties": false``.
 """
 
 from __future__ import annotations
@@ -24,6 +26,7 @@ import re
 import subprocess
 import tempfile
 import time
+from copy import deepcopy
 from pathlib import Path
 
 from capsaicin.adapters.base import BaseAdapter
@@ -86,11 +89,36 @@ class CodexAdapter(BaseAdapter):
         return None
 
     @staticmethod
-    def _ensure_additional_properties_false(schema: dict) -> dict:
-        """Codex requires ``additionalProperties: false`` at the top level."""
-        schema = dict(schema)
-        schema["additionalProperties"] = False
-        return schema
+    def _normalize_schema_for_codex(schema: dict) -> dict:
+        """Normalize a shared JSON schema for Codex ``--output-schema``.
+
+        Codex enforces stricter object-schema rules than the shared adapter
+        contracts use. Every object property must be present in ``required``,
+        including fields that the workflow treats as optional at the semantic
+        layer, and object schemas must disable additional properties.
+        """
+
+        def _normalize(node: object) -> object:
+            if isinstance(node, list):
+                return [_normalize(item) for item in node]
+            if not isinstance(node, dict):
+                return node
+
+            normalized = {key: _normalize(value) for key, value in node.items()}
+
+            if normalized.get("type") == "object":
+                properties = normalized.get("properties")
+                if isinstance(properties, dict):
+                    normalized["required"] = list(properties.keys())
+                normalized["additionalProperties"] = False
+
+            items = normalized.get("items")
+            if items is not None:
+                normalized["items"] = _normalize(items)
+
+            return normalized
+
+        return _normalize(deepcopy(schema))
 
     def _build_command(
         self,
@@ -347,7 +375,7 @@ class CodexAdapter(BaseAdapter):
         if kind is not None:
             schema = self._structured_output_schema(kind)
             if schema is not None:
-                schema = self._ensure_additional_properties_false(schema)
+                schema = self._normalize_schema_for_codex(schema)
                 schema_tmpfile = tempfile.NamedTemporaryFile(
                     mode="w",
                     suffix=".json",

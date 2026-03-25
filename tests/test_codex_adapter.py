@@ -16,6 +16,11 @@ from capsaicin.adapters.types import (
     PlanningReviewResult,
     RunRequest,
 )
+from capsaicin.prompts import (
+    PLANNER_RESULT_SCHEMA,
+    PLANNING_REVIEW_RESULT_SCHEMA,
+    REVIEW_RESULT_SCHEMA,
+)
 
 
 def _request(**overrides) -> RunRequest:
@@ -209,6 +214,61 @@ class TestCommandConstruction:
         assert "--output-schema" in cmd
         idx = cmd.index("--output-schema")
         assert cmd[idx + 1] == "/tmp/schema.json"
+
+    def test_normalize_schema_for_codex_requires_all_planner_properties(self):
+        schema = CodexAdapter._normalize_schema_for_codex(PLANNER_RESULT_SCHEMA)
+
+        assert schema["required"] == [
+            "epic",
+            "tickets",
+            "sequencing_notes",
+            "open_questions",
+            "suggested_evidence_requirements",
+        ]
+        assert schema["additionalProperties"] is False
+        assert schema["properties"]["epic"]["required"] == [
+            "title",
+            "summary",
+            "success_outcome",
+        ]
+
+    def test_normalize_schema_for_codex_requires_all_review_properties(self):
+        schema = CodexAdapter._normalize_schema_for_codex(REVIEW_RESULT_SCHEMA)
+        finding_schema = schema["properties"]["findings"]["items"]
+
+        assert finding_schema["required"] == [
+            "severity",
+            "category",
+            "location",
+            "acceptance_criterion_id",
+            "description",
+            "disposition",
+        ]
+        assert schema["properties"]["scope_reviewed"]["required"] == [
+            "files_examined",
+            "tests_run",
+            "criteria_checked",
+        ]
+
+    def test_normalize_schema_for_codex_requires_all_planning_review_properties(
+        self,
+    ):
+        schema = CodexAdapter._normalize_schema_for_codex(PLANNING_REVIEW_RESULT_SCHEMA)
+        finding_schema = schema["properties"]["findings"]["items"]
+
+        assert finding_schema["required"] == [
+            "severity",
+            "category",
+            "target_type",
+            "target_sequence",
+            "description",
+            "disposition",
+        ]
+        assert schema["properties"]["scope_reviewed"]["required"] == [
+            "epic_reviewed",
+            "tickets_reviewed",
+            "aspects_checked",
+        ]
 
 
 # ---------------------------------------------------------------------------
