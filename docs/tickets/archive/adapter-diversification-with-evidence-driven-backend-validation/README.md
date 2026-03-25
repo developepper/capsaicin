@@ -12,15 +12,15 @@ An operator can configure independent backends for planner, planning reviewer, i
 
 | # | Title | Dependencies |
 |---|-------|--------------|
-| [T01](./T01.md) | Backend validation evidence data model and migration | - |
-| [T02](./T02.md) | Four-role config schema and adapter registry | - |
-| [T03](./T03.md) | Role override storage and adapter resolution service | T02 |
-| [T04](./T04.md) | UI affordances for capturing backend validation evidence with clarification workflow | T01 |
-| [T05](./T05.md) | UI for viewing and editing role/backend assignments | T03 |
-| [T06](./T06.md) | Implement a second backend adapter (OpenAI Codex CLI) | T02 |
-| [T07](./T07.md) | Inject validation evidence into planning, implementation, and review prompts with suggested requirements | T01, T04 |
-| [T08](./T08.md) | Missing-evidence gating and blocker states with clarification prompts | T01, T04, T07 |
-| [T09](./T09.md) | Evidence audit trail and inspectability | T01, T04, T07 |
+| [T01](T01.md) | Backend validation evidence data model and migration | - |
+| [T02](T02.md) | Four-role config schema and adapter registry | - |
+| [T03](T03.md) | Role override storage and adapter resolution service | T02 |
+| [T04](T04.md) | UI affordances for capturing backend validation evidence with clarification workflow | T01 |
+| [T05](T05.md) | UI for viewing and editing role/backend assignments | T03 |
+| [T06](T06.md) | Implement a second backend adapter (OpenAI Codex CLI) | T02 |
+| [T07](T07.md) | Inject validation evidence into planning, implementation, and review prompts with suggested requirements | T01, T04 |
+| [T08](T08.md) | Missing-evidence gating and blocker states with clarification prompts | T01, T04, T07 |
+| [T09](T09.md) | Evidence audit trail and inspectability | T01, T04, T07 |
 
 ## Sequencing Notes
 
