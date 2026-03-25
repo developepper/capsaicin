@@ -22,6 +22,7 @@ Current configuration areas:
 - escalation rules
 - review policy knobs
 - render and export preferences
+- workspace isolation settings
 - GitHub integration settings
 
 ## Default `config.toml`
@@ -114,6 +115,28 @@ Current implementation note:
 - `plan status`: no adapter config required
 - `plan loop`: requires both implementer and reviewer adapter config plus
   cycle limits
+
+## Workspace Isolation
+
+The optional `[workspace]` section controls isolated git worktree management.
+When omitted, isolation is disabled and all execution happens in the shared
+working tree (the pre-isolation behavior).
+
+```toml
+[workspace]
+enabled = true
+branch_prefix = "capsaicin/"
+auto_cleanup = true
+```
+
+| Key              | Type   | Default        | Description                                        |
+|------------------|--------|----------------|----------------------------------------------------|
+| `enabled`        | bool   | `false`        | Enable isolated worktree creation per ticket/epic.  |
+| `branch_prefix`  | string | `"capsaicin/"` | Prefix for worktree branch names.                   |
+| `auto_cleanup`   | bool   | `true`         | Delete branches automatically during teardown.      |
+
+See [workspace-lifecycle.md](./workspace-lifecycle.md) for lifecycle states,
+failure reasons, and transition rules.
 
 ## Non-goal
 

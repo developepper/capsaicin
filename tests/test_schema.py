@@ -31,6 +31,7 @@ EXPECTED_TABLES = {
     "role_overrides",
     "agent_run_evidence",
     "evidence_requirement_events",
+    "workspaces",
 }
 
 EXPECTED_INDEXES = {
@@ -64,6 +65,10 @@ EXPECTED_INDEXES = {
     "idx_role_overrides_project",
     "idx_agent_run_evidence_evidence",
     "idx_evidence_requirement_events_req",
+    "idx_workspaces_project_status",
+    "idx_workspaces_ticket",
+    "idx_workspaces_epic",
+    "idx_agent_runs_workspace",
 }
 
 
@@ -341,6 +346,118 @@ class TestCheckConstraints:
                 "VALUES ('t1', 'pe1', 'ready', 'implementing', 'system')"
             )
 
+    def test_workspace_status_rejects_invalid(self, conn):
+        _insert_project(conn)
+        _insert_ticket(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+                "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', 'invalid')"
+            )
+
+    def test_workspace_status_accepts_valid(self, conn):
+        _insert_project(conn)
+        _insert_ticket(conn)
+        non_failed = ["pending", "setting_up", "active", "tearing_down", "cleaned"]
+        for i, status in enumerate(non_failed):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+                "VALUES (?, 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', ?)",
+                (f"w{i}", status),
+            )
+        # 'failed' requires a failure_reason
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, "
+            "status, failure_reason) "
+            "VALUES ('wf', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', "
+            "'failed', 'setup_failure')"
+        )
+
+    def test_workspace_failure_reason_rejects_invalid(self, conn):
+        _insert_project(conn)
+        _insert_ticket(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, "
+                "status, failure_reason) "
+                "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', "
+                "'failed', 'bad_reason')"
+            )
+
+    def test_workspace_failure_reason_accepts_valid(self, conn):
+        _insert_project(conn)
+        _insert_ticket(conn)
+        valid = [
+            "dirty_base_repo",
+            "missing_worktree",
+            "branch_drift",
+            "setup_failure",
+            "cleanup_conflict",
+        ]
+        for i, reason in enumerate(valid):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, "
+                "status, failure_reason) "
+                "VALUES (?, 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', "
+                "'failed', ?)",
+                (f"w{i}", reason),
+            )
+
+    def test_workspace_failed_without_reason_rejected(self, conn):
+        """status='failed' requires failure_reason to be set."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, "
+                "status) "
+                "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', "
+                "'failed')"
+            )
+
+    def test_workspace_reason_without_failed_rejected(self, conn):
+        """Non-failed status must not have a failure_reason."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, "
+                "status, failure_reason) "
+                "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', "
+                "'active', 'setup_failure')"
+            )
+
+    def test_workspace_xor_both_set_rejected(self, conn):
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, epic_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'p1', 't1', 'pe1', '/tmp/wt', 'capsaicin/t1', 'main')"
+            )
+
+    def test_workspace_xor_both_null_rejected(self, conn):
+        _insert_project(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'p1', '/tmp/wt', 'capsaicin/t1', 'main')"
+            )
+
     def test_self_dependency_rejected(self, conn):
         _insert_project(conn)
         _insert_ticket(conn)
@@ -438,6 +555,190 @@ class TestForeignKeys:
             conn.execute(
                 "INSERT INTO ticket_dependencies (ticket_id, depends_on_id) VALUES ('t1', 'nonexistent')"
             )
+
+    def test_workspace_requires_valid_project(self, conn):
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'nonexistent', 't1', '/tmp/wt', 'capsaicin/t1', 'main')"
+            )
+
+    def test_workspace_requires_valid_ticket(self, conn):
+        _insert_project(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'p1', 'nonexistent', '/tmp/wt', 'capsaicin/t1', 'main')"
+            )
+
+    def test_agent_run_workspace_fk(self, conn):
+        """agent_runs.workspace_id must reference a valid workspace."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        _insert_run(conn)
+        with pytest.raises(sqlite3.IntegrityError):
+            conn.execute(
+                "UPDATE agent_runs SET workspace_id = 'nonexistent' WHERE id = 'r1'"
+            )
+
+    def test_agent_run_workspace_nullable(self, conn):
+        """Pre-isolation runs have workspace_id = NULL."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        _insert_run(conn)
+        row = conn.execute(
+            "SELECT workspace_id FROM agent_runs WHERE id = 'r1'"
+        ).fetchone()
+        assert row["workspace_id"] is None
+
+    def test_agent_run_workspace_coherence_same_ticket(self, conn):
+        """Run can reference a workspace with the same ticket_id."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO agent_runs "
+            "(id, ticket_id, role, mode, cycle_number, exit_status, prompt, "
+            "run_request, started_at, workspace_id) "
+            "VALUES ('r1', 't1', 'implementer', 'read-write', 1, 'running', "
+            "'p', '{}', datetime('now'), 'w1')"
+        )
+
+    def test_agent_run_workspace_coherence_different_ticket_rejected(self, conn):
+        """Run cannot reference a workspace with a different ticket_id."""
+        _insert_project(conn)
+        _insert_ticket(conn, ticket_id="t1")
+        _insert_ticket(conn, ticket_id="t2")
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w1', 'p1', 't2', '/tmp/wt', 'capsaicin/t2', 'main', 'active')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="workspace does not belong"):
+            conn.execute(
+                "INSERT INTO agent_runs "
+                "(id, ticket_id, role, mode, cycle_number, exit_status, prompt, "
+                "run_request, started_at, workspace_id) "
+                "VALUES ('r1', 't1', 'implementer', 'read-write', 1, 'running', "
+                "'p', '{}', datetime('now'), 'w1')"
+            )
+
+    def test_agent_run_workspace_coherence_update_rejected(self, conn):
+        """Updating workspace_id to a mismatched workspace is rejected."""
+        _insert_project(conn)
+        _insert_ticket(conn, ticket_id="t1")
+        _insert_ticket(conn, ticket_id="t2")
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w1', 'p1', 't1', '/tmp/wt1', 'capsaicin/t1', 'main', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w2', 'p1', 't2', '/tmp/wt2', 'capsaicin/t2', 'main', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO agent_runs "
+            "(id, ticket_id, role, mode, cycle_number, exit_status, prompt, "
+            "run_request, started_at, workspace_id) "
+            "VALUES ('r1', 't1', 'implementer', 'read-write', 1, 'running', "
+            "'p', '{}', datetime('now'), 'w1')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="workspace does not belong"):
+            conn.execute("UPDATE agent_runs SET workspace_id = 'w2' WHERE id = 'r1'")
+
+    def test_workspace_project_coherence_ticket_mismatch_rejected(self, conn):
+        """Workspace project_id must match the ticket's project_id."""
+        _insert_project(conn, project_id="p1")
+        _insert_project(conn, project_id="p2")
+        _insert_ticket(conn, ticket_id="t1", project_id="p1")
+        with pytest.raises(sqlite3.IntegrityError, match="workspace project_id"):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, ticket_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'p2', 't1', '/tmp/wt', 'capsaicin/t1', 'main')"
+            )
+
+    def test_workspace_project_coherence_epic_mismatch_rejected(self, conn):
+        """Workspace project_id must match the epic's project_id."""
+        _insert_project(conn, project_id="p1")
+        _insert_project(conn, project_id="p2")
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="workspace project_id"):
+            conn.execute(
+                "INSERT INTO workspaces "
+                "(id, project_id, epic_id, worktree_path, branch_name, base_ref) "
+                "VALUES ('w1', 'p2', 'pe1', '/tmp/wt', 'capsaicin/pe1', 'main')"
+            )
+
+    def test_workspace_project_coherence_matching_accepted(self, conn):
+        """Workspace with matching project_id succeeds."""
+        _insert_project(conn)
+        _insert_ticket(conn)
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref) "
+            "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main')"
+        )
+
+    def test_agent_run_retarget_ticket_with_workspace_rejected(self, conn):
+        """Updating ticket_id on a run with workspace_id revalidates coherence."""
+        _insert_project(conn)
+        _insert_ticket(conn, ticket_id="t1")
+        _insert_ticket(conn, ticket_id="t2")
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, ticket_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w1', 'p1', 't1', '/tmp/wt', 'capsaicin/t1', 'main', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO agent_runs "
+            "(id, ticket_id, role, mode, cycle_number, exit_status, prompt, "
+            "run_request, started_at, workspace_id) "
+            "VALUES ('r1', 't1', 'implementer', 'read-write', 1, 'running', "
+            "'p', '{}', datetime('now'), 'w1')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="workspace does not belong"):
+            conn.execute("UPDATE agent_runs SET ticket_id = 't2' WHERE id = 'r1'")
+
+    def test_agent_run_retarget_epic_with_workspace_rejected(self, conn):
+        """Updating epic_id on a run with workspace_id revalidates coherence."""
+        _insert_project(conn)
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe1', 'p1', 'problem', 'new')"
+        )
+        conn.execute(
+            "INSERT INTO planned_epics "
+            "(id, project_id, problem_statement, status) "
+            "VALUES ('pe2', 'p1', 'problem2', 'new')"
+        )
+        conn.execute(
+            "INSERT INTO workspaces "
+            "(id, project_id, epic_id, worktree_path, branch_name, base_ref, status) "
+            "VALUES ('w1', 'p1', 'pe1', '/tmp/wt', 'capsaicin/pe1', 'main', 'active')"
+        )
+        conn.execute(
+            "INSERT INTO agent_runs "
+            "(id, epic_id, role, mode, cycle_number, exit_status, prompt, "
+            "run_request, started_at, workspace_id) "
+            "VALUES ('r1', 'pe1', 'planner', 'read-only', 1, 'running', "
+            "'p', '{}', datetime('now'), 'w1')"
+        )
+        with pytest.raises(sqlite3.IntegrityError, match="workspace does not belong"):
+            conn.execute("UPDATE agent_runs SET epic_id = 'pe2' WHERE id = 'r1'")
 
     def test_valid_dependency_succeeds(self, conn):
         _insert_project(conn)
