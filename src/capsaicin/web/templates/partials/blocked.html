@@ -2,12 +2,20 @@
   {% if data.blocked_tickets %}
   <h2>Blocked ({{ data.blocked_tickets|length }})</h2>
   <div class="table-wrap"><table>
-    <thead><tr><th>Ticket</th><th>Reason</th></tr></thead>
+    <thead><tr><th>Ticket</th><th>Reason</th><th>Workspace</th></tr></thead>
     <tbody>
       {% for t in data.blocked_tickets %}
       <tr>
         <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.blocked_reason or "unknown" }}</td>
+        <td>
+          {% if t.id in data.workspace_summaries %}
+            {% set ws = data.workspace_summaries[t.id] %}
+            {% include "partials/workspace_badge.html" %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

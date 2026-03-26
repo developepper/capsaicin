@@ -2,13 +2,21 @@
   <h2>Inbox{% if data.inbox and data.inbox.count %} ({{ data.inbox.count }}){% endif %}</h2>
   {% if data.inbox and data.inbox.tickets %}
   <div class="table-wrap"><table>
-    <thead><tr><th>Ticket</th><th>Gate Reason</th><th>Since</th></tr></thead>
+    <thead><tr><th>Ticket</th><th>Gate Reason</th><th>Since</th><th>Workspace</th></tr></thead>
     <tbody>
       {% for t in data.inbox.tickets %}
       <tr>
         <td><a href="{{ request.url_for('ticket_detail', ticket_id=t.id) }}">{{ t.title }}</a></td>
         <td>{{ t.gate_reason or "unknown" }}</td>
         <td>{{ t.status_changed_at or "" }}</td>
+        <td>
+          {% if t.id in data.workspace_summaries %}
+            {% set ws = data.workspace_summaries[t.id] %}
+            {% include "partials/workspace_badge.html" %}
+          {% else %}
+            —
+          {% endif %}
+        </td>
       </tr>
       {% endfor %}
     </tbody>

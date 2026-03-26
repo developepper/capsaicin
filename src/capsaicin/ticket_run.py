@@ -42,6 +42,7 @@ from capsaicin.queries import (
     record_run_evidence,
 )
 from capsaicin.state_machine import transition_ticket
+from capsaicin.workspace import resolve_or_block
 
 
 # ---------------------------------------------------------------------------
@@ -100,13 +101,14 @@ def _insert_impl_run(
     attempt_number: int,
     prompt: str,
     run_request_json: str,
+    workspace_id: str | None = None,
 ) -> None:
     """Insert an agent_runs row with exit_status='running'."""
     conn.execute(
         "INSERT INTO agent_runs "
         "(id, ticket_id, role, mode, cycle_number, attempt_number, "
-        "exit_status, prompt, run_request, started_at) "
-        "VALUES (?, ?, 'implementer', 'read-write', ?, ?, 'running', ?, ?, ?)",
+        "exit_status, prompt, run_request, workspace_id, started_at) "
+        "VALUES (?, ?, 'implementer', 'read-write', ?, ?, 'running', ?, ?, ?, ?)",
         (
             run_id,
             ticket_id,
@@ -114,6 +116,7 @@ def _insert_impl_run(
             attempt_number,
             prompt,
             run_request_json,
+            workspace_id,
             now_utc(),
         ),
     )
@@ -170,6 +173,14 @@ def run_implementation_pipeline(
     """
     ticket_id = ticket["id"]
     from_status = ticket["status"]
+
+    # --- Resolve workspace path (isolation routing) ---
+    resolved = resolve_or_block(conn, config, project_id, ticket_id, log_path)
+    if resolved is None:
+        set_idle(conn, project_id)
+        return "blocked"
+    working_dir = resolved.working_dir
+    workspace_id = resolved.workspace_id
 
     # --- Cycle-limit shortcut (revise only) ---
     if from_status == "revise":
@@ -229,6 +240,8 @@ def run_implementation_pipeline(
         adapter=adapter,
         log_path=log_path,
         epic_id=epic_id,
+        working_dir=working_dir,
+        workspace_id=workspace_id,
     )
 
 
@@ -242,6 +255,8 @@ def invoke_impl_with_retries(
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
     epic_id: str | None = None,
+    working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> str:
     """Invoke the adapter, handling retries on failure/timeout.
 
@@ -265,6 +280,8 @@ def invoke_impl_with_retries(
             adapter=adapter,
             log_path=log_path,
             epic_id=epic_id,
+            working_dir=working_dir,
+            workspace_id=workspace_id,
         )
 
         if not outcome.should_retry:
@@ -307,8 +324,13 @@ def _impl_invoke_once(
     adapter: BaseAdapter,
     log_path: str | Path | None = None,
     epic_id: str | None = None,
+    working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> PipelineOutcome:
     """Single adapter invocation. Returns a PipelineOutcome."""
+    if working_dir is None:
+        working_dir = config.project.repo_path
+
     run_id = generate_id()
 
     # Load context
@@ -350,7 +372,7 @@ def _impl_invoke_once(
         run_id=run_id,
         role="implementer",
         mode="read-write",
-        working_directory=config.project.repo_path,
+        working_directory=str(working_dir),
         prompt=prompt,
         acceptance_criteria=criteria,
         prior_findings=prior_findings,
@@ -371,6 +393,7 @@ def _impl_invoke_once(
         attempt_number,
         prompt,
         run_request.to_json(),
+        workspace_id=workspace_id,
     )
 
     # Record which evidence was included in this run's prompt (T09)
@@ -432,6 +455,7 @@ def _impl_invoke_once(
         exit_status=result.exit_status,
         config=config,
         log_path=log_path,
+        working_dir=working_dir,
     )
 
 
@@ -443,11 +467,14 @@ def handle_run_result(
     exit_status: str,
     config: Config,
     log_path: str | Path | None = None,
+    working_dir: str | Path | None = None,
 ) -> PipelineOutcome:
     """Process the adapter result and transition the ticket.
 
     Returns a ``PipelineOutcome`` — either a terminal status or a retry signal.
     """
+    if working_dir is None:
+        working_dir = config.project.repo_path
     # Permission denied — route to human-gate without consuming retries
     if exit_status == "permission_denied":
         transition_ticket(
@@ -474,7 +501,7 @@ def handle_run_result(
 
     if exit_status == "success":
         # Capture post-run diff
-        diff_result = capture_diff(config.project.repo_path)
+        diff_result = capture_diff(working_dir)
 
         if not diff_result.is_empty:
             persist_run_diff(conn, run_id, diff_result)

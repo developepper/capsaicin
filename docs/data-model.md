@@ -25,6 +25,10 @@
 - `planning_findings` — review findings against planning artifacts
 - `materialization_hashes` — content hashes for materialized files
 
+### Workspace Isolation
+
+- `workspaces` — isolated git worktree lifecycle per ticket or epic
+
 ### Shared Tables
 
 `agent_runs`, `decisions`, and `state_transitions` are shared between the
@@ -114,6 +118,7 @@ CREATE TABLE agent_runs (
     raw_stderr        TEXT,
     structured_result TEXT,
     duration_seconds  REAL,
+    workspace_id      TEXT REFERENCES workspaces(id),
     adapter_metadata  TEXT,
     started_at        TEXT NOT NULL,
     finished_at       TEXT,
@@ -195,6 +200,37 @@ CREATE TABLE decisions (
     CHECK (
         (ticket_id IS NOT NULL AND epic_id IS NULL) OR
         (ticket_id IS NULL AND epic_id IS NOT NULL)
+    )
+);
+
+CREATE TABLE workspaces (
+    id              TEXT PRIMARY KEY,
+    project_id      TEXT NOT NULL REFERENCES projects(id),
+    ticket_id       TEXT REFERENCES tickets(id),
+    epic_id         TEXT REFERENCES planned_epics(id),
+    worktree_path   TEXT NOT NULL,
+    branch_name     TEXT NOT NULL,
+    base_ref        TEXT NOT NULL,
+    status          TEXT NOT NULL DEFAULT 'pending'
+                    CHECK (status IN (
+                        'pending','setting_up','active',
+                        'tearing_down','cleaned','failed'
+                    )),
+    failure_reason  TEXT CHECK (failure_reason IN (
+                        'dirty_base_repo','missing_worktree',
+                        'branch_drift','setup_failure',
+                        'cleanup_conflict'
+                    )),
+    failure_detail  TEXT,
+    created_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at      TEXT NOT NULL DEFAULT (datetime('now')),
+    CHECK (
+        (ticket_id IS NOT NULL AND epic_id IS NULL) OR
+        (ticket_id IS NULL AND epic_id IS NOT NULL)
+    ),
+    CHECK (
+        (status = 'failed' AND failure_reason IS NOT NULL) OR
+        (status != 'failed' AND failure_reason IS NULL)
     )
 );
 
@@ -329,6 +365,21 @@ links the two. The relationship is 1:1.
   loop; `active_ticket_id` and `active_plan_id` follow the same mutual
   exclusion as the loop type
 
+### Workspace Isolation
+
+- `workspaces` tracks the full lifecycle of isolated git worktrees; see
+  [workspace-lifecycle.md](./workspace-lifecycle.md) for states, transitions,
+  and failure taxonomy
+- `agent_runs.workspace_id` is a nullable FK to `workspaces(id)`; runs that
+  predate workspace isolation have `workspace_id = NULL`
+- `workspaces.ticket_id` / `workspaces.epic_id` follow the same XOR constraint
+  as `agent_runs` — exactly one must be set per row
+- a CHECK constraint enforces that `failure_reason` is set if and only if
+  `status = 'failed'`, preventing incomplete or self-contradictory state
+- INSERT/UPDATE triggers on `agent_runs` enforce that the linked workspace
+  belongs to the same ticket or epic as the run, so a run cannot be persisted
+  against an unrelated workspace
+
 ## Recommended Indexes
 
 ```sql
@@ -390,6 +441,20 @@ CREATE INDEX idx_agent_runs_epic
 
 CREATE INDEX idx_state_transitions_epic
     ON state_transitions(epic_id, created_at);
+
+-- Workspace indexes
+
+CREATE INDEX idx_workspaces_project_status
+    ON workspaces(project_id, status);
+
+CREATE INDEX idx_workspaces_ticket
+    ON workspaces(ticket_id);
+
+CREATE INDEX idx_workspaces_epic
+    ON workspaces(epic_id);
+
+CREATE INDEX idx_agent_runs_workspace
+    ON agent_runs(workspace_id);
 ```
 
 ## SQLite Notes

@@ -4,6 +4,7 @@ from __future__ import annotations
 
 import pytest
 
+from capsaicin.config import load_config
 from capsaicin.errors import (
     InvalidStatusError,
     NoEligibleTicketError,
@@ -23,12 +24,17 @@ from capsaicin.ticket_review import (
     run_review_pipeline,
     select_review_ticket,
 )
-from tests.adapters import DiffProducingAdapter
+from tests.adapters import DiffProducingAdapter, WorkspaceDiffAdapter
 from tests.conftest import (
     add_ticket,
     get_ticket,
     get_ticket_status,
     run_impl_to_in_review,
+)
+from tests.workspace_helpers import (
+    commit_setup,
+    create_workspace_for_ticket,
+    enable_workspace,
 )
 
 
@@ -1042,3 +1048,110 @@ class TestCycleLimitOnFail:
 
         state = get_state(env["conn"], env["project_id"])
         assert state["status"] == "awaiting_human"
+
+
+# ---------------------------------------------------------------------------
+# Review with workspace isolation (T07)
+# ---------------------------------------------------------------------------
+
+
+def _run_impl_with_workspace(env):
+    """Run impl to in-review with workspace isolation enabled.
+
+    Returns ``(ticket_id, config, worktree_path)``.
+    """
+    from capsaicin.ticket_run import run_implementation_pipeline
+
+    enable_workspace(env)
+    commit_setup(env)
+    config = load_config(env["project_dir"] / "config.toml")
+
+    tid = add_ticket(env)
+
+    # Create workspace first, then run impl using a workspace-aware adapter
+    ws = create_workspace_for_ticket(env, tid)
+
+    ticket = get_ticket(env["conn"], tid)
+    adapter = WorkspaceDiffAdapter()
+    final = run_implementation_pipeline(
+        conn=env["conn"],
+        project_id=env["project_id"],
+        ticket=ticket,
+        config=config,
+        adapter=adapter,
+        log_path=env["log_path"],
+    )
+    assert final == "in-review"
+    return tid, config, ws.worktree_path
+
+
+class TestReviewWithWorkspace:
+    """Review pipeline resolves workspace correctly when isolation is enabled."""
+
+    def test_review_uses_worktree_path(self, project_env):
+        """Review adapter receives the worktree path, not the base repo."""
+        env = project_env
+        tid, config, wt_path = _run_impl_with_workspace(env)
+        ticket = get_ticket(env["conn"], tid)
+        adapter = MockReviewAdapter(verdict="pass", confidence="high")
+
+        run_review_pipeline(
+            env["conn"],
+            env["project_id"],
+            ticket,
+            config,
+            adapter,
+            log_path=env["log_path"],
+        )
+
+        assert len(adapter.calls) == 1
+        assert adapter.calls[0].working_directory == wt_path
+
+    def test_review_workspace_blocked_transitions_ticket(self, project_env):
+        """Broken workspace before review blocks the ticket."""
+        env = project_env
+        tid, config, wt_path = _run_impl_with_workspace(env)
+        ticket = get_ticket(env["conn"], tid)
+
+        from tests.workspace_helpers import break_worktree
+
+        break_worktree(env, wt_path)
+
+        adapter = MockReviewAdapter(verdict="pass", confidence="high")
+
+        final = run_review_pipeline(
+            env["conn"],
+            env["project_id"],
+            ticket,
+            config,
+            adapter,
+            log_path=env["log_path"],
+        )
+
+        assert final == "blocked"
+        assert get_ticket_status(env["conn"], tid) == "blocked"
+        row = (
+            env["conn"]
+            .execute("SELECT blocked_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
+        assert row["blocked_reason"].startswith("workspace_")
+
+    def test_review_without_workspace_uses_base_repo(self, project_env):
+        """With workspace.enabled=False, review uses the base repo path."""
+        env = project_env
+        tid = run_impl_to_in_review(env)
+        ticket = get_ticket(env["conn"], tid)
+        adapter = MockReviewAdapter(verdict="pass", confidence="high")
+
+        run_review_pipeline(
+            env["conn"],
+            env["project_id"],
+            ticket,
+            env["config"],
+            adapter,
+            log_path=env["log_path"],
+        )
+
+        assert len(adapter.calls) == 1
+        assert adapter.calls[0].working_directory == str(env["repo"])

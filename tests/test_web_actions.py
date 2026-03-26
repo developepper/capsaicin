@@ -14,13 +14,19 @@ Covers:
 
 from __future__ import annotations
 
+import contextlib
 import json
+import logging
 
 import pytest
 from starlette.testclient import TestClient
 
 from capsaicin.state_machine import transition_ticket
 from capsaicin.web.app import create_app
+from tests.workspace_helpers import (
+    commit_setup as _commit_setup,
+    enable_workspace as _enable_workspace,
+)
 from tests.conftest import add_ticket
 
 
@@ -931,3 +937,234 @@ class TestAddDependencyAction:
         resp = client.get(f"/tickets/{tid}")
         assert resp.status_code == 200
         assert "Dependencies" in resp.text
+
+
+# ---------------------------------------------------------------------------
+# Workspace recovery actions (AC-2)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkspaceRecoverAction:
+    """POST /tickets/{id}/workspace/recover delegates to command service."""
+
+    def test_recover_creates_workspace(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Recover Target")
+        _enable_workspace(env)
+        _commit_setup(env)
+
+        resp = client.post(
+            f"/tickets/{tid}/workspace/recover",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert f"/tickets/{tid}" in resp.headers["location"]
+        # Verify workspace was created
+        ws = (
+            env["conn"]
+            .execute("SELECT status FROM workspaces WHERE ticket_id = ?", (tid,))
+            .fetchone()
+        )
+        assert ws is not None
+        assert ws["status"] == "active"
+
+    def test_recover_disabled_returns_error(self, web_client):
+        """Workspace recovery when isolation is disabled returns error."""
+        client, env = web_client
+        tid = add_ticket(env, title="Recover Disabled")
+
+        resp = client.post(
+            f"/tickets/{tid}/workspace/recover",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+
+class TestWorkspaceCleanupAction:
+    """POST /tickets/{id}/workspace/cleanup delegates to command service."""
+
+    def test_cleanup_active_workspace(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Cleanup Target")
+        _enable_workspace(env)
+        _commit_setup(env)
+
+        from capsaicin.config import WorkspaceConfig
+        from capsaicin.workspace import WorkspaceReady, create_workspace
+
+        wt_root = str(env["repo"].parent / "worktrees")
+        result = create_workspace(
+            env["conn"],
+            env["repo"],
+            env["project_id"],
+            WorkspaceConfig(
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt_root,
+            ),
+            ticket_id=tid,
+        )
+        assert isinstance(result, WorkspaceReady)
+
+        resp = client.post(
+            f"/tickets/{tid}/workspace/cleanup",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert f"/tickets/{tid}" in resp.headers["location"]
+
+        ws = (
+            env["conn"]
+            .execute("SELECT status FROM workspaces WHERE ticket_id = ?", (tid,))
+            .fetchone()
+        )
+        assert ws["status"] == "cleaned"
+
+    def test_cleanup_disabled_returns_error(self, web_client):
+        client, env = web_client
+        tid = add_ticket(env, title="Cleanup Disabled")
+
+        resp = client.post(
+            f"/tickets/{tid}/workspace/cleanup",
+            follow_redirects=False,
+        )
+        assert resp.status_code == 303
+        assert "error=" in resp.headers["location"]
+
+
+# ---------------------------------------------------------------------------
+# Actionable workspace error messages (AC-3)
+# ---------------------------------------------------------------------------
+
+
+@contextlib.contextmanager
+def capture_actions_log():
+    """Context manager that captures ERROR-level messages from the actions logger."""
+    captured: list[str] = []
+
+    class _Handler(logging.Handler):
+        def emit(self, record):
+            captured.append(record.getMessage())
+
+    handler = _Handler()
+    handler.setLevel(logging.ERROR)
+    logger = logging.getLogger("capsaicin.web.routes.actions")
+    logger.addHandler(handler)
+    try:
+        yield captured
+    finally:
+        logger.removeHandler(handler)
+
+
+class TestActionableWorkspaceErrors:
+    """Workspace failures produce specific messages, not generic run errors."""
+
+    def test_log_workspace_error_produces_actionable_message(self):
+        """The _log_workspace_error helper maps reasons to guidance."""
+        from capsaicin.web.routes.actions import _log_workspace_error
+        from capsaicin.workspace import RecoveryAction, WorkspaceRecovery
+
+        recovery = WorkspaceRecovery(
+            workspace_id="ws1",
+            failure_reason="missing_worktree",
+            action=RecoveryAction.recreate,
+            detail="worktree dir gone",
+        )
+
+        with capture_actions_log() as logs:
+            _log_workspace_error(
+                "t1", type("E", (Exception,), {"recovery": recovery})()
+            )
+
+        assert len(logs) == 1
+        assert "missing" in logs[0].lower() or "worktree" in logs[0].lower()
+        assert "Recover Workspace" in logs[0]
+
+    def test_all_failure_reasons_have_messages(self):
+        """Every known failure reason maps to a specific message."""
+        from capsaicin.web.routes.actions import _log_workspace_error
+        from capsaicin.workspace import RecoveryAction, WorkspaceRecovery
+
+        reasons = [
+            "missing_worktree",
+            "branch_drift",
+            "dirty_base_repo",
+            "setup_failure",
+            "cleanup_conflict",
+        ]
+
+        for reason in reasons:
+            recovery = WorkspaceRecovery(
+                workspace_id="ws1",
+                failure_reason=reason,
+                action=RecoveryAction.retry,
+                detail="test",
+            )
+            with capture_actions_log() as logs:
+                _log_workspace_error(
+                    "t1", type("E", (Exception,), {"recovery": recovery})()
+                )
+
+            assert len(logs) == 1, f"No log for {reason}"
+            # Should NOT contain the generic fallback pattern
+            assert "Unknown" not in logs[0], f"Generic message for {reason}"
+
+    def test_missing_recovery_attr_does_not_crash(self):
+        """_log_workspace_error handles exceptions without a recovery attribute."""
+        from capsaicin.web.routes.actions import _log_workspace_error
+
+        with capture_actions_log() as logs:
+            _log_workspace_error("t1", Exception("plain error"))
+
+        assert len(logs) == 1
+        assert "no recovery detail" in logs[0]
+
+    def test_ticket_detail_shows_specific_failure_message(self, web_client):
+        """Workspace failure on ticket detail shows actionable text, not generic error."""
+        client, env = web_client
+        tid = add_ticket(env, title="Specific Error")
+        _enable_workspace(env)
+        _commit_setup(env)
+
+        from capsaicin.config import WorkspaceConfig
+        from capsaicin.workspace import WorkspaceReady, create_workspace
+
+        wt_root = str(env["repo"].parent / "worktrees")
+        ws = create_workspace(
+            env["conn"],
+            env["repo"],
+            env["project_id"],
+            WorkspaceConfig(
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt_root,
+            ),
+            ticket_id=tid,
+        )
+        assert isinstance(ws, WorkspaceReady)
+
+        # Force worktree to be missing
+        import subprocess
+        from pathlib import Path
+
+        subprocess.run(
+            ["git", "worktree", "remove", "--force", ws.worktree_path],
+            cwd=env["repo"],
+            check=True,
+            capture_output=True,
+        )
+        Path(ws.worktree_path).mkdir(parents=True)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        # Should show specific actionable message about missing worktree
+        assert "workspace-failure" in resp.text
+        assert (
+            "missing" in resp.text.lower()
+            or "no longer registered" in resp.text.lower()
+        )
+        # Should NOT just say a generic error
+        assert "Run error" not in resp.text

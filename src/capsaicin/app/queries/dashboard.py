@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import logging
 import sqlite3
 from dataclasses import dataclass, field
 
@@ -24,6 +25,16 @@ class InboxSummary:
 
 
 @dataclass
+class WorkspaceTicketSummary:
+    """Lightweight workspace state for a ticket in dashboard lists."""
+
+    ticket_id: str
+    isolation_mode: str  # "shared", "branch", "worktree", "none"
+    status: str | None = None
+    failure_reason: str | None = None
+
+
+@dataclass
 class DashboardData:
     """Structured project dashboard for operator views."""
 
@@ -36,6 +47,7 @@ class DashboardData:
     orchestrator: OrchestratorSummary | None = None
     inbox: InboxSummary | None = None
     recent_runs: list[dict] = field(default_factory=list)
+    workspace_summaries: dict[str, WorkspaceTicketSummary] = field(default_factory=dict)
 
 
 def get_orchestrator_summary(
@@ -87,6 +99,65 @@ def get_recent_runs(
         (project_id, limit),
     ).fetchall()
     return [dict(r) for r in rows]
+
+
+_log = logging.getLogger(__name__)
+
+
+def collect_workspace_summaries(
+    conn: sqlite3.Connection, config, tickets: list[dict]
+) -> dict[str, WorkspaceTicketSummary]:
+    """Build workspace summaries for a list of tickets.
+
+    Uses the same ``workspace_status`` command service as the CLI so the
+    dashboard reflects the exact isolation state that would affect execution.
+
+    .. note::
+
+       This issues one ``workspace_status`` call per ticket (N+1).  For
+       dashboards with many tickets a single batch query would be more
+       efficient.  Expected shape::
+
+           SELECT w.ticket_id, w.status, w.failure_reason
+           FROM workspaces w
+           INNER JOIN (
+               SELECT ticket_id, MAX(created_at) AS latest
+               FROM workspaces
+               WHERE ticket_id IN (?, ?, ...)
+                 AND status NOT IN ('cleaned', 'failed')
+               GROUP BY ticket_id
+           ) latest ON w.ticket_id = latest.ticket_id
+                   AND w.created_at = latest.latest
+
+       This replaces the per-ticket ``workspace_status`` loop with one
+       round-trip and avoids repeated git checks.
+    """
+    from capsaicin.app.commands.workspace_ops import workspace_status
+
+    if not config.workspace.enabled:
+        summaries: dict[str, WorkspaceTicketSummary] = {}
+        for t in tickets:
+            tid = t.get("id") or t.get("ticket_id", "")
+            summaries[tid] = WorkspaceTicketSummary(
+                ticket_id=tid,
+                isolation_mode="shared",
+            )
+        return summaries
+
+    summaries: dict[str, WorkspaceTicketSummary] = {}
+    for t in tickets:
+        tid = t.get("id") or t.get("ticket_id", "")
+        try:
+            ws = workspace_status(conn, config, tid)
+            summaries[tid] = WorkspaceTicketSummary(
+                ticket_id=tid,
+                isolation_mode=ws.isolation_mode,
+                status=ws.status,
+                failure_reason=ws.failure_reason,
+            )
+        except Exception:
+            _log.debug("Could not load workspace status for %s", tid, exc_info=True)
+    return summaries
 
 
 def get_dashboard(conn: sqlite3.Connection, project_id: str) -> DashboardData:

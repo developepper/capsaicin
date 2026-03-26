@@ -11,6 +11,7 @@ from capsaicin.adapters.types import (
     RunResult,
     ScopeReviewed,
 )
+from capsaicin.config import load_config
 from capsaicin.orchestrator import get_state
 from capsaicin.resume import (
     build_human_gate_context,
@@ -18,6 +19,7 @@ from capsaicin.resume import (
     resume_pipeline,
 )
 from tests.conftest import add_ticket, get_ticket_status
+from tests.workspace_helpers import commit_setup, enable_workspace
 
 
 # ---------------------------------------------------------------------------
@@ -1024,3 +1026,256 @@ class TestActivityLog:
 
         log_content = env["log_path"].read_text()
         assert "RUN_INTERRUPTED" in log_content
+
+
+# ---------------------------------------------------------------------------
+# Resume with workspace isolation (T07)
+# ---------------------------------------------------------------------------
+
+
+def _enable_and_prepare_workspace(env, ticket_id):
+    """Enable workspace isolation, commit setup, and create a workspace."""
+    from tests.workspace_helpers import create_workspace_for_ticket
+
+    enable_workspace(env)
+    commit_setup(env)
+    config = load_config(env["project_dir"] / "config.toml")
+    ws = create_workspace_for_ticket(env, ticket_id)
+    return config, ws
+
+
+class TestResumeWithWorkspace:
+    """Resume paths resolve workspace correctly when isolation is enabled."""
+
+    def test_resume_interrupted_impl_uses_worktree(self, project_env):
+        """Interrupted impl run resumes with adapter receiving worktree path."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        # Write a change in the worktree so the retry produces a non-empty diff.
+        from pathlib import Path
+
+        (Path(ws.worktree_path) / "impl.txt").write_text("ws change\n")
+
+        # Reset impl attempt so the retry doesn't hit the limit immediately.
+        env["conn"].execute(
+            "UPDATE tickets SET current_impl_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        action, _detail = resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        assert action == "interrupted"
+        # The adapter should have been invoked in the worktree, not the base repo.
+        assert len(adapter.calls) == 1
+        assert adapter.calls[0].working_directory == ws.worktree_path
+
+    def test_resume_interrupted_impl_workspace_blocked(self, project_env):
+        """Broken workspace during resume blocks the ticket."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        # Break the worktree so validation fails on resume
+        from tests.workspace_helpers import break_worktree
+
+        break_worktree(env, ws.worktree_path)
+
+        adapter = MockAdapter()
+        action, detail = resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        assert action == "interrupted"
+        assert "blocked" in detail
+        assert get_ticket_status(env["conn"], tid) == "blocked"
+        ticket = (
+            env["conn"]
+            .execute("SELECT blocked_reason FROM tickets WHERE id = ?", (tid,))
+            .fetchone()
+        )
+        assert ticket["blocked_reason"].startswith("workspace_")
+
+    def test_resume_finished_impl_captures_diff_from_worktree(self, project_env):
+        """Finished impl run captures diff from the worktree, not the base repo."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        # Write a change in the worktree (not the base repo)
+        from pathlib import Path
+
+        (Path(ws.worktree_path) / "impl.txt").write_text("workspace change\n")
+
+        # Mark the run as finished successfully
+        env["conn"].execute(
+            "UPDATE agent_runs SET exit_status = 'success', "
+            "finished_at = datetime('now') WHERE id = 'impl-run-1'"
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        action, detail = resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        assert action == "post_run"
+        assert "in-review" in detail
+        assert get_ticket_status(env["conn"], tid) == "in-review"
+
+        # Verify diff was captured (should contain the worktree change)
+        diff_row = (
+            env["conn"]
+            .execute("SELECT diff_text FROM run_diffs WHERE run_id = 'impl-run-1'")
+            .fetchone()
+        )
+        assert diff_row is not None
+        assert "workspace change" in diff_row["diff_text"]
+
+    def test_resume_interrupted_impl_persists_workspace_id(self, project_env):
+        """Resumed interrupted impl run writes workspace_id to the new agent_runs row."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        from pathlib import Path
+
+        (Path(ws.worktree_path) / "impl.txt").write_text("ws change\n")
+
+        env["conn"].execute(
+            "UPDATE tickets SET current_impl_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        # The retried agent_runs row (not the original seeded one) should
+        # have a non-NULL workspace_id matching the active workspace.
+        rows = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'implementer' "
+                "ORDER BY started_at DESC",
+                (tid,),
+            )
+            .fetchall()
+        )
+        # At least the retry row exists
+        assert len(rows) >= 2
+        retry_row = rows[0]
+        assert retry_row["workspace_id"] is not None
+
+        ws_row = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM workspaces WHERE ticket_id = ? AND status = 'active'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert retry_row["workspace_id"] == ws_row["id"]
+
+    def test_resume_interrupted_reviewer_persists_workspace_id(self, project_env):
+        """Resumed interrupted reviewer run writes workspace_id to the new agent_runs row."""
+        env = project_env
+        tid = _make_in_review_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        # Make the stored impl diff empty so it matches the clean worktree,
+        # avoiding WorkspaceDriftError on the retry drift check.
+        env["conn"].execute(
+            "UPDATE run_diffs SET diff_text = '' WHERE run_id = 'impl-run-1'"
+        )
+        env["conn"].execute(
+            "UPDATE tickets SET current_review_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        # The retried agent_runs row (not the original seeded one) should
+        # have a non-NULL workspace_id matching the active workspace.
+        rows = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'reviewer' "
+                "ORDER BY started_at DESC",
+                (tid,),
+            )
+            .fetchall()
+        )
+        assert len(rows) >= 2
+        retry_row = rows[0]
+        assert retry_row["workspace_id"] is not None
+
+        ws_row = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM workspaces WHERE ticket_id = ? AND status = 'active'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert retry_row["workspace_id"] == ws_row["id"]
+
+    def test_resume_without_workspace_uses_base_repo(self, project_env):
+        """With workspace.enabled=False, resume uses the base repo path."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+
+        # Reset impl attempt so the retry doesn't hit the limit immediately.
+        env["conn"].execute(
+            "UPDATE tickets SET current_impl_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        action, _detail = resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            env["config"],
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        assert action == "interrupted"
+        assert len(adapter.calls) == 1
+        assert adapter.calls[0].working_directory == str(env["repo"])

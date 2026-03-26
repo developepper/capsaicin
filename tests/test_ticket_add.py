@@ -117,7 +117,7 @@ class TestAddTicketFromFile:
         assert row["title"] == "Auth ticket"
         assert "JWT" in row["description"]
         criteria = conn.execute(
-            "SELECT description FROM acceptance_criteria WHERE ticket_id = ? ORDER BY id",
+            "SELECT description FROM acceptance_criteria WHERE ticket_id = ? ORDER BY rowid",
             (ticket_id,),
         ).fetchall()
         assert len(criteria) == 2

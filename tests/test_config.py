@@ -8,6 +8,7 @@ from capsaicin.config import (
     AdapterConfig,
     Config,
     ConfigError,
+    WorkspaceConfig,
     config_to_snapshot,
     load_config,
     resolve_project,
@@ -87,6 +88,28 @@ command = "claude-planrev"
 allowed_tools = ["Read", "Grep"]
 
 [limits]
+"""
+
+
+WORKSPACE_TOML = """\
+[project]
+name = "ws-proj"
+repo_path = "/tmp/repo"
+
+[adapters.implementer]
+backend = "claude-code"
+command = "claude"
+
+[adapters.reviewer]
+backend = "claude-code"
+command = "claude"
+
+[limits]
+
+[workspace]
+enabled = true
+branch_prefix = "ws/"
+auto_cleanup = false
 """
 
 
@@ -352,6 +375,49 @@ class TestConfigToSnapshotFourRoles:
             assert "command" in adapter_snap
             assert "model" in adapter_snap
             assert "allowed_tools" in adapter_snap
+
+
+class TestWorkspaceConfig:
+    def test_workspace_defaults_when_absent(self, tmp_path):
+        """Existing configs without [workspace] get isolation disabled."""
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(MINIMAL_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.workspace.enabled is False
+        assert cfg.workspace.branch_prefix == "capsaicin/"
+        assert cfg.workspace.auto_cleanup is True
+
+    def test_workspace_explicit_values(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(WORKSPACE_TOML)
+        cfg = load_config(cfg_path)
+        assert cfg.workspace.enabled is True
+        assert cfg.workspace.branch_prefix == "ws/"
+        assert cfg.workspace.auto_cleanup is False
+
+    def test_workspace_disabled_factory(self):
+        ws = WorkspaceConfig.disabled()
+        assert ws.enabled is False
+        assert ws.branch_prefix == "capsaicin/"
+        assert ws.auto_cleanup is True
+
+    def test_snapshot_includes_workspace(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(WORKSPACE_TOML)
+        cfg = load_config(cfg_path)
+        snap = config_to_snapshot(cfg)
+        assert snap["workspace"]["enabled"] is True
+        assert snap["workspace"]["branch_prefix"] == "ws/"
+        assert snap["workspace"]["auto_cleanup"] is False
+
+    def test_snapshot_workspace_defaults(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        cfg_path.write_text(MINIMAL_TOML)
+        cfg = load_config(cfg_path)
+        snap = config_to_snapshot(cfg)
+        assert snap["workspace"]["enabled"] is False
+        assert snap["workspace"]["branch_prefix"] == "capsaicin/"
+        assert snap["workspace"]["auto_cleanup"] is True
 
 
 class TestResolveAdapter:

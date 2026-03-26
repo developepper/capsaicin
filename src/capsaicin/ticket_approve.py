@@ -1,28 +1,21 @@
 """Approval pipeline for ``capsaicin ticket approve`` (T21).
 
-Human approval gate with workspace verification.
+Human approval gate with workspace verification, divergence persistence,
+and approval-time metadata capture for downstream commit/PR workflows.
 """
 
 from __future__ import annotations
 
 import sqlite3
-from datetime import datetime, timezone
+from dataclasses import dataclass, replace
 from pathlib import Path
 
 from capsaicin.activity_log import log_event
-from capsaicin.diff import capture_diff, diffs_match, get_run_diff
+from capsaicin.diff import capture_diff, capture_git_metadata, diffs_match, get_run_diff
 from capsaicin.orchestrator import set_idle
+from capsaicin.queries import generate_id, now_utc
+from capsaicin.config import Config
 from capsaicin.state_machine import transition_ticket
-
-
-def _now() -> str:
-    return datetime.now(timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
-
-
-def _generate_id() -> str:
-    from ulid import ULID
-
-    return str(ULID())
 
 
 # Gate reasons that require a rationale for approval.
@@ -33,6 +26,22 @@ _RATIONALE_REQUIRED_GATES = frozenset(
 
 class WorkspaceMismatchError(Exception):
     """Raised when workspace does not match the reviewed diff."""
+
+
+# ---------------------------------------------------------------------------
+# Workspace check detail
+# ---------------------------------------------------------------------------
+
+
+@dataclass(frozen=True)
+class _WorkspaceCheckDetail:
+    """Internal result of a detailed workspace comparison."""
+
+    matches: bool
+    expected_diff: str | None = None
+    actual_diff: str | None = None
+    divergence_type: str | None = None
+    workspace_id: str | None = None
 
 
 # ---------------------------------------------------------------------------
@@ -79,17 +88,13 @@ def select_approve_ticket(
 # ---------------------------------------------------------------------------
 
 
-def check_workspace_matches(
+def _check_workspace_detailed(
     conn: sqlite3.Connection, repo_path: str | Path, ticket_id: str
-) -> bool:
-    """Check whether the current workspace matches the diff that was reviewed.
+) -> _WorkspaceCheckDetail:
+    """Compare current workspace against the reviewed diff, returning details.
 
-    Compares against the review baseline of the most recent successful
-    reviewer run, which captures the workspace state at the time the
-    reviewer was invoked.  Falls back to the implementer run diff if
-    no review baseline exists.
-
-    Returns True if the workspace matches (or no baseline exists).
+    Returns a ``_WorkspaceCheckDetail`` with match status, expected/actual
+    diffs, and divergence type when a mismatch is found.
     """
     # Prefer the review baseline from the latest successful reviewer run
     row = conn.execute(
@@ -104,7 +109,14 @@ def check_workspace_matches(
 
     if row is not None:
         current = capture_diff(repo_path)
-        return diffs_match(row["baseline_diff"], current.diff_text)
+        if diffs_match(row["baseline_diff"], current.diff_text):
+            return _WorkspaceCheckDetail(matches=True)
+        return _WorkspaceCheckDetail(
+            matches=False,
+            expected_diff=row["baseline_diff"],
+            actual_diff=current.diff_text,
+            divergence_type="diff_mismatch",
+        )
 
     # Fallback: compare against the implementer run diff
     impl_row = conn.execute(
@@ -114,15 +126,170 @@ def check_workspace_matches(
         (ticket_id,),
     ).fetchone()
     if impl_row is None:
-        return True
+        return _WorkspaceCheckDetail(matches=True)
 
     try:
         stored = get_run_diff(conn, impl_row["id"])
     except KeyError:
-        return True
+        return _WorkspaceCheckDetail(matches=True)
 
     current = capture_diff(repo_path)
-    return diffs_match(stored.diff_text, current.diff_text)
+    if diffs_match(stored.diff_text, current.diff_text):
+        return _WorkspaceCheckDetail(matches=True)
+    return _WorkspaceCheckDetail(
+        matches=False,
+        expected_diff=stored.diff_text,
+        actual_diff=current.diff_text,
+        divergence_type="diff_mismatch",
+    )
+
+
+def check_workspace_matches(
+    conn: sqlite3.Connection, repo_path: str | Path, ticket_id: str
+) -> bool:
+    """Check whether the current workspace matches the diff that was reviewed.
+
+    Compares against the review baseline of the most recent successful
+    reviewer run, which captures the workspace state at the time the
+    reviewer was invoked.  Falls back to the implementer run diff if
+    no review baseline exists.
+
+    Returns True if the workspace matches (or no baseline exists).
+    """
+    return _check_workspace_detailed(conn, repo_path, ticket_id).matches
+
+
+def _fetch_workspace_row(
+    conn: sqlite3.Connection, ticket_id: str
+) -> sqlite3.Row | None:
+    """Fetch the most recent usable workspace row for *ticket_id*.
+
+    Returns ``None`` when no workspace exists (excluding cleaned/failed).
+    The result is shared by ``_resolve_workspace_info`` and
+    ``_check_workspace_with_isolation`` so both operate on the same snapshot.
+    """
+    return conn.execute(
+        "SELECT id, worktree_path, branch_name, status "
+        "FROM workspaces WHERE ticket_id = ? "
+        "AND status NOT IN ('cleaned', 'failed') "
+        "ORDER BY created_at DESC LIMIT 1",
+        (ticket_id,),
+    ).fetchone()
+
+
+def _resolve_workspace_info(
+    config: Config, ws_row: dict | None
+) -> tuple[str, str | None, str | None]:
+    """Resolve the effective path, workspace_id, and branch for approval.
+
+    When workspace isolation is enabled and an active workspace exists,
+    validates the workspace and returns its worktree path.  Otherwise
+    returns the base repo_path.
+
+    *ws_row* is the result of ``_fetch_workspace_row`` (may be ``None``).
+
+    Returns (effective_path, workspace_id_or_None, branch_name_or_None).
+    """
+    if not config.workspace.enabled:
+        return config.project.repo_path, None, None
+
+    if ws_row is None:
+        return config.project.repo_path, None, None
+
+    if ws_row["status"] == "active" and Path(ws_row["worktree_path"]).is_dir():
+        return ws_row["worktree_path"], ws_row["id"], ws_row["branch_name"]
+
+    # Workspace exists but is not usable — treated as workspace_invalid
+    return config.project.repo_path, ws_row["id"], ws_row["branch_name"]
+
+
+def _check_workspace_with_isolation(
+    conn: sqlite3.Connection,
+    config: Config,
+    ticket_id: str,
+    ws_row: dict | None,
+) -> _WorkspaceCheckDetail:
+    """Extended workspace check that also validates isolated workspace state.
+
+    When workspace isolation is enabled, checks that the workspace is still
+    active and usable before comparing diffs.  A non-active workspace
+    produces a ``workspace_invalid`` divergence.
+
+    *ws_row* is the result of ``_fetch_workspace_row`` (may be ``None``).
+    """
+    if not config.workspace.enabled:
+        return _check_workspace_detailed(conn, config.project.repo_path, ticket_id)
+
+    if ws_row is None:
+        # No workspace — fall back to base repo diff check
+        return _check_workspace_detailed(conn, config.project.repo_path, ticket_id)
+
+    if ws_row["status"] != "active" or not Path(ws_row["worktree_path"]).is_dir():
+        return _WorkspaceCheckDetail(
+            matches=False,
+            divergence_type="workspace_invalid",
+            workspace_id=ws_row["id"],
+        )
+
+    detail = _check_workspace_detailed(conn, ws_row["worktree_path"], ticket_id)
+    return replace(detail, workspace_id=ws_row["id"])
+
+
+# ---------------------------------------------------------------------------
+# Divergence persistence (AC-2)
+# ---------------------------------------------------------------------------
+
+
+def _persist_divergence(
+    conn: sqlite3.Connection,
+    ticket_id: str,
+    detail: _WorkspaceCheckDetail,
+    recovery_action: str,
+) -> str:
+    """Insert a workspace divergence record and return its id."""
+    div_id = generate_id()
+    conn.execute(
+        "INSERT INTO workspace_divergences "
+        "(id, ticket_id, workspace_id, expected_diff, actual_diff, "
+        "divergence_type, recovery_action, detected_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?)",
+        (
+            div_id,
+            ticket_id,
+            detail.workspace_id,
+            detail.expected_diff,
+            detail.actual_diff,
+            detail.divergence_type,
+            recovery_action,
+            now_utc(),
+        ),
+    )
+    conn.commit()
+    return div_id
+
+
+# ---------------------------------------------------------------------------
+# Approval metadata (AC-3)
+# ---------------------------------------------------------------------------
+
+
+def _persist_approval_metadata(
+    conn: sqlite3.Connection,
+    decision_id: str,
+    workspace_id: str | None,
+    branch_name: str,
+    worktree_path: str,
+    commit_ref: str,
+) -> None:
+    """Capture git metadata at approval time for downstream workflows."""
+    conn.execute(
+        "INSERT INTO approval_metadata "
+        "(decision_id, workspace_id, branch_name, worktree_path, "
+        "commit_ref, created_at) "
+        "VALUES (?, ?, ?, ?, ?, ?)",
+        (decision_id, workspace_id, branch_name, worktree_path, commit_ref, now_utc()),
+    )
+    conn.commit()
 
 
 # ---------------------------------------------------------------------------
@@ -138,8 +305,14 @@ def approve_ticket(
     rationale: str | None = None,
     force: bool = False,
     log_path: str | Path | None = None,
+    *,
+    config: Config,
 ) -> str:
     """Execute the approval pipeline for a ticket.
+
+    Validates the workspace (including isolation checks when enabled),
+    persists divergence events, and captures approval metadata for
+    downstream commit/PR workflows.
 
     Returns the final ticket status ('pr-ready').
 
@@ -150,9 +323,30 @@ def approve_ticket(
     ticket_id = ticket["id"]
     gate_reason = ticket.get("gate_reason")
 
-    # --- Workspace verification ---
-    if not force:
-        if not check_workspace_matches(conn, repo_path, ticket_id):
+    # --- Workspace verification (AC-1 / AC-2) ---
+    ws_row = _fetch_workspace_row(conn, ticket_id)
+    detail = _check_workspace_with_isolation(conn, config, ticket_id, ws_row)
+    effective_path, ws_id, ws_branch = _resolve_workspace_info(config, ws_row)
+
+    if not detail.matches:
+        recovery_action = "force_override" if force else "rejected"
+        div_id = _persist_divergence(conn, ticket_id, detail, recovery_action)
+
+        if log_path:
+            log_event(
+                log_path,
+                "WORKSPACE_DIVERGENCE",
+                project_id=project_id,
+                ticket_id=ticket_id,
+                payload={
+                    "divergence_id": div_id,
+                    "divergence_type": detail.divergence_type,
+                    "recovery_action": recovery_action,
+                    "workspace_id": detail.workspace_id or ws_id,
+                },
+            )
+
+        if not force:
             raise WorkspaceMismatchError(
                 "Workspace does not match the reviewed implementation diff. "
                 "Use --force to override."
@@ -166,13 +360,24 @@ def approve_ticket(
         )
 
     # --- Record decision ---
-    decision_id = _generate_id()
+    decision_id = generate_id()
     conn.execute(
         "INSERT INTO decisions (id, ticket_id, decision, rationale, created_at) "
         "VALUES (?, ?, 'approve', ?, ?)",
-        (decision_id, ticket_id, rationale, _now()),
+        (decision_id, ticket_id, rationale, now_utc()),
     )
     conn.commit()
+
+    # --- Capture approval metadata (AC-3) ---
+    git_meta = capture_git_metadata(effective_path)
+    _persist_approval_metadata(
+        conn,
+        decision_id=decision_id,
+        workspace_id=ws_id or detail.workspace_id,
+        branch_name=ws_branch or git_meta.branch_name,
+        worktree_path=effective_path,
+        commit_ref=git_meta.commit_ref,
+    )
 
     # --- Transition to pr-ready ---
     transition_ticket(

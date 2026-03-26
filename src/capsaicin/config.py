@@ -46,6 +46,19 @@ class PathsConfig:
 
 
 @dataclass
+class WorkspaceConfig:
+    enabled: bool = False
+    branch_prefix: str = "capsaicin/"
+    auto_cleanup: bool = True
+    worktree_root: str | None = None
+
+    @staticmethod
+    def disabled() -> WorkspaceConfig:
+        """Return the default config used when isolation is not configured."""
+        return WorkspaceConfig(enabled=False)
+
+
+@dataclass
 class ProjectConfig:
     name: str
     repo_path: str
@@ -60,6 +73,7 @@ class Config:
     reviewer_policy: ReviewerConfig
     ticket_selection: TicketSelectionConfig
     paths: PathsConfig
+    workspace: WorkspaceConfig = field(default_factory=WorkspaceConfig.disabled)
     planner: AdapterConfig | None = None
     planning_reviewer: AdapterConfig | None = None
 
@@ -153,6 +167,14 @@ def load_config(config_path: str | Path) -> Config:
         exports_dir=p.get("exports_dir", "exports"),
     )
 
+    ws = raw.get("workspace", {})
+    workspace = WorkspaceConfig(
+        enabled=ws.get("enabled", False),
+        branch_prefix=ws.get("branch_prefix", "capsaicin/"),
+        auto_cleanup=ws.get("auto_cleanup", True),
+        worktree_root=ws.get("worktree_root"),
+    )
+
     return Config(
         project=project,
         implementer=implementer,
@@ -161,6 +183,7 @@ def load_config(config_path: str | Path) -> Config:
         reviewer_policy=reviewer_policy,
         ticket_selection=ticket_selection,
         paths=paths,
+        workspace=workspace,
         planner=planner,
         planning_reviewer=planning_reviewer,
     )
@@ -214,6 +237,16 @@ def config_to_snapshot(config: Config) -> dict:
         "paths": {
             "renders_dir": config.paths.renders_dir,
             "exports_dir": config.paths.exports_dir,
+        },
+        "workspace": {
+            "enabled": config.workspace.enabled,
+            "branch_prefix": config.workspace.branch_prefix,
+            "auto_cleanup": config.workspace.auto_cleanup,
+            **(
+                {"worktree_root": config.workspace.worktree_root}
+                if config.workspace.worktree_root
+                else {}
+            ),
         },
     }
 

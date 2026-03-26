@@ -25,6 +25,21 @@ class RunDiagnosticSummary:
 
 
 @dataclass
+class WorkspaceSummary:
+    """Workspace isolation state for the ticket detail view."""
+
+    isolation_mode: str  # "shared", "branch", "worktree", "none"
+    status: str | None = None  # "active", "failed", "cleaned", etc.
+    branch_name: str | None = None
+    worktree_path: str | None = None
+    failure_reason: str | None = None
+    failure_detail: str | None = None
+    needs_recovery: bool = False
+    needs_cleanup: bool = False
+    awaiting_human: bool = False
+
+
+@dataclass
 class TicketDetailData:
     """Structured ticket detail for operator views."""
 
@@ -40,6 +55,7 @@ class TicketDetailData:
     diagnostic: str | None = None
     diff_summary: DiffSummary | None = None
     planned_ticket: dict | None = None
+    workspace: WorkspaceSummary | None = None
 
 
 def _parse_adapter_metadata(raw: str | None) -> dict:

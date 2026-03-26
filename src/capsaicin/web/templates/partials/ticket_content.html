@@ -20,6 +20,66 @@
   {% endif %}
 </dl>
 
+{# --- Workspace isolation state --- #}
+{% if data.workspace %}
+<section class="workspace-panel" data-workspace-status="{{ data.workspace.status or 'none' }}">
+  <h2>Workspace</h2>
+  <dl>
+    <dt>Isolation</dt><dd>{{ data.workspace.isolation_mode }}</dd>
+    {% if data.workspace.status %}
+    <dt>Status</dt>
+    <dd>
+      <span class="workspace-status workspace-status-{{ data.workspace.status }}">{{ data.workspace.status }}</span>
+    </dd>
+    {% endif %}
+    {% if data.workspace.branch_name %}
+    <dt>Branch</dt><dd><code>{{ data.workspace.branch_name }}</code></dd>
+    {% endif %}
+    {% if data.workspace.worktree_path %}
+    <dt>Worktree</dt><dd><code>{{ data.workspace.worktree_path }}</code></dd>
+    {% endif %}
+  </dl>
+
+  {% if data.workspace.failure_reason %}
+  <div class="workspace-failure">
+    <strong>Workspace problem:</strong>
+    {% if data.workspace.failure_reason == "missing_worktree" %}
+      The worktree directory is missing or no longer registered with git. Recover to create a fresh worktree.
+    {% elif data.workspace.failure_reason == "branch_drift" %}
+      The workspace branch has diverged from the expected base. Recover to re-create the worktree from the current base.
+    {% elif data.workspace.failure_reason == "dirty_base_repo" %}
+      The base repository has uncommitted changes. Commit or stash changes in the main repo, then retry.
+    {% elif data.workspace.failure_reason == "setup_failure" %}
+      Workspace setup commands failed. Check setup configuration and retry.
+    {% elif data.workspace.failure_reason == "cleanup_conflict" %}
+      The worktree has uncommitted changes that prevent automatic cleanup. Manually resolve changes in the worktree, then clean up.
+    {% else %}
+      {{ data.workspace.failure_reason }}: {{ data.workspace.failure_detail or "Unknown failure." }}
+    {% endif %}
+  </div>
+  {% endif %}
+
+  {% if data.workspace.awaiting_human %}
+  <div class="workspace-actions workspace-human-gate">
+    <p><strong>Awaiting operator action:</strong> This workspace requires manual intervention before it can proceed. Resolve the issue described above, then clean up or retry.</p>
+  </div>
+  {% elif data.workspace.needs_recovery or data.workspace.needs_cleanup %}
+  <div class="workspace-actions">
+    {% if data.workspace.needs_recovery %}
+    <form method="post" action="{{ request.url_for('action_workspace_recover', ticket_id=data.ticket.id) }}" class="action-form">
+      <button type="submit" class="btn btn-action">Recover Workspace</button>
+    </form>
+    {% endif %}
+    {% if data.workspace.needs_cleanup %}
+    <form method="post" action="{{ request.url_for('action_workspace_cleanup', ticket_id=data.ticket.id) }}" class="action-form">
+      <button type="submit" class="btn btn-defer">Clean Up Workspace</button>
+    </form>
+    {% endif %}
+  </div>
+  {% endif %}
+</section>
+{% endif %}
+
 {# --- Role Assignments (implementer / reviewer) --- #}
 {% if role_assignments %}
 {% include "partials/role_assignments.html" %}

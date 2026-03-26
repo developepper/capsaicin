@@ -7,10 +7,13 @@ the ``run_diffs`` table.
 from __future__ import annotations
 
 import json
+import logging
 import sqlite3
 import subprocess
 from dataclasses import dataclass
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 
 @dataclass
@@ -83,6 +86,44 @@ def get_run_diff(conn: sqlite3.Connection, run_id: str) -> DiffResult:
         diff_text=row["diff_text"],
         files_changed=json.loads(row["files_changed"]),
     )
+
+
+@dataclass(frozen=True)
+class GitMetadata:
+    """Snapshot of branch name and commit SHA at a point in time."""
+
+    branch_name: str
+    commit_ref: str
+
+
+def capture_git_metadata(repo_path: str | Path) -> GitMetadata:
+    """Return the current branch name and HEAD commit SHA for *repo_path*."""
+    branch_result = subprocess.run(
+        ["git", "rev-parse", "--abbrev-ref", "HEAD"],
+        cwd=str(repo_path),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    branch_name = (
+        branch_result.stdout.strip() if branch_result.returncode == 0 else "HEAD"
+    )
+
+    commit_result = subprocess.run(
+        ["git", "rev-parse", "HEAD"],
+        cwd=str(repo_path),
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if commit_result.returncode != 0:
+        raise RuntimeError(
+            f"Failed to capture git commit ref in {repo_path}: "
+            f"{commit_result.stderr.strip()}"
+        )
+    commit_ref = commit_result.stdout.strip()
+
+    return GitMetadata(branch_name=branch_name, commit_ref=commit_ref)
 
 
 def diffs_match(a: str, b: str) -> bool:

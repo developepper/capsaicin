@@ -8,6 +8,7 @@ and any future setup commands.
 from __future__ import annotations
 
 import json
+import os
 import shutil
 import subprocess
 from dataclasses import dataclass, field
@@ -257,6 +258,137 @@ def check_claude_permissions(repo_path: str | Path) -> CheckResult:
 
 
 # ---------------------------------------------------------------------------
+# Workspace isolation readiness
+# ---------------------------------------------------------------------------
+
+
+def check_workspace_readiness(
+    repo_path: str | Path,
+    workspace_enabled: bool = False,
+    *,
+    worktree_root: str | None = None,
+) -> CheckResult:
+    """Check whether workspace isolation prerequisites are met.
+
+    When ``workspace_enabled`` is True, verifies that git supports
+    worktrees and the worktree root directory is writable.  When
+    disabled, reports a pass with an informational message.
+
+    The *worktree_root* parameter overrides the default worktree
+    location (``~/.capsaicin/worktrees/<hash>``).
+    """
+    if not workspace_enabled:
+        return CheckResult(
+            name="workspace_readiness",
+            status="pass",
+            message="Workspace isolation is disabled (shared repo mode).",
+        )
+
+    p = Path(repo_path)
+
+    # Check git worktree support (requires git >= 2.5).
+    try:
+        result = subprocess.run(
+            ["git", "worktree", "list"],
+            cwd=str(p),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if result.returncode != 0:
+            return CheckResult(
+                name="workspace_readiness",
+                status="fail",
+                message="git worktree not supported or not a git repo.",
+                detail=result.stderr.strip() or "git worktree list failed.",
+            )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        return CheckResult(
+            name="workspace_readiness",
+            status="fail",
+            message="Could not verify git worktree support.",
+        )
+
+    # Resolve the worktree root directory.
+    from capsaicin.workspace import resolve_worktree_root
+    from capsaicin.config import WorkspaceConfig
+
+    ws_cfg = WorkspaceConfig(enabled=True, worktree_root=worktree_root)
+    worktrees_dir = resolve_worktree_root(p.resolve(), ws_cfg)
+
+    if worktrees_dir.exists() and not worktrees_dir.is_dir():
+        return CheckResult(
+            name="workspace_readiness",
+            status="fail",
+            message="Worktree root exists but is not a directory.",
+            detail=f"Remove or rename {worktrees_dir} to allow workspace isolation.",
+        )
+
+    # Check writability without mutating the filesystem.
+    if worktrees_dir.is_dir():
+        if not os.access(worktrees_dir, os.W_OK):
+            return CheckResult(
+                name="workspace_readiness",
+                status="fail",
+                message="Worktree root directory is not writable.",
+                detail=f"Check filesystem permissions on {worktrees_dir}.",
+            )
+    else:
+        # Directory does not exist — check nearest existing parent is writable.
+        check_dir = worktrees_dir
+        while not check_dir.exists():
+            check_dir = check_dir.parent
+        if not os.access(check_dir, os.W_OK):
+            return CheckResult(
+                name="workspace_readiness",
+                status="fail",
+                message="Cannot create worktree root directory.",
+                detail=f"Check filesystem permissions on {check_dir}.",
+            )
+
+    # Check git metadata is writable (needed for refs during worktree add).
+    git_dir = p / ".git"
+    if git_dir.is_dir():
+        refs_dir = git_dir / "refs"
+        check_target = refs_dir if refs_dir.is_dir() else git_dir
+        if not os.access(check_target, os.W_OK):
+            return CheckResult(
+                name="workspace_readiness",
+                status="fail",
+                message="Git metadata directory is not writable.",
+                detail=f"Check filesystem permissions on {check_target}.",
+            )
+
+    # Warn if working tree is dirty (blocks worktree creation).
+    try:
+        status_result = subprocess.run(
+            ["git", "status", "--porcelain"],
+            cwd=str(p),
+            capture_output=True,
+            text=True,
+            timeout=10,
+        )
+        if status_result.returncode == 0 and status_result.stdout.strip():
+            return CheckResult(
+                name="workspace_readiness",
+                status="warn",
+                message="Workspace isolation enabled but working tree is dirty.",
+                detail=(
+                    "Uncommitted changes block worktree creation. "
+                    "Commit or stash changes before running workspace-isolated pipelines."
+                ),
+            )
+    except (subprocess.TimeoutExpired, FileNotFoundError):
+        pass
+
+    return CheckResult(
+        name="workspace_readiness",
+        status="pass",
+        message="Workspace isolation prerequisites met (git worktree supported).",
+    )
+
+
+# ---------------------------------------------------------------------------
 # Aggregated preflight
 # ---------------------------------------------------------------------------
 
@@ -264,6 +396,8 @@ def check_claude_permissions(repo_path: str | Path) -> CheckResult:
 def run_preflight(
     repo_path: str | Path,
     adapter_command: str = "claude",
+    workspace_enabled: bool = False,
+    worktree_root: str | None = None,
 ) -> PreflightReport:
     """Run all preflight checks and return a structured report."""
     report = PreflightReport()
@@ -272,4 +406,9 @@ def run_preflight(
     report.checks.append(check_is_git_repo(repo_path))
     report.checks.append(check_working_tree_clean(repo_path))
     report.checks.append(check_claude_permissions(repo_path))
+    report.checks.append(
+        check_workspace_readiness(
+            repo_path, workspace_enabled, worktree_root=worktree_root
+        )
+    )
     return report

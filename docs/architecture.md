@@ -96,6 +96,33 @@ canonical system of record. `exports/` should be reserved for outward-facing
 artifacts such as GitHub issue bodies and PR summaries. The database remains
 canonical.
 
+## Workspace Isolation
+
+When the optional `[workspace]` config section is enabled, capsaicin creates
+per-ticket git worktrees so that agent runs never mutate the operator's active
+checkout.  Worktrees live outside the repository tree at
+`~/.capsaicin/worktrees/<repo-hash>/<ticket-id>` (overridable via
+`worktree_root` in the `[workspace]` config section) and are tracked by a
+dedicated `workspaces` table in the database.
+
+Key design points:
+
+- **Disabled by default** — existing projects that omit the `[workspace]`
+  section continue to run in the shared repo exactly as before.
+- **Pipeline routing** — every execution entry point (`ticket run`,
+  `ticket review`, `resume`, `loop`) calls `resolve_or_block()` which either
+  acquires a valid worktree or blocks the ticket with a workspace-prefixed
+  `blocked_reason`.
+- **Independent lifecycle** — workspace states (`pending`, `setting_up`,
+  `active`, `tearing_down`, `cleaned`, `failed`) are independent of ticket
+  states.  A workspace can fail while its ticket is still in `implementing`.
+- **Recovery** — failed workspaces can be recovered via `capsaicin workspace
+  recover` (CLI) or the Recover Workspace button (web UI), followed by
+  `capsaicin ticket unblock` to re-queue the ticket.
+
+See [workspace-lifecycle.md](./workspace-lifecycle.md) for the full state
+diagram, failure taxonomy, and configuration reference.
+
 `activity.log` should be a lightweight append-only debug trace rather than a
 second system of record. It should record events such as project init, ticket
 creation, state transitions, run start/finish, drift detection,

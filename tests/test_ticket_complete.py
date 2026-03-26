@@ -86,6 +86,7 @@ def _run_to_pr_ready(env):
         repo_path=env["repo"],
         force=True,
         log_path=env["log_path"],
+        config=env["config"],
     )
 
     assert get_ticket_status(env["conn"], tid) == "pr-ready"
