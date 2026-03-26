@@ -45,7 +45,7 @@ class TestCreateWorkspace:
         _insert_ticket(conn)
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
 
         assert isinstance(result, WorkspaceReady)
@@ -70,7 +70,9 @@ class TestCreateWorkspace:
         _insert_project(conn)
         _insert_epic(conn)
 
-        result = create_workspace(conn, repo, "p1", _default_ws_config(), epic_id="e1")
+        result = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), epic_id="e1"
+        )
 
         assert isinstance(result, WorkspaceReady)
         assert result.branch_name == "capsaicin/e1"
@@ -90,7 +92,9 @@ class TestCreateWorkspace:
             text=True,
         ).stdout.strip()
 
-        create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
 
         after = subprocess.run(
             ["git", "rev-parse", "--abbrev-ref", "HEAD"],
@@ -112,7 +116,7 @@ class TestCreateWorkspace:
         (repo / "dirty.txt").write_text("uncommitted\n")
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
 
         assert isinstance(result, WorkspaceRecovery)
@@ -144,7 +148,7 @@ class TestCreateWorkspace:
         )
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t2"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t2"
         )
 
         assert isinstance(result, WorkspaceRecovery)
@@ -179,7 +183,12 @@ class TestCreateWorkspace:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        cfg = WorkspaceConfig(enabled=True, branch_prefix="work/", auto_cleanup=True)
+        cfg = WorkspaceConfig(
+            enabled=True,
+            branch_prefix="work/",
+            auto_cleanup=True,
+            worktree_root=str(tmp_path / "wt"),
+        )
         result = create_workspace(conn, repo, "p1", cfg, ticket_id="t1")
 
         assert isinstance(result, WorkspaceReady)
@@ -202,7 +211,7 @@ class TestValidateWorkspace:
         _insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -218,7 +227,7 @@ class TestValidateWorkspace:
         _insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -243,7 +252,7 @@ class TestValidateWorkspace:
         _insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -272,7 +281,7 @@ class TestValidateWorkspace:
         # Dirty repo to get a failed workspace.
         (repo / "dirty.txt").write_text("d\n")
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceRecovery)
 
@@ -319,7 +328,7 @@ class TestAcquireWorkspace:
         _insert_ticket(conn)
 
         result = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceReady)
 
@@ -330,11 +339,13 @@ class TestAcquireWorkspace:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        first = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        first = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(first, WorkspaceReady)
 
         second = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(second, WorkspaceReady)
         assert second.workspace_id == first.workspace_id
@@ -349,7 +360,7 @@ class TestAcquireWorkspace:
         # Dirty repo to get a failed workspace.
         (repo / "dirty.txt").write_text("d\n")
         failed = create_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(failed, WorkspaceRecovery)
 
@@ -359,7 +370,7 @@ class TestAcquireWorkspace:
         (repo / "dirty.txt").unlink(missing_ok=True)
 
         result = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(), ticket_id="t1"
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceReady)
         assert result.workspace_id != failed.workspace_id
@@ -380,7 +391,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         result = run_setup_commands(conn, ws.workspace_id, ["echo hello", "true"])
@@ -400,7 +413,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         result = run_setup_commands(conn, ws.workspace_id, ["false"])
@@ -424,7 +439,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         # Second command should never run.
@@ -446,7 +463,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         # Create a marker file via setup command.
@@ -466,7 +485,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         result = run_setup_commands(conn, ws.workspace_id, [])
@@ -484,7 +505,9 @@ class TestRunSetupCommands:
         _insert_project(conn)
         _insert_ticket(conn)
 
-        ws = create_workspace(conn, repo, "p1", _default_ws_config(), ticket_id="t1")
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
         assert isinstance(ws, WorkspaceReady)
 
         result = run_setup_commands(

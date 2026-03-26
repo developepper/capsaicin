@@ -8,6 +8,7 @@ are persisted in the ``workspaces`` table defined by migration 0012.
 from __future__ import annotations
 
 import enum
+import hashlib
 import sqlite3
 import subprocess
 from dataclasses import dataclass
@@ -256,6 +257,25 @@ def _find_active_workspace(
 
 
 # ---------------------------------------------------------------------------
+# Worktree root resolution
+# ---------------------------------------------------------------------------
+
+
+def resolve_worktree_root(repo: Path, ws_config: WorkspaceConfig) -> Path:
+    """Return the directory under which per-ticket worktrees are created.
+
+    When ``ws_config.worktree_root`` is set it is used as-is (useful for
+    tests).  Otherwise the default location is
+    ``~/.capsaicin/worktrees/<short-hash>/`` where *short-hash* is derived
+    from the resolved repo path so that multiple projects don't collide.
+    """
+    if ws_config.worktree_root is not None:
+        return Path(ws_config.worktree_root)
+    repo_hash = hashlib.sha256(str(repo).encode()).hexdigest()[:12]
+    return Path.home() / ".capsaicin" / "worktrees" / repo_hash
+
+
+# ---------------------------------------------------------------------------
 # Public API
 # ---------------------------------------------------------------------------
 
@@ -289,7 +309,8 @@ def create_workspace(
     # Derive branch and worktree path.
     slug = ticket_id or epic_id
     branch_name = f"{ws_config.branch_prefix}{slug}"
-    worktree_path = str(repo / ".worktrees" / slug)
+    wt_root = resolve_worktree_root(repo, ws_config)
+    worktree_path = str(wt_root / slug)
 
     # Resolve base ref before any mutation.
     base_ref = _resolve_ref(repo)

@@ -50,6 +50,7 @@ class WorkspaceConfig:
     enabled: bool = False
     branch_prefix: str = "capsaicin/"
     auto_cleanup: bool = True
+    worktree_root: str | None = None
 
     @staticmethod
     def disabled() -> WorkspaceConfig:
@@ -171,6 +172,7 @@ def load_config(config_path: str | Path) -> Config:
         enabled=ws.get("enabled", False),
         branch_prefix=ws.get("branch_prefix", "capsaicin/"),
         auto_cleanup=ws.get("auto_cleanup", True),
+        worktree_root=ws.get("worktree_root"),
     )
 
     return Config(
@@ -240,6 +242,11 @@ def config_to_snapshot(config: Config) -> dict:
             "enabled": config.workspace.enabled,
             "branch_prefix": config.workspace.branch_prefix,
             "auto_cleanup": config.workspace.auto_cleanup,
+            **(
+                {"worktree_root": config.workspace.worktree_root}
+                if config.workspace.worktree_root
+                else {}
+            ),
         },
     }
 

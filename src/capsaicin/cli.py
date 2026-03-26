@@ -945,14 +945,19 @@ def doctor(repo_path, project_slug):
     from capsaicin.preflight import run_preflight
 
     workspace_enabled = False
+    worktree_root = None
     if capsaicin_root.is_dir():
         try:
             workspace_enabled = config.workspace.enabled  # type: ignore[possibly-undefined]
+            worktree_root = config.workspace.worktree_root  # type: ignore[possibly-undefined]
         except Exception:
             pass
 
     report = run_preflight(
-        repo_path, adapter_command=adapter_command, workspace_enabled=workspace_enabled
+        repo_path,
+        adapter_command=adapter_command,
+        workspace_enabled=workspace_enabled,
+        worktree_root=worktree_root,
     )
 
     # Render checklist

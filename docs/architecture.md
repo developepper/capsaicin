@@ -100,8 +100,10 @@ canonical.
 
 When the optional `[workspace]` config section is enabled, capsaicin creates
 per-ticket git worktrees so that agent runs never mutate the operator's active
-checkout.  Each worktree lives in a temporary directory outside the repo and is
-tracked by a dedicated `workspaces` table in the database.
+checkout.  Worktrees live outside the repository tree at
+`~/.capsaicin/worktrees/<repo-hash>/<ticket-id>` (overridable via
+`worktree_root` in the `[workspace]` config section) and are tracked by a
+dedicated `workspaces` table in the database.
 
 Key design points:
 

@@ -37,7 +37,7 @@ from tests.workspace_helpers import (
 )
 
 
-def _make_config(repo_path="/tmp", workspace_enabled=False):
+def _make_config(repo_path="/tmp", workspace_enabled=False, worktree_root=None):
     return Config(
         project=ProjectConfig(name="test", repo_path=str(repo_path)),
         implementer=AdapterConfig(backend="claude", command="claude"),
@@ -50,6 +50,7 @@ def _make_config(repo_path="/tmp", workspace_enabled=False):
             enabled=workspace_enabled,
             branch_prefix="capsaicin/",
             auto_cleanup=True,
+            worktree_root=str(worktree_root) if worktree_root else None,
         ),
     )
 
@@ -91,7 +92,8 @@ class TestWorkspaceStatus:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
 
@@ -100,7 +102,10 @@ class TestWorkspaceStatus:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -119,7 +124,8 @@ class TestWorkspaceStatus:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace, cleanup_workspace
 
@@ -128,7 +134,10 @@ class TestWorkspaceStatus:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=False
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=False,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -138,7 +147,10 @@ class TestWorkspaceStatus:
             repo,
             ws.workspace_id,
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=False
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=False,
+                worktree_root=wt,
             ),
         )
 
@@ -156,7 +168,8 @@ class TestWorkspaceStatus:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace, cleanup_workspace
 
@@ -165,7 +178,10 @@ class TestWorkspaceStatus:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -174,7 +190,10 @@ class TestWorkspaceStatus:
             repo,
             ws.workspace_id,
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
         )
 
@@ -201,12 +220,16 @@ class TestWorkspaceStatus:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
 
         ws_cfg = WorkspaceConfig(
-            enabled=True, branch_prefix="capsaicin/", auto_cleanup=False
+            enabled=True,
+            branch_prefix="capsaicin/",
+            auto_cleanup=False,
+            worktree_root=wt,
         )
         ws = create_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
 
@@ -236,12 +259,16 @@ class TestWorkspaceStatus:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
 
         ws_cfg = WorkspaceConfig(
-            enabled=True, branch_prefix="capsaicin/", auto_cleanup=False
+            enabled=True,
+            branch_prefix="capsaicin/",
+            auto_cleanup=False,
+            worktree_root=wt,
         )
         ws = create_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
 
@@ -308,7 +335,9 @@ class TestWorkspaceRecover:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        config = _make_config(
+            repo_path=repo, workspace_enabled=True, worktree_root=tmp_path / "wt"
+        )
 
         result = workspace_recover(conn, "p1", config, "t1")
 
@@ -323,7 +352,8 @@ class TestWorkspaceRecover:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
 
@@ -332,7 +362,10 @@ class TestWorkspaceRecover:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -384,7 +417,8 @@ class TestWorkspaceCleanup:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
 
@@ -393,7 +427,10 @@ class TestWorkspaceCleanup:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -410,7 +447,8 @@ class TestWorkspaceCleanup:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace
         from pathlib import Path
@@ -420,7 +458,10 @@ class TestWorkspaceCleanup:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -441,7 +482,8 @@ class TestWorkspaceCleanup:
         conn = _make_conn()
         _insert_project(conn, repo_path=str(repo))
         _insert_ticket(conn)
-        config = _make_config(repo_path=repo, workspace_enabled=True)
+        wt = str(tmp_path / "wt")
+        config = _make_config(repo_path=repo, workspace_enabled=True, worktree_root=wt)
 
         from capsaicin.workspace import create_workspace, cleanup_workspace
 
@@ -450,7 +492,10 @@ class TestWorkspaceCleanup:
             repo,
             "p1",
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
             ticket_id="t1",
         )
@@ -459,7 +504,10 @@ class TestWorkspaceCleanup:
             repo,
             ws.workspace_id,
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt,
             ),
         )
 

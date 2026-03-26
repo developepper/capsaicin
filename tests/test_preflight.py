@@ -372,7 +372,7 @@ class TestCheckWorkspaceReadiness:
         assert "worktree" in result.message.lower()
 
     def test_worktrees_file_blocks(self, tmp_path):
-        """A .worktrees file (not directory) should fail."""
+        """A worktree root that is a file (not directory) should fail."""
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
@@ -396,13 +396,16 @@ class TestCheckWorkspaceReadiness:
             check=True,
             capture_output=True,
         )
-        (repo / ".worktrees").write_text("not a dir")
-        result = check_workspace_readiness(repo, workspace_enabled=True)
+        wt_root = tmp_path / "wt"
+        wt_root.write_text("not a dir")
+        result = check_workspace_readiness(
+            repo, workspace_enabled=True, worktree_root=str(wt_root)
+        )
         assert result.status == "fail"
         assert "not a directory" in result.message.lower()
 
     def test_unwritable_worktrees_dir_fails(self, tmp_path):
-        """If .worktrees exists but is not writable, fail."""
+        """If worktree root exists but is not writable, fail."""
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
@@ -426,18 +429,20 @@ class TestCheckWorkspaceReadiness:
             check=True,
             capture_output=True,
         )
-        wt_dir = repo / ".worktrees"
+        wt_dir = tmp_path / "wt"
         wt_dir.mkdir()
         wt_dir.chmod(0o444)
         try:
-            result = check_workspace_readiness(repo, workspace_enabled=True)
+            result = check_workspace_readiness(
+                repo, workspace_enabled=True, worktree_root=str(wt_dir)
+            )
             assert result.status == "fail"
             assert "not writable" in result.message.lower()
         finally:
             wt_dir.chmod(0o755)
 
     def test_uncreatable_worktrees_dir_fails(self, tmp_path):
-        """If the repo dir is not writable and .worktrees doesn't exist, fail."""
+        """If the worktree root parent is not writable, fail."""
         repo = tmp_path / "repo"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
@@ -461,13 +466,17 @@ class TestCheckWorkspaceReadiness:
             check=True,
             capture_output=True,
         )
-        repo.chmod(0o555)
+        wt_parent = tmp_path / "locked"
+        wt_parent.mkdir()
+        wt_parent.chmod(0o555)
         try:
-            result = check_workspace_readiness(repo, workspace_enabled=True)
+            result = check_workspace_readiness(
+                repo, workspace_enabled=True, worktree_root=str(wt_parent / "wt")
+            )
             assert result.status == "fail"
             assert "cannot create" in result.message.lower()
         finally:
-            repo.chmod(0o755)
+            wt_parent.chmod(0o755)
 
     def test_unwritable_git_metadata_fails(self, tmp_path):
         """If .git/refs is not writable, workspace readiness should fail."""

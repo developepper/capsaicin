@@ -995,12 +995,16 @@ class TestWorkspaceCleanupAction:
         from capsaicin.config import WorkspaceConfig
         from capsaicin.workspace import WorkspaceReady, create_workspace
 
+        wt_root = str(env["repo"].parent / "worktrees")
         result = create_workspace(
             env["conn"],
             env["repo"],
             env["project_id"],
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt_root,
             ),
             ticket_id=tid,
         )
@@ -1129,12 +1133,16 @@ class TestActionableWorkspaceErrors:
         from capsaicin.config import WorkspaceConfig
         from capsaicin.workspace import WorkspaceReady, create_workspace
 
+        wt_root = str(env["repo"].parent / "worktrees")
         ws = create_workspace(
             env["conn"],
             env["repo"],
             env["project_id"],
             WorkspaceConfig(
-                enabled=True, branch_prefix="capsaicin/", auto_cleanup=True
+                enabled=True,
+                branch_prefix="capsaicin/",
+                auto_cleanup=True,
+                worktree_root=wt_root,
             ),
             ticket_id=tid,
         )

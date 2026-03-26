@@ -265,12 +265,17 @@ def check_claude_permissions(repo_path: str | Path) -> CheckResult:
 def check_workspace_readiness(
     repo_path: str | Path,
     workspace_enabled: bool = False,
+    *,
+    worktree_root: str | None = None,
 ) -> CheckResult:
     """Check whether workspace isolation prerequisites are met.
 
     When ``workspace_enabled`` is True, verifies that git supports
-    worktrees and the ``.worktrees`` directory is writable.  When
+    worktrees and the worktree root directory is writable.  When
     disabled, reports a pass with an informational message.
+
+    The *worktree_root* parameter overrides the default worktree
+    location (``~/.capsaicin/worktrees/<hash>``).
     """
     if not workspace_enabled:
         return CheckResult(
@@ -304,13 +309,18 @@ def check_workspace_readiness(
             message="Could not verify git worktree support.",
         )
 
-    # Check .worktrees directory is writable (or can be created).
-    worktrees_dir = p / ".worktrees"
+    # Resolve the worktree root directory.
+    from capsaicin.workspace import resolve_worktree_root
+    from capsaicin.config import WorkspaceConfig
+
+    ws_cfg = WorkspaceConfig(enabled=True, worktree_root=worktree_root)
+    worktrees_dir = resolve_worktree_root(p.resolve(), ws_cfg)
+
     if worktrees_dir.exists() and not worktrees_dir.is_dir():
         return CheckResult(
             name="workspace_readiness",
             status="fail",
-            message=".worktrees exists but is not a directory.",
+            message="Worktree root exists but is not a directory.",
             detail=f"Remove or rename {worktrees_dir} to allow workspace isolation.",
         )
 
@@ -320,17 +330,20 @@ def check_workspace_readiness(
             return CheckResult(
                 name="workspace_readiness",
                 status="fail",
-                message=".worktrees directory is not writable.",
+                message="Worktree root directory is not writable.",
                 detail=f"Check filesystem permissions on {worktrees_dir}.",
             )
     else:
-        # Directory does not exist — check parent is writable.
-        if not os.access(p, os.W_OK):
+        # Directory does not exist — check nearest existing parent is writable.
+        check_dir = worktrees_dir
+        while not check_dir.exists():
+            check_dir = check_dir.parent
+        if not os.access(check_dir, os.W_OK):
             return CheckResult(
                 name="workspace_readiness",
                 status="fail",
-                message="Cannot create .worktrees directory.",
-                detail=f"Check filesystem permissions on {p}.",
+                message="Cannot create worktree root directory.",
+                detail=f"Check filesystem permissions on {check_dir}.",
             )
 
     # Check git metadata is writable (needed for refs during worktree add).
@@ -384,6 +397,7 @@ def run_preflight(
     repo_path: str | Path,
     adapter_command: str = "claude",
     workspace_enabled: bool = False,
+    worktree_root: str | None = None,
 ) -> PreflightReport:
     """Run all preflight checks and return a structured report."""
     report = PreflightReport()
@@ -392,5 +406,9 @@ def run_preflight(
     report.checks.append(check_is_git_repo(repo_path))
     report.checks.append(check_working_tree_clean(repo_path))
     report.checks.append(check_claude_permissions(repo_path))
-    report.checks.append(check_workspace_readiness(repo_path, workspace_enabled))
+    report.checks.append(
+        check_workspace_readiness(
+            repo_path, workspace_enabled, worktree_root=worktree_root
+        )
+    )
     return report

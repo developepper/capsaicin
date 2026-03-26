@@ -93,9 +93,18 @@ def insert_epic(conn, epic_id="e1", project_id="p1"):
 # ---------------------------------------------------------------------------
 
 
-def default_ws_config():
-    """Return a standard enabled WorkspaceConfig."""
-    return WorkspaceConfig(enabled=True, branch_prefix="capsaicin/", auto_cleanup=True)
+def default_ws_config(worktree_root=None):
+    """Return a standard enabled WorkspaceConfig.
+
+    When *worktree_root* is given it overrides the default home-directory
+    location, keeping tests from polluting ``~/.capsaicin/worktrees/``.
+    """
+    return WorkspaceConfig(
+        enabled=True,
+        branch_prefix="capsaicin/",
+        auto_cleanup=True,
+        worktree_root=str(worktree_root) if worktree_root is not None else None,
+    )
 
 
 def enable_workspace_config(config: Config) -> Config:
@@ -116,13 +125,19 @@ def enable_workspace_config(config: Config) -> Config:
 
 
 def enable_workspace(env) -> None:
-    """Enable workspace isolation in the project config.toml file."""
+    """Enable workspace isolation in the project config.toml file.
+
+    Sets ``worktree_root`` to a sibling of the test repo so that worktrees
+    stay inside pytest's tmp_path and never pollute ``~/.capsaicin/``.
+    """
+    wt_root = env["repo"].parent / "worktrees"
     config_path = env["project_dir"] / "config.toml"
     text = config_path.read_text()
     if "[workspace]" not in text:
         text += (
             "\n[workspace]\nenabled = true\n"
             'branch_prefix = "capsaicin/"\nauto_cleanup = true\n'
+            f'worktree_root = "{wt_root}"\n'
         )
     else:
         text = text.replace("enabled = false", "enabled = true")
@@ -153,11 +168,12 @@ def create_workspace_for_ticket(env, ticket_id):
     """
     from capsaicin.workspace import WorkspaceReady, create_workspace
 
+    wt_root = env["repo"].parent / "worktrees"
     result = create_workspace(
         env["conn"],
         env["repo"],
         env["project_id"],
-        default_ws_config(),
+        default_ws_config(worktree_root=wt_root),
         ticket_id=ticket_id,
     )
     assert isinstance(result, WorkspaceReady), (

@@ -18,11 +18,13 @@ async def doctor_page(request: Request) -> HTMLResponse:
     adapter_command = "claude"
     repo_path = None
     workspace_enabled = False
+    worktree_root = None
     try:
         config = load_config(config_path)
         repo_path = config.project.repo_path
         adapter_command = config.implementer.command
         workspace_enabled = config.workspace.enabled
+        worktree_root = config.workspace.worktree_root
     except (ConfigError, Exception):
         pass
 
@@ -35,7 +37,10 @@ async def doctor_page(request: Request) -> HTMLResponse:
         )
 
     report = run_preflight(
-        repo_path, adapter_command=adapter_command, workspace_enabled=workspace_enabled
+        repo_path,
+        adapter_command=adapter_command,
+        workspace_enabled=workspace_enabled,
+        worktree_root=worktree_root,
     )
 
     return templates.TemplateResponse(
