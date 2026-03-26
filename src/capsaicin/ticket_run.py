@@ -101,13 +101,14 @@ def _insert_impl_run(
     attempt_number: int,
     prompt: str,
     run_request_json: str,
+    workspace_id: str | None = None,
 ) -> None:
     """Insert an agent_runs row with exit_status='running'."""
     conn.execute(
         "INSERT INTO agent_runs "
         "(id, ticket_id, role, mode, cycle_number, attempt_number, "
-        "exit_status, prompt, run_request, started_at) "
-        "VALUES (?, ?, 'implementer', 'read-write', ?, ?, 'running', ?, ?, ?)",
+        "exit_status, prompt, run_request, workspace_id, started_at) "
+        "VALUES (?, ?, 'implementer', 'read-write', ?, ?, 'running', ?, ?, ?, ?)",
         (
             run_id,
             ticket_id,
@@ -115,6 +116,7 @@ def _insert_impl_run(
             attempt_number,
             prompt,
             run_request_json,
+            workspace_id,
             now_utc(),
         ),
     )
@@ -173,10 +175,12 @@ def run_implementation_pipeline(
     from_status = ticket["status"]
 
     # --- Resolve workspace path (isolation routing) ---
-    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
-    if working_dir is None:
+    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    if resolved is None:
         set_idle(conn, project_id)
         return "blocked"
+    working_dir = resolved.working_dir
+    workspace_id = resolved.workspace_id
 
     # --- Cycle-limit shortcut (revise only) ---
     if from_status == "revise":
@@ -237,6 +241,7 @@ def run_implementation_pipeline(
         log_path=log_path,
         epic_id=epic_id,
         working_dir=working_dir,
+        workspace_id=workspace_id,
     )
 
 
@@ -251,6 +256,7 @@ def invoke_impl_with_retries(
     log_path: str | Path | None = None,
     epic_id: str | None = None,
     working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> str:
     """Invoke the adapter, handling retries on failure/timeout.
 
@@ -275,6 +281,7 @@ def invoke_impl_with_retries(
             log_path=log_path,
             epic_id=epic_id,
             working_dir=working_dir,
+            workspace_id=workspace_id,
         )
 
         if not outcome.should_retry:
@@ -318,6 +325,7 @@ def _impl_invoke_once(
     log_path: str | Path | None = None,
     epic_id: str | None = None,
     working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> PipelineOutcome:
     """Single adapter invocation. Returns a PipelineOutcome."""
     if working_dir is None:
@@ -385,6 +393,7 @@ def _impl_invoke_once(
         attempt_number,
         prompt,
         run_request.to_json(),
+        workspace_id=workspace_id,
     )
 
     # Record which evidence was included in this run's prompt (T09)

@@ -126,10 +126,12 @@ def _handle_interrupted_run(
         )
 
     # Resolve workspace path for retry invocations.
-    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
-    if working_dir is None:
+    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    if resolved is None:
         set_idle(conn, project_id)
         return "blocked"
+    working_dir = resolved.working_dir
+    workspace_id = resolved.workspace_id
 
     if role == "implementer":
         increment_impl_attempt(conn, ticket_id)
@@ -162,6 +164,7 @@ def _handle_interrupted_run(
             log_path=log_path,
             epic_id=epic_id,
             working_dir=working_dir,
+            workspace_id=workspace_id,
         )
     elif role == "reviewer":
         increment_review_attempt(conn, ticket_id)
@@ -190,6 +193,7 @@ def _handle_interrupted_run(
             log_path=log_path,
             epic_id=epic_id,
             working_dir=working_dir,
+            workspace_id=workspace_id,
         )
     else:
         # Unknown role — just clean up
@@ -220,11 +224,12 @@ def _handle_finished_impl_run(
         return ticket["status"]
 
     # Resolve workspace path so diff capture uses the isolated worktree.
-    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
-    if working_dir is None:
+    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    if resolved is None:
         finish_run(conn, project_id)
         set_idle(conn, project_id)
         return "blocked"
+    working_dir = resolved.working_dir
 
     outcome = handle_run_result(
         conn=conn,
@@ -283,11 +288,12 @@ def _handle_finished_review_run(
         return ticket["status"]
 
     # Resolve workspace path so contract-violation check uses the isolated worktree.
-    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
-    if working_dir is None:
+    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    if resolved is None:
         finish_run(conn, project_id)
         set_idle(conn, project_id)
         return "blocked"
+    working_dir = resolved.working_dir
 
     impl_run_id = get_impl_run_id(conn, ticket_id)
     result = _reconstruct_run_result(run)

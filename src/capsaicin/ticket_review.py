@@ -102,13 +102,14 @@ def _insert_reviewer_run(
     prompt: str,
     run_request_json: str,
     diff_context: str,
+    workspace_id: str | None = None,
 ) -> None:
     """Insert an agent_runs row with exit_status='running' for a reviewer."""
     conn.execute(
         "INSERT INTO agent_runs "
         "(id, ticket_id, role, mode, cycle_number, attempt_number, "
-        "exit_status, prompt, run_request, diff_context, started_at) "
-        "VALUES (?, ?, 'reviewer', 'read-only', ?, ?, 'running', ?, ?, ?, ?)",
+        "exit_status, prompt, run_request, diff_context, workspace_id, started_at) "
+        "VALUES (?, ?, 'reviewer', 'read-only', ?, ?, 'running', ?, ?, ?, ?, ?)",
         (
             run_id,
             ticket_id,
@@ -117,6 +118,7 @@ def _insert_reviewer_run(
             prompt,
             run_request_json,
             diff_context,
+            workspace_id,
             now_utc(),
         ),
     )
@@ -179,10 +181,12 @@ def run_review_pipeline(
     ticket_id = ticket["id"]
 
     # --- Resolve workspace path (isolation routing) ---
-    working_dir = resolve_or_block(conn, config, ticket_id, log_path)
-    if working_dir is None:
+    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    if resolved is None:
         set_idle(conn, project_id)
         return "blocked"
+    working_dir = resolved.working_dir
+    workspace_id = resolved.workspace_id
 
     # --- Find the implementation run for drift/baseline checks ---
     impl_run_id = get_impl_run_id(conn, ticket_id)
@@ -201,6 +205,7 @@ def run_review_pipeline(
         log_path=log_path,
         epic_id=epic_id,
         working_dir=working_dir,
+        workspace_id=workspace_id,
     )
 
 
@@ -227,6 +232,7 @@ def invoke_review_with_retries(
     log_path: str | Path | None = None,
     epic_id: str | None = None,
     working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> str:
     """Invoke the reviewer adapter, handling retries on errors.
 
@@ -280,6 +286,7 @@ def invoke_review_with_retries(
             log_path=log_path,
             epic_id=epic_id,
             working_dir=working_dir,
+            workspace_id=workspace_id,
         )
 
         if not outcome.should_retry:
@@ -331,6 +338,7 @@ def _review_invoke_once(
     log_path: str | Path | None = None,
     epic_id: str | None = None,
     working_dir: str | Path | None = None,
+    workspace_id: str | None = None,
 ) -> PipelineOutcome:
     """Single reviewer invocation. Returns a PipelineOutcome."""
     if working_dir is None:
@@ -404,6 +412,7 @@ def _review_invoke_once(
         prompt,
         run_request.to_json(),
         impl_diff.diff_text,
+        workspace_id=workspace_id,
     )
 
     # Record which evidence was included in this run's prompt (T09)

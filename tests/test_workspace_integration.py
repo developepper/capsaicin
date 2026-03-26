@@ -284,12 +284,102 @@ class TestWorkspaceFailureModes:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.skip(reason="workspace_id not yet threaded into run insertion")
 class TestWorkspaceIdOnRuns:
-    """Placeholder: agent_runs.workspace_id should be populated during runs."""
+    """agent_runs.workspace_id should be populated during runs."""
 
     def test_workspace_id_linked_on_impl_run(self, project_env):
-        pass
+        env = project_env
+        enable_workspace(env)
+        commit_setup(env)
+        config = load_config(env["project_dir"] / "config.toml")
+
+        tid = add_ticket(env, criteria=["impl works"])
+        ticket = get_ticket(env["conn"], tid)
+
+        impl_adapter = WorkspaceDiffAdapter()
+        final = run_implementation_pipeline(
+            conn=env["conn"],
+            project_id=env["project_id"],
+            ticket=ticket,
+            config=config,
+            adapter=impl_adapter,
+            log_path=env["log_path"],
+        )
+        assert final == "in-review"
+
+        # The agent_runs row should have a non-NULL workspace_id
+        run_row = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs WHERE ticket_id = ? AND role = 'implementer'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert run_row is not None
+        assert run_row["workspace_id"] is not None
+
+        # workspace_id should match the active workspace for this ticket
+        ws_row = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM workspaces WHERE ticket_id = ? AND status = 'active'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert ws_row is not None
+        assert run_row["workspace_id"] == ws_row["id"]
+
+        # Also verify reviewer run gets workspace_id
+        ticket = get_ticket(env["conn"], tid)
+        reviewer = _PassReviewer()
+        final = run_review_pipeline(
+            conn=env["conn"],
+            project_id=env["project_id"],
+            ticket=ticket,
+            config=config,
+            adapter=reviewer,
+            log_path=env["log_path"],
+        )
+        assert final == "human-gate"
+
+        review_row = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs WHERE ticket_id = ? AND role = 'reviewer'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert review_row is not None
+        assert review_row["workspace_id"] is not None
+        assert review_row["workspace_id"] == ws_row["id"]
 
     def test_workspace_id_null_without_isolation(self, project_env):
-        pass
+        env = project_env
+        tid = add_ticket(env, criteria=["impl works"])
+        ticket = get_ticket(env["conn"], tid)
+
+        impl_adapter = DiffProducingAdapter(env["repo"])
+        final = run_implementation_pipeline(
+            conn=env["conn"],
+            project_id=env["project_id"],
+            ticket=ticket,
+            config=env["config"],
+            adapter=impl_adapter,
+            log_path=env["log_path"],
+        )
+        assert final == "in-review"
+
+        # workspace_id should be NULL when isolation is disabled
+        run_row = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs WHERE ticket_id = ? AND role = 'implementer'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert run_row is not None
+        assert run_row["workspace_id"] is None

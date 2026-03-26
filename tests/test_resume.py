@@ -1151,6 +1151,110 @@ class TestResumeWithWorkspace:
         assert diff_row is not None
         assert "workspace change" in diff_row["diff_text"]
 
+    def test_resume_interrupted_impl_persists_workspace_id(self, project_env):
+        """Resumed interrupted impl run writes workspace_id to the new agent_runs row."""
+        env = project_env
+        tid = _make_implementing_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        from pathlib import Path
+
+        (Path(ws.worktree_path) / "impl.txt").write_text("ws change\n")
+
+        env["conn"].execute(
+            "UPDATE tickets SET current_impl_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        # The retried agent_runs row (not the original seeded one) should
+        # have a non-NULL workspace_id matching the active workspace.
+        rows = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'implementer' "
+                "ORDER BY started_at DESC",
+                (tid,),
+            )
+            .fetchall()
+        )
+        # At least the retry row exists
+        assert len(rows) >= 2
+        retry_row = rows[0]
+        assert retry_row["workspace_id"] is not None
+
+        ws_row = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM workspaces WHERE ticket_id = ? AND status = 'active'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert retry_row["workspace_id"] == ws_row["id"]
+
+    def test_resume_interrupted_reviewer_persists_workspace_id(self, project_env):
+        """Resumed interrupted reviewer run writes workspace_id to the new agent_runs row."""
+        env = project_env
+        tid = _make_in_review_ticket(env)
+        config, ws = _enable_and_prepare_workspace(env, tid)
+
+        # Make the stored impl diff empty so it matches the clean worktree,
+        # avoiding WorkspaceDriftError on the retry drift check.
+        env["conn"].execute(
+            "UPDATE run_diffs SET diff_text = '' WHERE run_id = 'impl-run-1'"
+        )
+        env["conn"].execute(
+            "UPDATE tickets SET current_review_attempt = 0 WHERE id = ?", (tid,)
+        )
+        env["conn"].commit()
+
+        adapter = MockAdapter()
+        resume_pipeline(
+            env["conn"],
+            env["project_id"],
+            config,
+            adapter,
+            adapter,
+            env["log_path"],
+        )
+
+        # The retried agent_runs row (not the original seeded one) should
+        # have a non-NULL workspace_id matching the active workspace.
+        rows = (
+            env["conn"]
+            .execute(
+                "SELECT workspace_id FROM agent_runs "
+                "WHERE ticket_id = ? AND role = 'reviewer' "
+                "ORDER BY started_at DESC",
+                (tid,),
+            )
+            .fetchall()
+        )
+        assert len(rows) >= 2
+        retry_row = rows[0]
+        assert retry_row["workspace_id"] is not None
+
+        ws_row = (
+            env["conn"]
+            .execute(
+                "SELECT id FROM workspaces WHERE ticket_id = ? AND status = 'active'",
+                (tid,),
+            )
+            .fetchone()
+        )
+        assert retry_row["workspace_id"] == ws_row["id"]
+
     def test_resume_without_workspace_uses_base_repo(self, project_env):
         """With workspace.enabled=False, resume uses the base repo path."""
         env = project_env

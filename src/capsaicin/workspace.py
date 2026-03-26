@@ -84,6 +84,18 @@ class WorkspaceReady:
 WorkspaceResult = WorkspaceReady | WorkspaceRecovery
 
 
+@dataclass(frozen=True)
+class ResolvedPath:
+    """Result of resolving the execution path for a pipeline run.
+
+    Carries both the working directory and the optional workspace ID so
+    callers can thread the FK into ``agent_runs`` rows.
+    """
+
+    working_dir: str
+    workspace_id: str | None = None
+
+
 class WorkspaceBlockedError(Exception):
     """Raised when workspace acquisition fails and the pipeline must stop."""
 
@@ -467,7 +479,7 @@ def resolve_execution_path(
     *,
     ticket_id: str | None = None,
     epic_id: str | None = None,
-) -> str:
+) -> ResolvedPath:
     """Return the effective working directory for a pipeline run.
 
     When workspace isolation is enabled (``config.workspace.enabled``),
@@ -479,7 +491,7 @@ def resolve_execution_path(
     signal to stop the pipeline with a blocked or human-gate outcome.
     """
     if not config.workspace.enabled:
-        return config.project.repo_path
+        return ResolvedPath(working_dir=config.project.repo_path)
 
     # Look up the project_id from the DB.
     row = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()
@@ -496,7 +508,10 @@ def resolve_execution_path(
     if isinstance(result, WorkspaceRecovery):
         raise WorkspaceBlockedError(result)
 
-    return result.worktree_path
+    return ResolvedPath(
+        working_dir=result.worktree_path,
+        workspace_id=result.workspace_id,
+    )
 
 
 def resolve_or_block(
@@ -504,14 +519,14 @@ def resolve_or_block(
     config: Config,
     ticket_id: str,
     log_path: str | Path | None = None,
-) -> str | None:
+) -> ResolvedPath | None:
     """Resolve the execution path, blocking the ticket on workspace failure.
 
     Convenience wrapper around :func:`resolve_execution_path` that catches
     ``WorkspaceBlockedError`` and transitions the ticket to ``blocked``
     with the appropriate reason.
 
-    Returns the working directory string on success, or ``None`` if the
+    Returns a :class:`ResolvedPath` on success, or ``None`` if the
     ticket was blocked.  When ``None`` is returned the caller is
     responsible for any remaining orchestrator cleanup (e.g.
     ``finish_run`` / ``set_idle``) before returning ``"blocked"``.
