@@ -525,7 +525,7 @@ def _log_workspace_error(ticket_id: str, exc) -> None:
         "missing_worktree": (
             "Workspace worktree is missing or unregistered. "
             "Use the 'Recover Workspace' action on the ticket detail page, "
-            "or run: capsaicin ticket workspace recover"
+            "or run: capsaicin workspace recover"
         ),
         "branch_drift": (
             "Workspace branch has diverged from the expected base. "

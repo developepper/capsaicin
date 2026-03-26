@@ -22,12 +22,12 @@ from capsaicin.workspace import (
     validate_workspace,
 )
 from tests.workspace_helpers import (
-    default_ws_config as _default_ws_config,
-    init_git_repo as _init_git_repo,
-    insert_epic as _insert_epic,
-    insert_project as _insert_project,
-    insert_ticket as _insert_ticket,
-    make_workspace_conn as _make_conn,
+    default_ws_config,
+    init_git_repo,
+    insert_epic,
+    insert_project,
+    insert_ticket,
+    make_workspace_conn,
 )
 
 
@@ -41,13 +41,13 @@ class TestCreateWorkspace:
 
     def test_create_workspace_happy_path(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
 
         assert isinstance(result, WorkspaceReady)
@@ -67,13 +67,13 @@ class TestCreateWorkspace:
 
     def test_create_workspace_for_epic(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_epic(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_epic(conn)
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), epic_id="e1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), epic_id="e1"
         )
 
         assert isinstance(result, WorkspaceReady)
@@ -81,10 +81,10 @@ class TestCreateWorkspace:
 
     def test_does_not_mutate_active_checkout(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         # Record the active branch before workspace creation.
         before = subprocess.run(
@@ -95,7 +95,7 @@ class TestCreateWorkspace:
         ).stdout.strip()
 
         create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
 
         after = subprocess.run(
@@ -109,16 +109,16 @@ class TestCreateWorkspace:
 
     def test_dirty_base_repo_returns_recovery(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         # Dirty the repo.
         (repo / "dirty.txt").write_text("uncommitted\n")
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
 
         assert isinstance(result, WorkspaceRecovery)
@@ -135,11 +135,11 @@ class TestCreateWorkspace:
 
     def test_branch_already_exists_returns_branch_drift(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn, ticket_id="t1")
-        _insert_ticket(conn, ticket_id="t2")
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn, ticket_id="t1")
+        insert_ticket(conn, ticket_id="t2")
 
         # Pre-create the branch that create_workspace would try to use.
         subprocess.run(
@@ -150,7 +150,7 @@ class TestCreateWorkspace:
         )
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t2"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t2"
         )
 
         assert isinstance(result, WorkspaceRecovery)
@@ -158,32 +158,32 @@ class TestCreateWorkspace:
         assert result.action == RecoveryAction.recreate
 
     def test_requires_ticket_or_epic(self):
-        conn = _make_conn()
-        _insert_project(conn)
+        conn = make_workspace_conn()
+        insert_project(conn)
 
         with pytest.raises(ValueError, match="Either ticket_id or epic_id"):
-            create_workspace(conn, "/tmp", "p1", _default_ws_config())
+            create_workspace(conn, "/tmp", "p1", default_ws_config())
 
     def test_rejects_both_ticket_and_epic(self):
-        conn = _make_conn()
-        _insert_project(conn)
+        conn = make_workspace_conn()
+        insert_project(conn)
 
         with pytest.raises(ValueError, match="Only one"):
             create_workspace(
                 conn,
                 "/tmp",
                 "p1",
-                _default_ws_config(),
+                default_ws_config(),
                 ticket_id="t1",
                 epic_id="e1",
             )
 
     def test_custom_branch_prefix(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         cfg = WorkspaceConfig(
             enabled=True,
@@ -207,13 +207,13 @@ class TestValidateWorkspace:
 
     def test_valid_workspace_returns_ready(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -223,13 +223,13 @@ class TestValidateWorkspace:
 
     def test_missing_worktree_returns_recovery(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -250,13 +250,13 @@ class TestValidateWorkspace:
         """An unrelated commit on the base branch should NOT invalidate
         the workspace — merge-base is unchanged."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -277,13 +277,13 @@ class TestValidateWorkspace:
         """A force-push / rebase that changes the merge-base DOES trigger
         branch_drift."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceReady)
 
@@ -306,15 +306,15 @@ class TestValidateWorkspace:
 
     def test_already_failed_workspace_surfaces_recovery(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         # Dirty repo to get a failed workspace.
         (repo / "dirty.txt").write_text("d\n")
         created = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(created, WorkspaceRecovery)
 
@@ -323,7 +323,7 @@ class TestValidateWorkspace:
         assert result.failure_reason == "dirty_base_repo"
 
     def test_nonexistent_workspace_raises(self):
-        conn = _make_conn()
+        conn = make_workspace_conn()
         with pytest.raises(KeyError, match="No workspace found"):
             validate_workspace(conn, "/tmp", "nonexistent")
 
@@ -355,45 +355,45 @@ class TestAcquireWorkspace:
 
     def test_creates_when_none_exists(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         result = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceReady)
 
     def test_reuses_active_workspace(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         first = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(first, WorkspaceReady)
 
         second = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(second, WorkspaceReady)
         assert second.workspace_id == first.workspace_id
 
     def test_creates_new_after_failed(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         # Dirty repo to get a failed workspace.
         (repo / "dirty.txt").write_text("d\n")
         failed = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(failed, WorkspaceRecovery)
 
@@ -403,7 +403,7 @@ class TestAcquireWorkspace:
         (repo / "dirty.txt").unlink(missing_ok=True)
 
         result = acquire_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceReady)
         assert result.workspace_id != failed.workspace_id
@@ -419,13 +419,13 @@ class TestRunSetupCommands:
 
     def test_successful_setup(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -441,13 +441,13 @@ class TestRunSetupCommands:
 
     def test_failed_setup_persists_detail(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -467,13 +467,13 @@ class TestRunSetupCommands:
 
     def test_stops_at_first_failure(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -491,13 +491,13 @@ class TestRunSetupCommands:
 
     def test_commands_run_in_worktree_directory(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -513,13 +513,13 @@ class TestRunSetupCommands:
 
     def test_empty_command_list_succeeds(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -527,20 +527,20 @@ class TestRunSetupCommands:
         assert isinstance(result, SetupSuccess)
 
     def test_nonexistent_workspace_raises(self):
-        conn = _make_conn()
+        conn = make_workspace_conn()
         with pytest.raises(KeyError, match="No workspace found"):
             run_setup_commands(conn, "nonexistent", ["echo hi"])
 
     def test_shell_metacharacters_not_executed(self, tmp_path):
         """Regression: shell metacharacters must be treated as literal args."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -559,13 +559,13 @@ class TestRunSetupCommands:
 
     def test_setup_failure_stderr_captured(self, tmp_path):
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -589,10 +589,10 @@ class TestTransactionalCreate:
         git worktree add completes, no committed row should exist because
         create_workspace itself rolls back the transaction."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         from unittest.mock import patch
 
@@ -610,7 +610,7 @@ class TestTransactionalCreate:
                     conn,
                     repo,
                     "p1",
-                    _default_ws_config(tmp_path / "wt"),
+                    default_ws_config(tmp_path / "wt"),
                     ticket_id="t1",
                 )
             except KeyboardInterrupt:
@@ -633,10 +633,10 @@ class TestTransactionalCreate:
         """If create_workspace is interrupted during the preflight check
         (before worktree add), the uncommitted insert is rolled back."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         from unittest.mock import patch
 
@@ -652,7 +652,7 @@ class TestTransactionalCreate:
                     conn,
                     repo,
                     "p1",
-                    _default_ws_config(tmp_path / "wt"),
+                    default_ws_config(tmp_path / "wt"),
                     ticket_id="t1",
                 )
             except KeyboardInterrupt:
@@ -671,13 +671,13 @@ class TestTransactionalCreate:
         """On success, both the INSERT and the active status are visible
         after a single commit at the end — not incrementally."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceReady)
 
@@ -691,10 +691,10 @@ class TestTransactionalCreate:
         """If create_workspace is interrupted during _branch_exists (after a
         failed git worktree add), the uncommitted insert is rolled back."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         from unittest.mock import patch
         import subprocess
@@ -721,7 +721,7 @@ class TestTransactionalCreate:
                     conn,
                     repo,
                     "p1",
-                    _default_ws_config(tmp_path / "wt"),
+                    default_ws_config(tmp_path / "wt"),
                     ticket_id="t1",
                 )
             except KeyboardInterrupt:
@@ -739,15 +739,15 @@ class TestTransactionalCreate:
     def test_failure_commits_failed_status(self, tmp_path):
         """On failure, the committed row has status=failed (not pending/setting_up)."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         (repo / "dirty.txt").write_text("uncommitted\n")
 
         result = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(result, WorkspaceRecovery)
 
@@ -767,13 +767,13 @@ class TestTransactionalCleanup:
         """If cleanup_workspace is interrupted during git operations,
         the tearing_down status is rolled back — not left pending."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
@@ -792,7 +792,7 @@ class TestTransactionalCleanup:
                     conn,
                     repo,
                     ws.workspace_id,
-                    _default_ws_config(tmp_path / "wt"),
+                    default_ws_config(tmp_path / "wt"),
                 )
             except KeyboardInterrupt:
                 pass
@@ -819,18 +819,18 @@ class TestTransactionalCleanup:
     def test_cleanup_commits_cleaned_status(self, tmp_path):
         """After cleanup, the committed row has status=cleaned."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
         ws = create_workspace(
-            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+            conn, repo, "p1", default_ws_config(tmp_path / "wt"), ticket_id="t1"
         )
         assert isinstance(ws, WorkspaceReady)
 
         result = cleanup_workspace(
-            conn, repo, ws.workspace_id, _default_ws_config(tmp_path / "wt")
+            conn, repo, ws.workspace_id, default_ws_config(tmp_path / "wt")
         )
         assert result is None
 
@@ -849,12 +849,12 @@ class TestRecoverStuckWorkspace:
     def test_recover_setting_up_workspace(self, tmp_path):
         """A workspace stuck in setting_up should be cleaned up and recreated."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
-        ws_cfg = _default_ws_config(tmp_path / "wt")
+        ws_cfg = default_ws_config(tmp_path / "wt")
 
         # Create a workspace, then manually set it to setting_up to simulate
         # a stuck intermediate state.
@@ -877,12 +877,12 @@ class TestRecoverStuckWorkspace:
         """A workspace stuck in tearing_down should have teardown completed
         without provisioning a new workspace."""
         repo = tmp_path / "repo"
-        _init_git_repo(repo)
-        conn = _make_conn()
-        _insert_project(conn)
-        _insert_ticket(conn)
+        init_git_repo(repo)
+        conn = make_workspace_conn()
+        insert_project(conn)
+        insert_ticket(conn)
 
-        ws_cfg = _default_ws_config(tmp_path / "wt")
+        ws_cfg = default_ws_config(tmp_path / "wt")
 
         # Create a workspace, then manually set it to tearing_down.
         ws = create_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")

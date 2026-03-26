@@ -114,9 +114,23 @@ def collect_workspace_summaries(
 
     .. note::
 
-       This issues one ``workspace_status`` call per ticket.  For dashboards
-       with many blocked/inbox tickets, a batch query would be more efficient.
-       TODO: add a batch variant once the workspace table supports it.
+       This issues one ``workspace_status`` call per ticket (N+1).  For
+       dashboards with many tickets a single batch query would be more
+       efficient.  Expected shape::
+
+           SELECT w.ticket_id, w.status, w.failure_reason
+           FROM workspaces w
+           INNER JOIN (
+               SELECT ticket_id, MAX(created_at) AS latest
+               FROM workspaces
+               WHERE ticket_id IN (?, ?, ...)
+                 AND status NOT IN ('cleaned', 'failed')
+               GROUP BY ticket_id
+           ) latest ON w.ticket_id = latest.ticket_id
+                   AND w.created_at = latest.latest
+
+       This replaces the per-ticket ``workspace_status`` loop with one
+       round-trip and avoids repeated git checks.
     """
     from capsaicin.app.commands.workspace_ops import workspace_status
 

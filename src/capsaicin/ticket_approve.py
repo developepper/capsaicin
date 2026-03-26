@@ -14,6 +14,7 @@ from capsaicin.activity_log import log_event
 from capsaicin.diff import capture_diff, capture_git_metadata, diffs_match, get_run_diff
 from capsaicin.orchestrator import set_idle
 from capsaicin.queries import generate_id, now_utc
+from capsaicin.config import Config
 from capsaicin.state_machine import transition_ticket
 
 
@@ -158,7 +159,9 @@ def check_workspace_matches(
     return _check_workspace_detailed(conn, repo_path, ticket_id).matches
 
 
-def _fetch_workspace_row(conn: sqlite3.Connection, ticket_id: str) -> dict | None:
+def _fetch_workspace_row(
+    conn: sqlite3.Connection, ticket_id: str
+) -> sqlite3.Row | None:
     """Fetch the most recent usable workspace row for *ticket_id*.
 
     Returns ``None`` when no workspace exists (excluding cleaned/failed).
@@ -175,7 +178,7 @@ def _fetch_workspace_row(conn: sqlite3.Connection, ticket_id: str) -> dict | Non
 
 
 def _resolve_workspace_info(
-    config, ws_row: dict | None
+    config: Config, ws_row: dict | None
 ) -> tuple[str, str | None, str | None]:
     """Resolve the effective path, workspace_id, and branch for approval.
 
@@ -202,7 +205,7 @@ def _resolve_workspace_info(
 
 def _check_workspace_with_isolation(
     conn: sqlite3.Connection,
-    config,
+    config: Config,
     ticket_id: str,
     ws_row: dict | None,
 ) -> _WorkspaceCheckDetail:
@@ -302,7 +305,7 @@ def approve_ticket(
     rationale: str | None = None,
     force: bool = False,
     log_path: str | Path | None = None,
-    config=None,
+    config: Config | None = None,
 ) -> str:
     """Execute the approval pipeline for a ticket.
 
