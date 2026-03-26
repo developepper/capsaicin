@@ -94,6 +94,7 @@ Workspace isolation is controlled by the optional `[workspace]` config section:
 enabled = true
 branch_prefix = "capsaicin/"
 auto_cleanup = true
+worktree_root = "/custom/path/for/worktrees"
 ```
 
 - `enabled` (default `false`) — when `false`, the orchestrator skips workspace
@@ -102,6 +103,9 @@ auto_cleanup = true
   (e.g. `capsaicin/ticket-T01`).
 - `auto_cleanup` (default `true`) — when `true`, cleaned workspaces have their
   branches deleted automatically during teardown.
+- `worktree_root` (default `null`) — optional override for the directory that
+  holds isolated worktrees. When unset, capsaicin uses
+  `~/.capsaicin/worktrees/<repo-hash>/`.
 
 When the `[workspace]` section is absent from `config.toml`, isolation is
 disabled and existing projects behave identically to before.

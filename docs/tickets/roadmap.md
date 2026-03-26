@@ -86,7 +86,8 @@ long-term arc; this section is just the next set of work streams to keep in
 focus.
 
 1. GitHub handoff and PR automation
-2. operator experience and workspace isolation for safer day-to-day execution
+2. operator experience and workflow polish on top of the shipped planning,
+   implementation, and workspace flows
 3. workflow policy and capability modeling to support cleaner multi-backend
    execution
 4. stronger verification, audit, and policy controls around planning and
@@ -124,31 +125,33 @@ Candidate areas:
 - better visibility into branch, commit, and workspace state while a loop is
   running
 
-## Workspace Isolation And Execution Safety
+## Workspace Follow-Ons And Handoff Integration
 
-Reduce the risk of workflow interference from unrelated local changes and
-prepare the system for stronger automation.
-
-This is a near-term operational priority because GitHub handoff, PR
-preparation, and safer automation all depend on stronger isolation than the
-current shared-worktree model.
+Workspace isolation and recovery are now part of the shipped local workflow.
+The remaining work is not "add worktrees" but "make isolated execution pay off
+everywhere downstream."
 
 Candidate areas:
 
-- branch or worktree management per ticket or approved implementation batch
-- configurable workspace setup commands for isolated execution environments
-- naming and lifecycle rules for branches and worktrees so cleanup is reliable
-- disposable or isolated execution environments for agent runs
-- better drift handling and workspace cleanliness checks before execution
-- safer recovery paths when local state and repo state diverge
-- explicit coupling between isolated workspaces and downstream handoff actions
+- configurable bootstrap/setup commands for isolated workspaces so project
+  dependencies and local tooling can be prepared automatically
+- workspace-aware commit and PR preparation that consumes the approval-time
+  metadata already being recorded
+- cleaner automatic cleanup hooks tied to completion, defer/abandon, and later
+  merge flows
+- stronger operator guidance for stuck setup or teardown states, including
+  better surfaced recovery recommendations
+- optional stronger sandboxing beyond git worktrees, such as disposable
+  environments for higher-risk execution
+- more efficient workspace read models for dashboards and ticket detail views
+  so the UI does not rely on repeated per-ticket status resolution
 
 ## GitHub Handoff And PR Automation
 
 Automate the work that currently begins at `pr-ready`.
 
-Workspace isolation is a prerequisite for reliable branch-aware handoff and PR
-automation.
+Workspace isolation is now in place, so the handoff work can assume
+branch/worktree-aware execution state instead of the old shared-worktree model.
 
 Candidate areas:
 
@@ -156,8 +159,8 @@ Candidate areas:
 - branch and commit preparation
 - automatic commit creation after successful implementation runs, with commit
   messages derived from ticket metadata and workflow context
-- branch-aware handoff that can carry ticket or epic context through to PR
-  preparation
+- branch-aware handoff that carries ticket, epic, and workspace context
+  through to PR preparation
 - `gh` integration for PR creation
 - merge, cleanup, and completion flows after human approval
 - explicit completion flow from `pr-ready` to `done`

@@ -127,6 +127,7 @@ working tree (the pre-isolation behavior).
 enabled = true
 branch_prefix = "capsaicin/"
 auto_cleanup = true
+worktree_root = "/custom/path/for/worktrees"
 ```
 
 | Key              | Type   | Default        | Description                                        |
@@ -134,6 +135,7 @@ auto_cleanup = true
 | `enabled`        | bool   | `false`        | Enable isolated worktree creation per ticket/epic.  |
 | `branch_prefix`  | string | `"capsaicin/"` | Prefix for worktree branch names.                   |
 | `auto_cleanup`   | bool   | `true`         | Delete branches automatically during teardown.      |
+| `worktree_root`  | string | `null`         | Optional root directory for isolated worktrees.     |
 
 See [workspace-lifecycle.md](./workspace-lifecycle.md) for lifecycle states,
 failure reasons, and transition rules.  See the

@@ -635,8 +635,8 @@ Behavior:
 - verify the repo path exists and is a git worktree
 - warn on a dirty working tree
 - verify local Claude permission settings required for write-capable runs
-- when workspace isolation is enabled, check worktree support, writable
-  `.worktrees` directory, and writable git metadata
+- when workspace isolation is enabled, check worktree support, the resolved
+  worktree root directory, and writable git metadata
 - exit non-zero when required checks fail
 
 ### `capsaicin workspace`

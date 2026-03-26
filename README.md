@@ -20,6 +20,7 @@ The current runtime is built around a local SQLite database, a `.capsaicin/` pro
 - initialize a project-local workflow state store
 - create tickets and acceptance criteria
 - declare ticket dependencies
+- optionally run tickets in isolated per-ticket/per-epic git worktrees
 - run implementation passes
 - run independent review passes
 - persist findings, retries, and decisions locally
@@ -67,6 +68,9 @@ Included:
 - `capsaicin ticket complete`
 - `capsaicin ticket defer`
 - `capsaicin ticket unblock`
+- `capsaicin workspace status`
+- `capsaicin workspace recover`
+- `capsaicin workspace cleanup`
 - `capsaicin status`
 - `capsaicin resume`
 - `capsaicin loop`
@@ -140,6 +144,22 @@ Important files:
 - `capsaicin.db`: canonical workflow state
 - `config.toml`: source-of-truth configuration
 - `activity.log`: append-only debug/event log
+
+## Optional Workspace Isolation
+
+When `[workspace] enabled = true` is set in the project config, `capsaicin`
+runs implementation, review, loop, and resume flows inside isolated git
+worktrees instead of the operator's active checkout.
+
+By default, those worktrees live under
+`~/.capsaicin/worktrees/<repo-hash>/`. You can override that location with
+`worktree_root` in `config.toml`.
+
+Operators can inspect and repair workspace state with:
+
+- `capsaicin workspace status TICKET_ID`
+- `capsaicin workspace recover TICKET_ID`
+- `capsaicin workspace cleanup TICKET_ID`
 
 ## Quick Start
 
@@ -469,6 +489,19 @@ Use this after:
 - an interrupted machine/session
 
 `capsaicin` uses the persisted orchestrator state and prior run records to decide whether to continue, retry, mark failure, or stop for human action.
+
+### `capsaicin workspace`
+
+Inspect or manage isolated worktrees for a ticket:
+
+```bash
+capsaicin workspace status TICKET_ID
+capsaicin workspace recover TICKET_ID
+capsaicin workspace cleanup TICKET_ID
+```
+
+Use these commands when workspace isolation is enabled and a ticket is blocked
+by missing worktrees, branch drift, setup failures, or cleanup conflicts.
 
 ### `capsaicin loop`
 
