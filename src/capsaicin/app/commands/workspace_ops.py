@@ -164,6 +164,13 @@ def workspace_recover(
         ticket_id=ticket_id,
     )
 
+    if result is None:
+        return WorkspaceActionResult(
+            ticket_id=ticket_id,
+            action="recovered",
+            detail="Interrupted teardown completed. No workspace provisioned.",
+        )
+
     if isinstance(result, WorkspaceReady):
         return WorkspaceActionResult(
             ticket_id=ticket_id,

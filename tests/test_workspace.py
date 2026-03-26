@@ -15,7 +15,9 @@ from capsaicin.workspace import (
     WorkspaceRecovery,
     WorkspaceReady,
     acquire_workspace,
+    cleanup_workspace,
     create_workspace,
+    recover_workspace,
     run_setup_commands,
     validate_workspace,
 )
@@ -541,3 +543,342 @@ class TestRunSetupCommands:
         )
         assert isinstance(result, SetupFailure)
         assert "error_msg" in result.stderr
+
+
+# ---------------------------------------------------------------------------
+# Transactional workspace creation (AC5: rollback on interruption)
+# ---------------------------------------------------------------------------
+
+
+class TestTransactionalCreate:
+    """Verify that create_workspace commits only once, at the end."""
+
+    def test_no_committed_row_before_worktree_add(self, tmp_path):
+        """If create_workspace is interrupted after the INSERT but before the
+        git worktree add completes, no committed row should exist because
+        create_workspace itself rolls back the transaction."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        from unittest.mock import patch
+
+        original_git = __import__("capsaicin.workspace", fromlist=["_git"])._git
+
+        def interrupting_git(args, cwd, timeout=30):
+            # The worktree add call is the one we want to interrupt.
+            if args[0] == "worktree" and args[1] == "add":
+                raise KeyboardInterrupt("simulated crash")
+            return original_git(args, cwd, timeout)
+
+        with patch("capsaicin.workspace._git", side_effect=interrupting_git):
+            try:
+                create_workspace(
+                    conn,
+                    repo,
+                    "p1",
+                    _default_ws_config(tmp_path / "wt"),
+                    ticket_id="t1",
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # create_workspace rolled back on interruption — the row is gone
+        # without any manual rollback from the caller.
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, (
+            "Row should not exist after interrupted create (auto-rollback)"
+        )
+
+        # An unrelated commit on the same connection must not resurface the row.
+        conn.execute("SELECT 1")
+        conn.commit()
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, "Row must not reappear after unrelated commit"
+
+    def test_no_committed_row_when_preflight_interrupted(self, tmp_path):
+        """If create_workspace is interrupted during the preflight check
+        (before worktree add), the uncommitted insert is rolled back."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        from unittest.mock import patch
+
+        def interrupting_clean_check(path):
+            raise KeyboardInterrupt("simulated crash during preflight")
+
+        with patch(
+            "capsaicin.workspace._working_tree_is_clean",
+            side_effect=interrupting_clean_check,
+        ):
+            try:
+                create_workspace(
+                    conn,
+                    repo,
+                    "p1",
+                    _default_ws_config(tmp_path / "wt"),
+                    ticket_id="t1",
+                )
+            except KeyboardInterrupt:
+                pass
+
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, "Row should not exist after interrupted preflight"
+
+        # An unrelated commit must not resurface the row.
+        conn.execute("SELECT 1")
+        conn.commit()
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, "Row must not reappear after unrelated commit"
+
+    def test_success_commits_all_at_once(self, tmp_path):
+        """On success, both the INSERT and the active status are visible
+        after a single commit at the end — not incrementally."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        result = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(result, WorkspaceReady)
+
+        # The row is active (both insert and status update committed together).
+        row = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (result.workspace_id,)
+        ).fetchone()
+        assert row["status"] == "active"
+
+    def test_no_committed_row_when_branch_check_interrupted(self, tmp_path):
+        """If create_workspace is interrupted during _branch_exists (after a
+        failed git worktree add), the uncommitted insert is rolled back."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        from unittest.mock import patch
+        import subprocess
+
+        original_git = __import__("capsaicin.workspace", fromlist=["_git"])._git
+
+        def failing_git(args, cwd, timeout=30):
+            if args[0] == "worktree" and args[1] == "add":
+                return subprocess.CompletedProcess(args, 1, "", "error")
+            return original_git(args, cwd, timeout)
+
+        def interrupting_branch_exists(repo, branch):
+            raise KeyboardInterrupt("simulated crash during branch check")
+
+        with (
+            patch("capsaicin.workspace._git", side_effect=failing_git),
+            patch(
+                "capsaicin.workspace._branch_exists",
+                side_effect=interrupting_branch_exists,
+            ),
+        ):
+            try:
+                create_workspace(
+                    conn,
+                    repo,
+                    "p1",
+                    _default_ws_config(tmp_path / "wt"),
+                    ticket_id="t1",
+                )
+            except KeyboardInterrupt:
+                pass
+
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, "Row should not exist after interrupted branch check"
+
+        # An unrelated commit must not resurface the row.
+        conn.execute("SELECT 1")
+        conn.commit()
+        row = conn.execute("SELECT * FROM workspaces WHERE ticket_id = 't1'").fetchone()
+        assert row is None, "Row must not reappear after unrelated commit"
+
+    def test_failure_commits_failed_status(self, tmp_path):
+        """On failure, the committed row has status=failed (not pending/setting_up)."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        (repo / "dirty.txt").write_text("uncommitted\n")
+
+        result = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(result, WorkspaceRecovery)
+
+        row = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (result.workspace_id,)
+        ).fetchone()
+        assert row["status"] == "failed"
+
+
+# ---------------------------------------------------------------------------
+# Transactional cleanup (AC2: single commit)
+# ---------------------------------------------------------------------------
+
+
+class TestTransactionalCleanup:
+    def test_cleanup_rollback_on_interruption(self, tmp_path):
+        """If cleanup_workspace is interrupted during git operations,
+        the tearing_down status is rolled back — not left pending."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(ws, WorkspaceReady)
+
+        from unittest.mock import patch
+
+        original_git = __import__("capsaicin.workspace", fromlist=["_git"])._git
+
+        def interrupting_git(args, cwd, timeout=30):
+            if args[0] == "worktree" and args[1] == "remove":
+                raise KeyboardInterrupt("simulated crash during teardown")
+            return original_git(args, cwd, timeout)
+
+        with patch("capsaicin.workspace._git", side_effect=interrupting_git):
+            try:
+                cleanup_workspace(
+                    conn,
+                    repo,
+                    ws.workspace_id,
+                    _default_ws_config(tmp_path / "wt"),
+                )
+            except KeyboardInterrupt:
+                pass
+
+        # The tearing_down status should have been rolled back — the
+        # workspace should still show its pre-cleanup status (active).
+        row = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (ws.workspace_id,)
+        ).fetchone()
+        assert row["status"] == "active", (
+            f"Expected 'active' after rollback, got '{row['status']}'"
+        )
+
+        # An unrelated commit must not persist tearing_down.
+        conn.execute("SELECT 1")
+        conn.commit()
+        row = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (ws.workspace_id,)
+        ).fetchone()
+        assert row["status"] == "active", (
+            "tearing_down must not reappear after unrelated commit"
+        )
+
+    def test_cleanup_commits_cleaned_status(self, tmp_path):
+        """After cleanup, the committed row has status=cleaned."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(ws, WorkspaceReady)
+
+        result = cleanup_workspace(
+            conn, repo, ws.workspace_id, _default_ws_config(tmp_path / "wt")
+        )
+        assert result is None
+
+        row = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (ws.workspace_id,)
+        ).fetchone()
+        assert row["status"] == "cleaned"
+
+
+# ---------------------------------------------------------------------------
+# AC6/AC7: recover_workspace handles stuck intermediate states
+# ---------------------------------------------------------------------------
+
+
+class TestRecoverStuckWorkspace:
+    def test_recover_setting_up_workspace(self, tmp_path):
+        """A workspace stuck in setting_up should be cleaned up and recreated."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        ws_cfg = _default_ws_config(tmp_path / "wt")
+
+        # Create a workspace, then manually set it to setting_up to simulate
+        # a stuck intermediate state.
+        ws = create_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
+        assert isinstance(ws, WorkspaceReady)
+        conn.execute(
+            "UPDATE workspaces SET status = 'setting_up', "
+            "failure_reason = NULL, failure_detail = NULL WHERE id = ?",
+            (ws.workspace_id,),
+        )
+        conn.commit()
+
+        result = recover_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
+
+        assert isinstance(result, WorkspaceReady)
+        # Should be a new workspace, not the stuck one.
+        assert result.workspace_id != ws.workspace_id
+
+    def test_recover_tearing_down_workspace(self, tmp_path):
+        """A workspace stuck in tearing_down should have teardown completed
+        without provisioning a new workspace."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        ws_cfg = _default_ws_config(tmp_path / "wt")
+
+        # Create a workspace, then manually set it to tearing_down.
+        ws = create_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
+        assert isinstance(ws, WorkspaceReady)
+        conn.execute(
+            "UPDATE workspaces SET status = 'tearing_down', "
+            "failure_reason = NULL, failure_detail = NULL WHERE id = ?",
+            (ws.workspace_id,),
+        )
+        conn.commit()
+
+        result = recover_workspace(conn, repo, "p1", ws_cfg, ticket_id="t1")
+
+        # Teardown completed — no new workspace provisioned.
+        assert result is None
+
+        # The old workspace should be cleaned.
+        old = conn.execute(
+            "SELECT status FROM workspaces WHERE id = ?", (ws.workspace_id,)
+        ).fetchone()
+        assert old["status"] == "cleaned"
+
+        # No new workspace was created.
+        count = conn.execute(
+            "SELECT COUNT(*) as c FROM workspaces WHERE ticket_id = 't1' "
+            "AND status != 'cleaned'"
+        ).fetchone()["c"]
+        assert count == 0, (
+            "No active workspace should exist after tearing_down recovery"
+        )

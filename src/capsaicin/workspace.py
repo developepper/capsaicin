@@ -201,7 +201,6 @@ def _insert_workspace(
             now,
         ),
     )
-    conn.commit()
 
 
 def _update_status(
@@ -216,7 +215,6 @@ def _update_status(
         "failure_detail = ?, updated_at = ? WHERE id = ?",
         (status, failure_reason, failure_detail, now_utc(), workspace_id),
     )
-    conn.commit()
 
 
 def _load_workspace(conn: sqlite3.Connection, workspace_id: str) -> dict | None:
@@ -328,40 +326,50 @@ def create_workspace(
         base_ref=base_ref,
     )
 
-    # Pre-setup check: base repo must have a clean working tree.
-    if not _working_tree_is_clean(repo):
-        detail = "The base repository has uncommitted changes."
-        _update_status(conn, workspace_id, "failed", "dirty_base_repo", detail)
-        return WorkspaceRecovery.for_reason(workspace_id, "dirty_base_repo", detail)
+    # Everything after the insert is wrapped in a rollback guard so that
+    # any interruption (KeyboardInterrupt, TimeoutExpired, etc.) between
+    # the insert and the final commit rolls back the uncommitted row.
+    try:
+        # Pre-setup check: base repo must have a clean working tree.
+        if not _working_tree_is_clean(repo):
+            detail = "The base repository has uncommitted changes."
+            _update_status(conn, workspace_id, "failed", "dirty_base_repo", detail)
+            conn.commit()
+            return WorkspaceRecovery.for_reason(workspace_id, "dirty_base_repo", detail)
 
-    # Transition to setting_up.
-    _update_status(conn, workspace_id, "setting_up")
+        # Transition to setting_up (not committed — rollback-safe).
+        _update_status(conn, workspace_id, "setting_up")
 
-    # Create the worktree with a new branch.
-    result = _git(
-        ["worktree", "add", "-b", branch_name, worktree_path, "HEAD"],
-        repo,
-    )
-    if result.returncode != 0:
-        stderr = result.stderr.strip()
-        # Distinguish branch-drift (branch already exists) from other errors.
-        if _branch_exists(repo, branch_name):
-            reason = "branch_drift"
-            detail = f"Branch '{branch_name}' already exists and may have diverged."
-        else:
-            reason = "setup_failure"
-            detail = f"git worktree add failed (exit {result.returncode}): {stderr}"
-        _update_status(conn, workspace_id, "failed", reason, detail)
-        return WorkspaceRecovery.for_reason(workspace_id, reason, detail)
+        result = _git(
+            ["worktree", "add", "-b", branch_name, worktree_path, "HEAD"],
+            repo,
+        )
 
-    # Transition to active.
-    _update_status(conn, workspace_id, "active")
+        if result.returncode != 0:
+            stderr = result.stderr.strip()
+            # Distinguish branch-drift (branch already exists) from other errors.
+            if _branch_exists(repo, branch_name):
+                reason = "branch_drift"
+                detail = f"Branch '{branch_name}' already exists and may have diverged."
+            else:
+                reason = "setup_failure"
+                detail = f"git worktree add failed (exit {result.returncode}): {stderr}"
+            _update_status(conn, workspace_id, "failed", reason, detail)
+            conn.commit()
+            return WorkspaceRecovery.for_reason(workspace_id, reason, detail)
 
-    return WorkspaceReady(
-        workspace_id=workspace_id,
-        worktree_path=worktree_path,
-        branch_name=branch_name,
-    )
+        # Transition to active.
+        _update_status(conn, workspace_id, "active")
+        conn.commit()
+
+        return WorkspaceReady(
+            workspace_id=workspace_id,
+            worktree_path=worktree_path,
+            branch_name=branch_name,
+        )
+    except BaseException:
+        conn.rollback()
+        raise
 
 
 def validate_workspace(
@@ -393,6 +401,7 @@ def validate_workspace(
     if not wt_path.is_dir():
         detail = f"Worktree path does not exist: {wt_path}"
         _update_status(conn, workspace_id, "failed", "missing_worktree", detail)
+        conn.commit()
         return WorkspaceRecovery.for_reason(workspace_id, "missing_worktree", detail)
 
     # Check worktree is still registered with git.
@@ -400,6 +409,7 @@ def validate_workspace(
     if str(wt_path) not in registered:
         detail = f"Worktree at {wt_path} is not registered with git."
         _update_status(conn, workspace_id, "failed", "missing_worktree", detail)
+        conn.commit()
         return WorkspaceRecovery.for_reason(workspace_id, "missing_worktree", detail)
 
     # Check branch hasn't drifted from recorded base_ref.
@@ -410,6 +420,7 @@ def validate_workspace(
             f"current {current_base[:12]}."
         )
         _update_status(conn, workspace_id, "failed", "branch_drift", detail)
+        conn.commit()
         return WorkspaceRecovery.for_reason(workspace_id, "branch_drift", detail)
 
     return WorkspaceReady(
@@ -588,51 +599,62 @@ def cleanup_workspace(
     wt_path = ws["worktree_path"]
     branch_name = ws["branch_name"]
 
-    # Transition to tearing_down.
+    # Transition to tearing_down (not committed yet — single commit at end).
     _update_status(conn, workspace_id, "tearing_down")
 
-    # Remove the worktree if it still exists.
-    if Path(wt_path).is_dir():
-        # Safety check: refuse to force-remove a worktree with uncommitted
-        # changes — surface cleanup_conflict so the operator can decide.
-        if not _working_tree_is_clean(wt_path):
-            detail = (
-                f"Worktree {wt_path} has uncommitted changes. "
-                "Commit or discard changes before cleanup."
-            )
-            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
-            return WorkspaceRecovery.for_reason(
-                workspace_id, "cleanup_conflict", detail
-            )
+    # All git operations are wrapped in a rollback guard so that an
+    # interruption (KeyboardInterrupt, TimeoutExpired, etc.) rolls back
+    # the uncommitted tearing_down status instead of leaving it pending.
+    try:
+        # Remove the worktree if it still exists.
+        if Path(wt_path).is_dir():
+            # Safety check: refuse to force-remove a worktree with uncommitted
+            # changes — surface cleanup_conflict so the operator can decide.
+            if not _working_tree_is_clean(wt_path):
+                detail = (
+                    f"Worktree {wt_path} has uncommitted changes. "
+                    "Commit or discard changes before cleanup."
+                )
+                _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+                conn.commit()
+                return WorkspaceRecovery.for_reason(
+                    workspace_id, "cleanup_conflict", detail
+                )
 
-        result = _git(["worktree", "remove", wt_path], repo)
-        if result.returncode != 0:
-            detail = (
-                f"git worktree remove failed (exit {result.returncode}): "
-                f"{result.stderr.strip()}"
-            )
-            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
-            return WorkspaceRecovery.for_reason(
-                workspace_id, "cleanup_conflict", detail
-            )
+            result = _git(["worktree", "remove", wt_path], repo)
+            if result.returncode != 0:
+                detail = (
+                    f"git worktree remove failed (exit {result.returncode}): "
+                    f"{result.stderr.strip()}"
+                )
+                _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+                conn.commit()
+                return WorkspaceRecovery.for_reason(
+                    workspace_id, "cleanup_conflict", detail
+                )
 
-    # Prune stale worktree references.
-    _git(["worktree", "prune"], repo)
+        # Prune stale worktree references.
+        _git(["worktree", "prune"], repo)
 
-    # Delete the branch if auto_cleanup is enabled and branch exists.
-    if ws_config.auto_cleanup and _branch_exists(repo, branch_name):
-        result = _git(["branch", "-D", branch_name], repo)
-        if result.returncode != 0:
-            detail = (
-                f"git branch -D failed (exit {result.returncode}): "
-                f"{result.stderr.strip()}"
-            )
-            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
-            return WorkspaceRecovery.for_reason(
-                workspace_id, "cleanup_conflict", detail
-            )
+        # Delete the branch if auto_cleanup is enabled and branch exists.
+        if ws_config.auto_cleanup and _branch_exists(repo, branch_name):
+            result = _git(["branch", "-D", branch_name], repo)
+            if result.returncode != 0:
+                detail = (
+                    f"git branch -D failed (exit {result.returncode}): "
+                    f"{result.stderr.strip()}"
+                )
+                _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+                conn.commit()
+                return WorkspaceRecovery.for_reason(
+                    workspace_id, "cleanup_conflict", detail
+                )
+    except BaseException:
+        conn.rollback()
+        raise
 
     _update_status(conn, workspace_id, "cleaned")
+    conn.commit()
     return None
 
 
@@ -644,26 +666,42 @@ def recover_workspace(
     *,
     ticket_id: str | None = None,
     epic_id: str | None = None,
-) -> WorkspaceResult:
+) -> WorkspaceResult | None:
     """Attempt to recover a failed workspace.
 
     Cleans up the failed workspace (if one exists) and creates a fresh
-    one.  Enforces the same safety checks as ``create_workspace``.
+    one.  A workspace stuck in ``tearing_down`` has its teardown
+    completed but is **not** reprovisioned (returns ``None``).
+    Enforces the same safety checks as ``create_workspace``.
     """
     existing = _find_active_workspace(
         conn, project_id, ticket_id=ticket_id, epic_id=epic_id
     )
 
-    # If an active workspace exists, validate it first — a healthy
-    # workspace should be preserved, matching acquire_workspace().
     if existing is not None:
-        validation = validate_workspace(conn, repo_path, existing["id"])
-        if isinstance(validation, WorkspaceReady):
-            return validation
-        # Validation failed — clean up before recreating.
-        recovery = cleanup_workspace(conn, repo_path, existing["id"], ws_config)
-        if recovery is not None:
-            return recovery
+        status = existing["status"]
+
+        # AC6/AC7: Handle workspaces stuck in intermediate states.
+        if status == "setting_up":
+            # Clean up partial state and recreate.
+            recovery = cleanup_workspace(conn, repo_path, existing["id"], ws_config)
+            if recovery is not None:
+                return recovery
+        elif status == "tearing_down":
+            # Complete the interrupted teardown — do not recreate.
+            recovery = cleanup_workspace(conn, repo_path, existing["id"], ws_config)
+            if recovery is not None:
+                return recovery
+            return None
+        else:
+            # Validate — a healthy workspace should be preserved.
+            validation = validate_workspace(conn, repo_path, existing["id"])
+            if isinstance(validation, WorkspaceReady):
+                return validation
+            # Validation failed — clean up before recreating.
+            recovery = cleanup_workspace(conn, repo_path, existing["id"], ws_config)
+            if recovery is not None:
+                return recovery
     else:
         # No active workspace — look for failed ones that need cleanup.
         if ticket_id is not None:
@@ -730,6 +768,7 @@ def run_setup_commands(
         except subprocess.TimeoutExpired:
             detail = f"Setup command timed out after {timeout}s: {cmd}"
             _update_status(conn, workspace_id, "failed", "setup_failure", detail)
+            conn.commit()
             return SetupFailure(
                 workspace_id=workspace_id,
                 command=cmd,
@@ -744,6 +783,7 @@ def run_setup_commands(
                 f"stderr: {stderr}"
             )
             _update_status(conn, workspace_id, "failed", "setup_failure", detail)
+            conn.commit()
             return SetupFailure(
                 workspace_id=workspace_id,
                 command=cmd,
