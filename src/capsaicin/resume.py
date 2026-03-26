@@ -126,7 +126,7 @@ def _handle_interrupted_run(
         )
 
     # Resolve workspace path for retry invocations.
-    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    resolved = resolve_or_block(conn, config, project_id, ticket_id, log_path)
     if resolved is None:
         set_idle(conn, project_id)
         return "blocked"
@@ -224,7 +224,7 @@ def _handle_finished_impl_run(
         return ticket["status"]
 
     # Resolve workspace path so diff capture uses the isolated worktree.
-    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    resolved = resolve_or_block(conn, config, project_id, ticket_id, log_path)
     if resolved is None:
         finish_run(conn, project_id)
         set_idle(conn, project_id)
@@ -288,7 +288,7 @@ def _handle_finished_review_run(
         return ticket["status"]
 
     # Resolve workspace path so contract-violation check uses the isolated worktree.
-    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    resolved = resolve_or_block(conn, config, project_id, ticket_id, log_path)
     if resolved is None:
         finish_run(conn, project_id)
         set_idle(conn, project_id)

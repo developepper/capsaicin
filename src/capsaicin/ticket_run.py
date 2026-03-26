@@ -175,7 +175,7 @@ def run_implementation_pipeline(
     from_status = ticket["status"]
 
     # --- Resolve workspace path (isolation routing) ---
-    resolved = resolve_or_block(conn, config, ticket_id, log_path)
+    resolved = resolve_or_block(conn, config, project_id, ticket_id, log_path)
     if resolved is None:
         set_idle(conn, project_id)
         return "blocked"

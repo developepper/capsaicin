@@ -476,6 +476,7 @@ def acquire_workspace(
 def resolve_execution_path(
     conn: sqlite3.Connection,
     config: Config,
+    project_id: str,
     *,
     ticket_id: str | None = None,
     epic_id: str | None = None,
@@ -492,10 +493,6 @@ def resolve_execution_path(
     """
     if not config.workspace.enabled:
         return ResolvedPath(working_dir=config.project.repo_path)
-
-    # Look up the project_id from the DB.
-    row = conn.execute("SELECT id FROM projects LIMIT 1").fetchone()
-    project_id = row["id"]
 
     result = acquire_workspace(
         conn,
@@ -517,6 +514,7 @@ def resolve_execution_path(
 def resolve_or_block(
     conn: sqlite3.Connection,
     config: Config,
+    project_id: str,
     ticket_id: str,
     log_path: str | Path | None = None,
 ) -> ResolvedPath | None:
@@ -534,7 +532,7 @@ def resolve_or_block(
     from capsaicin.state_machine import transition_ticket
 
     try:
-        return resolve_execution_path(conn, config, ticket_id=ticket_id)
+        return resolve_execution_path(conn, config, project_id, ticket_id=ticket_id)
     except WorkspaceBlockedError as exc:
         blocked_reason = "workspace_" + exc.recovery.failure_reason
         transition_ticket(
