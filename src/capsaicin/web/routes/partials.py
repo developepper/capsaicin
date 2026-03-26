@@ -11,6 +11,7 @@ from starlette.responses import HTMLResponse
 
 from capsaicin.app.queries.dashboard import (
     DashboardData,
+    collect_workspace_summaries,
     get_inbox_summary,
     get_orchestrator_summary,
     get_recent_runs,
@@ -38,9 +39,13 @@ async def partial_inbox(request: Request) -> HTMLResponse:
     conn = request.state.conn
     project_id = request.app.state.project_id
 
+    inbox = get_inbox_summary(conn, project_id)
+    config = load_config(request.app.state.config_path)
+
     data = DashboardData(
         total_tickets=0,
-        inbox=get_inbox_summary(conn, project_id),
+        inbox=inbox,
+        workspace_summaries=collect_workspace_summaries(conn, config, inbox.tickets),
     )
 
     return templates.TemplateResponse(
@@ -90,9 +95,13 @@ async def partial_blocked(request: Request) -> HTMLResponse:
     conn = request.state.conn
     project_id = request.app.state.project_id
 
+    blocked = get_blocked_tickets(conn, project_id)
+    config = load_config(request.app.state.config_path)
+
     data = DashboardData(
         total_tickets=0,
-        blocked_tickets=get_blocked_tickets(conn, project_id),
+        blocked_tickets=blocked,
+        workspace_summaries=collect_workspace_summaries(conn, config, blocked),
     )
 
     return templates.TemplateResponse(
@@ -124,10 +133,15 @@ async def partial_orchestrator(request: Request) -> HTMLResponse:
     conn = request.state.conn
     project_id = request.app.state.project_id
 
+    active = get_active_ticket(conn, project_id)
+    config = load_config(request.app.state.config_path)
+    relevant = [active] if active else []
+
     data = DashboardData(
         total_tickets=0,
         orchestrator=get_orchestrator_summary(conn, project_id),
-        active_ticket=get_active_ticket(conn, project_id),
+        active_ticket=active,
+        workspace_summaries=collect_workspace_summaries(conn, config, relevant),
     )
 
     return templates.TemplateResponse(
@@ -139,6 +153,8 @@ async def partial_orchestrator(request: Request) -> HTMLResponse:
 
 async def partial_ticket_content(request: Request) -> HTMLResponse:
     """Return the ticket detail content fragment for SSE-triggered refresh."""
+    from capsaicin.web.routes.tickets import _build_workspace_summary
+
     conn = request.state.conn
     ticket_id = request.path_params["ticket_id"]
 
@@ -160,6 +176,8 @@ async def partial_ticket_content(request: Request) -> HTMLResponse:
         config, conn=conn, ticket_id=ticket_id, epic_id=epic_id
     )
     overrides = get_overrides_for_ticket(conn, ticket_id)
+
+    data.workspace = _build_workspace_summary(conn, config, ticket_id)
 
     return templates.TemplateResponse(
         request,

@@ -17,6 +17,7 @@ from starlette.testclient import TestClient
 from capsaicin.app.queries.ticket_detail import (
     RunDiagnosticSummary,
     TicketDetailData,
+    WorkspaceSummary,
     get_ticket_detail,
 )
 from capsaicin.web.app import create_app
@@ -305,6 +306,119 @@ class TestTicketDetailRoute:
         assert "Back to dashboard" in resp.text
 
 
+# ---------------------------------------------------------------------------
+# Workspace state visibility (AC-1)
+# ---------------------------------------------------------------------------
+
+
+class TestWorkspaceSummaryReadModel:
+    """WorkspaceSummary dataclass validates expected field semantics."""
+
+    def test_active_workspace_summary(self):
+        ws = WorkspaceSummary(
+            isolation_mode="worktree",
+            status="active",
+            branch_name="capsaicin/t1",
+            worktree_path="/tmp/wt",
+        )
+        assert ws.isolation_mode == "worktree"
+        assert ws.status == "active"
+        assert not ws.needs_recovery
+        assert not ws.needs_cleanup
+
+    def test_failed_workspace_needs_recovery(self):
+        ws = WorkspaceSummary(
+            isolation_mode="none",
+            status="failed",
+            failure_reason="missing_worktree",
+            failure_detail="directory gone",
+            needs_recovery=True,
+            needs_cleanup=True,
+        )
+        assert ws.needs_recovery
+        assert ws.failure_reason == "missing_worktree"
+
+    def test_shared_mode_no_workspace_fields(self):
+        ws = WorkspaceSummary(isolation_mode="shared")
+        assert ws.status is None
+        assert ws.branch_name is None
+        assert not ws.needs_recovery
+
+
+class TestWorkspaceDetailRoute:
+    """Ticket detail page renders workspace state when isolation is active."""
+
+    def test_shared_workspace_section_shown(self, web_client):
+        """When workspace isolation is disabled, workspace panel shows shared mode."""
+        client, env = web_client
+        tid = add_ticket(env, title="Shared Mode")
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "workspace-panel" in resp.text
+        assert "shared" in resp.text
+
+    def test_workspace_section_with_active_workspace(self, web_client):
+        """When a workspace exists, detail page shows it."""
+        client, env = web_client
+        tid = add_ticket(env, title="Workspace View")
+
+        # Enable workspace isolation in config
+        _enable_workspace(env)
+
+        # Create a real workspace
+        ws = _create_workspace(env, tid)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "workspace-panel" in resp.text
+        assert "worktree" in resp.text
+        assert f"capsaicin/{tid}" in resp.text
+
+    def test_workspace_failure_shows_actionable_message(self, web_client):
+        """When workspace is failed, detail page shows specific failure guidance."""
+        client, env = web_client
+        tid = add_ticket(env, title="Failed WS")
+
+        _enable_workspace(env)
+        ws = _create_workspace(env, tid)
+
+        # Simulate workspace failure by removing the worktree
+        _break_worktree(env, ws.worktree_path)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "workspace-failure" in resp.text
+        assert "missing" in resp.text.lower() or "worktree" in resp.text.lower()
+
+    def test_workspace_recovery_button_shown(self, web_client):
+        """When workspace is failed, a Recover button is shown."""
+        client, env = web_client
+        tid = add_ticket(env, title="Recover Button")
+
+        _enable_workspace(env)
+        ws = _create_workspace(env, tid)
+        _break_worktree(env, ws.worktree_path)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "Recover Workspace" in resp.text
+        assert f"/tickets/{tid}/workspace/recover" in resp.text
+
+    def test_workspace_cleanup_button_on_active(self, web_client):
+        """Active workspace shows Clean Up button."""
+        client, env = web_client
+        tid = add_ticket(env, title="Cleanup Button")
+
+        _enable_workspace(env)
+        _create_workspace(env, tid)
+
+        resp = client.get(f"/tickets/{tid}")
+        assert resp.status_code == 200
+        assert "Clean Up Workspace" in resp.text
+        assert f"/tickets/{tid}/workspace/cleanup" in resp.text
+
+
 class TestDashboardToDetailNavigation:
     def test_dashboard_links_to_ticket_detail(self, web_client):
         client, env = web_client
@@ -462,3 +576,70 @@ def _move_to_blocked(env, ticket_id):
         reason="test",
         blocked_reason="implementation_failure",
     )
+
+
+def _enable_workspace(env):
+    """Enable workspace isolation in the project config file."""
+    config_path = env["project_dir"] / "config.toml"
+    text = config_path.read_text()
+    if "[workspace]" not in text:
+        text += '\n[workspace]\nenabled = true\nbranch_prefix = "capsaicin/"\nauto_cleanup = true\n'
+    else:
+        text = text.replace("enabled = false", "enabled = true")
+    config_path.write_text(text)
+
+
+def _create_workspace(env, ticket_id):
+    """Create a workspace for a ticket, returning the WorkspaceReady result.
+
+    Must be called *after* ``_enable_workspace`` since that modifies
+    config.toml — we need all file changes committed before worktree
+    creation or the dirty-base-repo check will reject it.
+    """
+    import subprocess
+
+    from capsaicin.config import WorkspaceConfig
+    from capsaicin.workspace import WorkspaceReady, create_workspace
+
+    # Ensure base repo is clean — project_env creates .capsaicin/ which
+    # contains the DB (continuously modified).  Gitignore it, then commit
+    # any remaining changes.
+    gitignore = env["repo"] / ".gitignore"
+    if not gitignore.exists() or ".capsaicin" not in gitignore.read_text():
+        with open(gitignore, "a") as f:
+            f.write("\n.capsaicin/\n")
+    subprocess.run(
+        ["git", "add", "-A"], cwd=env["repo"], check=True, capture_output=True
+    )
+    subprocess.run(
+        ["git", "commit", "-m", "setup"],
+        cwd=env["repo"],
+        check=True,
+        capture_output=True,
+    )
+
+    result = create_workspace(
+        env["conn"],
+        env["repo"],
+        env["project_id"],
+        WorkspaceConfig(enabled=True, branch_prefix="capsaicin/", auto_cleanup=True),
+        ticket_id=ticket_id,
+    )
+    assert isinstance(result, WorkspaceReady), (
+        f"Expected WorkspaceReady, got {type(result)}"
+    )
+    return result
+
+
+def _break_worktree(env, worktree_path):
+    """Unregister a worktree from git but leave an orphan directory."""
+    import subprocess
+    from pathlib import Path
+
+    subprocess.run(
+        ["git", "worktree", "remove", "--force", worktree_path],
+        cwd=env["repo"],
+        check=True,
+        capture_output=True,
+    )
+    Path(worktree_path).mkdir(parents=True)

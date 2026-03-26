@@ -258,8 +258,99 @@ class TestPartialRoutes:
 
 
 # ---------------------------------------------------------------------------
+# Workspace state on dashboard (AC-1)
+# ---------------------------------------------------------------------------
+
+
+class TestDashboardWorkspaceState:
+    def test_blocked_tickets_show_workspace_column(self, web_client):
+        """Dashboard blocked table includes Workspace column header."""
+        client, env = web_client
+        tid = add_ticket(env, title="Blocked WS")
+        _move_to_blocked(env, tid)
+
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Workspace" in resp.text
+
+    def test_shared_mode_shows_shared(self, web_client):
+        """When workspace isolation is disabled, blocked tickets show 'shared'."""
+        client, env = web_client
+        tid = add_ticket(env, title="Shared Blocked")
+        _move_to_blocked(env, tid)
+
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # The workspace column should show "shared" when isolation is disabled
+        assert "shared" in resp.text
+
+    def test_workspace_enabled_shows_isolation_mode_and_status(self, web_client):
+        """With workspace enabled, blocked tickets show isolation mode and status."""
+        client, env = web_client
+        tid = add_ticket(env, title="WS Blocked")
+        _move_to_blocked(env, tid)
+
+        _enable_workspace(env)
+
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "WS Blocked" in resp.text
+        # Workspace column should include the status category (e.g. "none" when
+        # no workspace record exists yet) via the workspace-status CSS class.
+        assert "workspace-status" in resp.text
+
+    def test_inbox_tickets_show_workspace_column(self, web_client):
+        """Dashboard inbox table includes Workspace column header."""
+        client, env = web_client
+        tid = add_ticket(env, title="Gate WS")
+        _move_to_human_gate(env, tid)
+
+        resp = client.get("/")
+        assert resp.status_code == 200
+        # Inbox table should have the Workspace column
+        assert "Gate WS" in resp.text
+        # Should show "shared" when workspace isolation is disabled
+        assert "shared" in resp.text
+
+    def test_inbox_workspace_enabled(self, web_client):
+        """With workspace enabled, inbox tickets show workspace status."""
+        client, env = web_client
+        tid = add_ticket(env, title="Gate WS Enabled")
+        _move_to_human_gate(env, tid)
+
+        _enable_workspace(env)
+
+        resp = client.get("/")
+        assert resp.status_code == 200
+        assert "Gate WS Enabled" in resp.text
+        assert "workspace-status" in resp.text
+
+    def test_partial_inbox_shows_workspace(self, web_client):
+        """The inbox partial includes workspace summaries."""
+        client, env = web_client
+        tid = add_ticket(env, title="Partial Gate WS")
+        _move_to_human_gate(env, tid)
+
+        resp = client.get("/partials/inbox")
+        assert resp.status_code == 200
+        assert "Partial Gate WS" in resp.text
+        assert "shared" in resp.text
+
+
+# ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
+
+
+def _enable_workspace(env):
+    """Enable workspace isolation in the project config file."""
+    config_path = env["project_dir"] / "config.toml"
+    text = config_path.read_text()
+    if "[workspace]" not in text:
+        text += '\n[workspace]\nenabled = true\nbranch_prefix = "capsaicin/"\nauto_cleanup = true\n'
+    else:
+        text = text.replace("enabled = false", "enabled = true")
+    config_path.write_text(text)
 
 
 def _move_to_human_gate(env, ticket_id):

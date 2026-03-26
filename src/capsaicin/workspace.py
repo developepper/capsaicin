@@ -30,13 +30,23 @@ class RecoveryAction(enum.Enum):
     human_gate = "human_gate"
 
 
-_RECOVERY_MAP: dict[str, RecoveryAction] = {
+RECOVERY_MAP: dict[str, RecoveryAction] = {
     "dirty_base_repo": RecoveryAction.retry,
     "missing_worktree": RecoveryAction.recreate,
     "branch_drift": RecoveryAction.recreate,
     "setup_failure": RecoveryAction.retry,
     "cleanup_conflict": RecoveryAction.human_gate,
 }
+
+
+def get_recovery_action(failure_reason: str | None) -> RecoveryAction | None:
+    """Look up the recommended recovery action for a failure reason.
+
+    Returns ``None`` when *failure_reason* is ``None`` or not recognised.
+    """
+    if failure_reason is None:
+        return None
+    return RECOVERY_MAP.get(failure_reason)
 
 
 @dataclass(frozen=True)
@@ -50,7 +60,7 @@ class WorkspaceRecovery:
 
     @staticmethod
     def for_reason(workspace_id: str, reason: str, detail: str) -> WorkspaceRecovery:
-        action = _RECOVERY_MAP.get(reason, RecoveryAction.human_gate)
+        action = RECOVERY_MAP.get(reason, RecoveryAction.human_gate)
         return WorkspaceRecovery(
             workspace_id=workspace_id,
             failure_reason=reason,

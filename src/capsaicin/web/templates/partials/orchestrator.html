@@ -6,6 +6,10 @@
   {% if data.orchestrator.active_ticket_id and data.active_ticket %}
     — working on <a href="{{ request.url_for('ticket_detail', ticket_id=data.active_ticket.id) }}">{{ data.active_ticket.title }}</a>
     ({{ data.active_ticket.status }})
+    {% if data.active_ticket.id in data.workspace_summaries %}
+      {% set ws = data.workspace_summaries[data.active_ticket.id] %}
+      | {% include "partials/workspace_badge.html" %}
+    {% endif %}
   {% endif %}
   {% if data.orchestrator.status in ("running", "awaiting_human", "suspended") %}
   <form method="post" action="{{ request.url_for('action_resume') }}" class="orchestrator-resume">

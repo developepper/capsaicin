@@ -513,8 +513,49 @@ def _run_in_background(fn, *args) -> None:
     t.start()
 
 
+def _log_workspace_error(ticket_id: str, exc) -> None:
+    """Log an actionable workspace-specific error instead of a generic trace."""
+    recovery = getattr(exc, "recovery", None)
+    if recovery is None:
+        _log.error("Workspace blocked for ticket %s (no recovery detail)", ticket_id)
+        return
+    reason = recovery.failure_reason
+
+    _ACTIONABLE_MESSAGES: dict[str, str] = {
+        "missing_worktree": (
+            "Workspace worktree is missing or unregistered. "
+            "Use the 'Recover Workspace' action on the ticket detail page, "
+            "or run: capsaicin ticket workspace recover"
+        ),
+        "branch_drift": (
+            "Workspace branch has diverged from the expected base. "
+            "Use 'Recover Workspace' to re-create from the current base."
+        ),
+        "dirty_base_repo": (
+            "Base repository has uncommitted changes that prevent workspace setup. "
+            "Commit or stash changes in the main repo, then retry."
+        ),
+        "setup_failure": (
+            "Workspace setup commands failed. "
+            "Check setup configuration and use 'Recover Workspace' to retry."
+        ),
+        "cleanup_conflict": (
+            "Workspace has uncommitted changes that prevent cleanup. "
+            "Manually resolve changes in the worktree, then use 'Clean Up Workspace'."
+        ),
+    }
+
+    message = _ACTIONABLE_MESSAGES.get(
+        reason,
+        f"Workspace failure ({reason}): {recovery.detail}. "
+        "Check the ticket detail page for recovery options.",
+    )
+    _log.error("Workspace blocked for ticket %s: %s", ticket_id, message)
+
+
 def _bg_run(db_path, project_id, config, ticket_id, log_path) -> None:
     from capsaicin.app.commands.run_ticket import run
+    from capsaicin.workspace import WorkspaceBlockedError
 
     conn = get_connection(db_path)
     try:
@@ -525,6 +566,8 @@ def _bg_run(db_path, project_id, config, ticket_id, log_path) -> None:
             ticket_id=ticket_id,
             log_path=log_path,
         )
+    except WorkspaceBlockedError as exc:
+        _log_workspace_error(ticket_id, exc)
     except Exception:
         _log.exception("Background run failed for ticket %s", ticket_id)
     finally:
@@ -533,6 +576,7 @@ def _bg_run(db_path, project_id, config, ticket_id, log_path) -> None:
 
 def _bg_review(db_path, project_id, config, ticket_id, allow_drift, log_path) -> None:
     from capsaicin.app.commands.review_ticket import review
+    from capsaicin.workspace import WorkspaceBlockedError
 
     conn = get_connection(db_path)
     try:
@@ -544,6 +588,8 @@ def _bg_review(db_path, project_id, config, ticket_id, allow_drift, log_path) ->
             allow_drift=allow_drift,
             log_path=log_path,
         )
+    except WorkspaceBlockedError as exc:
+        _log_workspace_error(ticket_id, exc)
     except Exception:
         _log.exception("Background review failed for ticket %s", ticket_id)
     finally:
@@ -552,6 +598,7 @@ def _bg_review(db_path, project_id, config, ticket_id, allow_drift, log_path) ->
 
 def _bg_loop(db_path, project_id, config, ticket_id, log_path) -> None:
     from capsaicin.app.commands.loop import loop
+    from capsaicin.workspace import WorkspaceBlockedError
 
     conn = get_connection(db_path)
     try:
@@ -562,6 +609,8 @@ def _bg_loop(db_path, project_id, config, ticket_id, log_path) -> None:
             ticket_id=ticket_id,
             log_path=log_path,
         )
+    except WorkspaceBlockedError as exc:
+        _log_workspace_error(ticket_id, exc)
     except Exception:
         _log.exception("Background loop failed for ticket %s", ticket_id)
     finally:
@@ -570,6 +619,7 @@ def _bg_loop(db_path, project_id, config, ticket_id, log_path) -> None:
 
 def _bg_resume(db_path, project_id, config, log_path) -> None:
     from capsaicin.app.commands.resume import resume
+    from capsaicin.workspace import WorkspaceBlockedError
 
     conn = get_connection(db_path)
     try:
@@ -579,6 +629,8 @@ def _bg_resume(db_path, project_id, config, log_path) -> None:
             config=config,
             log_path=log_path,
         )
+    except WorkspaceBlockedError as exc:
+        _log_workspace_error("resume-no-ticket", exc)
     except Exception:
         _log.exception("Background resume failed")
     finally:
