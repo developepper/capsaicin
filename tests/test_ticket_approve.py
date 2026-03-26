@@ -773,9 +773,9 @@ class TestApprovalSummary:
 
 def _enable_workspace_isolation(env):
     """Return a copy of config with workspace isolation enabled."""
-    import dataclasses
+    from tests.workspace_helpers import enable_workspace_config
 
-    return dataclasses.replace(env["config"], workspace=WorkspaceConfig(enabled=True))
+    return enable_workspace_config(env["config"])
 
 
 def _insert_workspace(

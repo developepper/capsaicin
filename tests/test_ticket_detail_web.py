@@ -578,68 +578,15 @@ def _move_to_blocked(env, ticket_id):
     )
 
 
-def _enable_workspace(env):
-    """Enable workspace isolation in the project config file."""
-    config_path = env["project_dir"] / "config.toml"
-    text = config_path.read_text()
-    if "[workspace]" not in text:
-        text += '\n[workspace]\nenabled = true\nbranch_prefix = "capsaicin/"\nauto_cleanup = true\n'
-    else:
-        text = text.replace("enabled = false", "enabled = true")
-    config_path.write_text(text)
+from tests.workspace_helpers import (  # noqa: E402
+    break_worktree as _break_worktree,
+    enable_workspace as _enable_workspace,
+)
 
 
 def _create_workspace(env, ticket_id):
-    """Create a workspace for a ticket, returning the WorkspaceReady result.
+    """Create a workspace for a ticket (commit_setup + create)."""
+    from tests.workspace_helpers import commit_setup, create_workspace_for_ticket
 
-    Must be called *after* ``_enable_workspace`` since that modifies
-    config.toml — we need all file changes committed before worktree
-    creation or the dirty-base-repo check will reject it.
-    """
-    import subprocess
-
-    from capsaicin.config import WorkspaceConfig
-    from capsaicin.workspace import WorkspaceReady, create_workspace
-
-    # Ensure base repo is clean — project_env creates .capsaicin/ which
-    # contains the DB (continuously modified).  Gitignore it, then commit
-    # any remaining changes.
-    gitignore = env["repo"] / ".gitignore"
-    if not gitignore.exists() or ".capsaicin" not in gitignore.read_text():
-        with open(gitignore, "a") as f:
-            f.write("\n.capsaicin/\n")
-    subprocess.run(
-        ["git", "add", "-A"], cwd=env["repo"], check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "setup"],
-        cwd=env["repo"],
-        check=True,
-        capture_output=True,
-    )
-
-    result = create_workspace(
-        env["conn"],
-        env["repo"],
-        env["project_id"],
-        WorkspaceConfig(enabled=True, branch_prefix="capsaicin/", auto_cleanup=True),
-        ticket_id=ticket_id,
-    )
-    assert isinstance(result, WorkspaceReady), (
-        f"Expected WorkspaceReady, got {type(result)}"
-    )
-    return result
-
-
-def _break_worktree(env, worktree_path):
-    """Unregister a worktree from git but leave an orphan directory."""
-    import subprocess
-    from pathlib import Path
-
-    subprocess.run(
-        ["git", "worktree", "remove", "--force", worktree_path],
-        cwd=env["repo"],
-        check=True,
-        capture_output=True,
-    )
-    Path(worktree_path).mkdir(parents=True)
+    commit_setup(env)
+    return create_workspace_for_ticket(env, ticket_id)

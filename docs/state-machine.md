@@ -153,6 +153,32 @@ Notes:
 - `pr-ready` is a terminal human-handoff state
 - `pr-ready -> done` is reserved for an explicit future completion command
 
+## Workspace Guard Conditions
+
+When workspace isolation is enabled (`[workspace] enabled = true`), an
+additional guard applies to execution entry points:
+
+- Before every `ticket run`, `ticket review`, and `resume` invocation, the
+  pipeline calls `resolve_or_block()` to acquire or validate a workspace.
+- If workspace acquisition fails (dirty base repo, missing worktree, branch
+  drift, etc.), the ticket transitions to `blocked` with a `blocked_reason`
+  prefixed by `workspace_` — for example, `workspace_dirty_base_repo` or
+  `workspace_missing_worktree`.
+- `implementing -> blocked` and `in-review -> blocked` are the legal
+  transition paths for workspace failures during active pipeline execution.
+
+Workspace lifecycle states are independent of ticket states:
+
+- A workspace can enter `failed` while the ticket is still in `implementing`.
+- Recovery requires two operator steps: fix the workspace problem (via
+  `capsaicin workspace recover` or the web UI), then unblock the ticket
+  (`capsaicin ticket unblock`).
+
+When workspace isolation is disabled, none of these guards apply and the
+pipeline runs in the shared repo as before.  See
+[workspace-lifecycle.md](./workspace-lifecycle.md) for the full workspace state
+diagram.
+
 ## Illegal Transitions
 
 - no ticket reaches `pr-ready` without passing through `human-gate`

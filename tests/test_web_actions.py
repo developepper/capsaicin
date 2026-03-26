@@ -940,34 +940,10 @@ class TestAddDependencyAction:
 # ---------------------------------------------------------------------------
 
 
-def _enable_workspace(env):
-    """Enable workspace isolation in the project config file."""
-    config_path = env["project_dir"] / "config.toml"
-    text = config_path.read_text()
-    if "[workspace]" not in text:
-        text += '\n[workspace]\nenabled = true\nbranch_prefix = "capsaicin/"\nauto_cleanup = true\n'
-    else:
-        text = text.replace("enabled = false", "enabled = true")
-    config_path.write_text(text)
-
-
-def _commit_setup(env):
-    """Gitignore .capsaicin/ and commit so the base repo is clean for workspace ops."""
-    import subprocess
-
-    gitignore = env["repo"] / ".gitignore"
-    if not gitignore.exists() or ".capsaicin" not in gitignore.read_text():
-        with open(gitignore, "a") as f:
-            f.write("\n.capsaicin/\n")
-    subprocess.run(
-        ["git", "add", "-A"], cwd=env["repo"], check=True, capture_output=True
-    )
-    subprocess.run(
-        ["git", "commit", "-m", "setup"],
-        cwd=env["repo"],
-        check=True,
-        capture_output=True,
-    )
+from tests.workspace_helpers import (  # noqa: E402
+    commit_setup as _commit_setup,
+    enable_workspace as _enable_workspace,
+)
 
 
 class TestWorkspaceRecoverAction:

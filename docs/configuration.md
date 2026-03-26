@@ -136,7 +136,9 @@ auto_cleanup = true
 | `auto_cleanup`   | bool   | `true`         | Delete branches automatically during teardown.      |
 
 See [workspace-lifecycle.md](./workspace-lifecycle.md) for lifecycle states,
-failure reasons, and transition rules.
+failure reasons, and transition rules.  See the
+[workspace CLI commands](./cli.md#capsaicin-workspace) for operator inspection,
+recovery, and cleanup actions.
 
 ## Non-goal
 

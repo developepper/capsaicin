@@ -282,6 +282,9 @@ Behavior:
 
 - if no `TICKET_ID` is provided, pick the next `ready` ticket whose
   dependencies are all `done`, ordered by `created_at`
+- when workspace isolation is enabled, acquire or validate an isolated worktree
+  before proceeding; if workspace acquisition fails, the ticket moves to
+  `blocked` with a `workspace_`-prefixed reason
 - if the ticket is in `revise` and `current_cycle >= max_cycles`, do not invoke
   the implementer; move directly to `human-gate` with
   `gate_reason = 'cycle_limit'`
@@ -324,6 +327,9 @@ capsaicin ticket review [TICKET_ID] [--allow-drift]
 Behavior:
 
 - find the ticket in `in-review`
+- when workspace isolation is enabled, validate the isolated worktree before
+  proceeding; if the workspace is missing or stale, the ticket moves to
+  `blocked` with a `workspace_`-prefixed reason
 - verify that the current `git diff HEAD` (tracked files only) matches the
   `run_diffs.diff_text` captured at the end of the implementation run; if
   they differ, reject the review with a workspace-drift error unless
@@ -629,4 +635,58 @@ Behavior:
 - verify the repo path exists and is a git worktree
 - warn on a dirty working tree
 - verify local Claude permission settings required for write-capable runs
+- when workspace isolation is enabled, check worktree support, writable
+  `.worktrees` directory, and writable git metadata
 - exit non-zero when required checks fail
+
+### `capsaicin workspace`
+
+Manage isolated git worktrees used for agent execution.  These commands are
+only meaningful when `[workspace] enabled = true` in the project config.
+
+#### `capsaicin workspace status`
+
+Usage:
+
+```text
+capsaicin workspace status TICKET_ID [--repo PATH] [--project SLUG]
+```
+
+Behavior:
+
+- report the isolation mode for the ticket: `shared` (isolation disabled),
+  `worktree` (active worktree exists), `branch` (branch exists but worktree
+  removed), or `none` (no workspace record)
+- show workspace ID, status, branch name, worktree path, and failure reason
+  when applicable
+- surface any blocking condition that would prevent the next pipeline run
+
+#### `capsaicin workspace recover`
+
+Usage:
+
+```text
+capsaicin workspace recover TICKET_ID [--repo PATH] [--project SLUG]
+```
+
+Behavior:
+
+- clean up a failed or stale workspace and create a fresh one
+- reuses an existing healthy workspace if validation passes
+- requires workspace isolation to be enabled; errors otherwise
+
+#### `capsaicin workspace cleanup`
+
+Usage:
+
+```text
+capsaicin workspace cleanup TICKET_ID [--repo PATH] [--project SLUG]
+```
+
+Behavior:
+
+- tear down the worktree and optionally delete the branch (controlled by
+  `auto_cleanup` config)
+- refuses to clean up a dirty worktree with uncommitted changes; surfaces a
+  `cleanup_conflict` failure for manual resolution
+- no-op when no workspace exists or it is already cleaned

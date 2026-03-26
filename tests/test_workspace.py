@@ -8,7 +8,6 @@ import subprocess
 import pytest
 
 from capsaicin.config import WorkspaceConfig
-from capsaicin.db import get_connection, run_migrations
 from capsaicin.workspace import (
     RecoveryAction,
     SetupFailure,
@@ -20,73 +19,14 @@ from capsaicin.workspace import (
     run_setup_commands,
     validate_workspace,
 )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _init_git_repo(path):
-    """Create a git repo with one commit at *path*."""
-    path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    (path / "readme.txt").write_text("init\n")
-    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-
-
-def _make_conn():
-    conn = get_connection(":memory:")
-    run_migrations(conn)
-    return conn
-
-
-def _insert_project(conn, project_id="p1"):
-    conn.execute(
-        "INSERT INTO projects (id, name, repo_path) VALUES (?, ?, ?)",
-        (project_id, "test", "/tmp"),
-    )
-    conn.commit()
-
-
-def _insert_ticket(conn, ticket_id="t1", project_id="p1"):
-    conn.execute(
-        "INSERT INTO tickets (id, project_id, title, description, status) "
-        "VALUES (?, ?, 'Test', 'desc', 'ready')",
-        (ticket_id, project_id),
-    )
-    conn.commit()
-
-
-def _insert_epic(conn, epic_id="e1", project_id="p1"):
-    conn.execute(
-        "INSERT INTO planned_epics (id, project_id, problem_statement, status) "
-        "VALUES (?, ?, 'problem', 'new')",
-        (epic_id, project_id),
-    )
-    conn.commit()
-
-
-def _default_ws_config():
-    return WorkspaceConfig(enabled=True, branch_prefix="capsaicin/", auto_cleanup=True)
+from tests.workspace_helpers import (
+    default_ws_config as _default_ws_config,
+    init_git_repo as _init_git_repo,
+    insert_epic as _insert_epic,
+    insert_project as _insert_project,
+    insert_ticket as _insert_ticket,
+    make_workspace_conn as _make_conn,
+)
 
 
 # ---------------------------------------------------------------------------

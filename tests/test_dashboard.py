@@ -342,15 +342,7 @@ class TestDashboardWorkspaceState:
 # ---------------------------------------------------------------------------
 
 
-def _enable_workspace(env):
-    """Enable workspace isolation in the project config file."""
-    config_path = env["project_dir"] / "config.toml"
-    text = config_path.read_text()
-    if "[workspace]" not in text:
-        text += '\n[workspace]\nenabled = true\nbranch_prefix = "capsaicin/"\nauto_cleanup = true\n'
-    else:
-        text = text.replace("enabled = false", "enabled = true")
-    config_path.write_text(text)
+from tests.workspace_helpers import enable_workspace as _enable_workspace  # noqa: E402
 
 
 def _move_to_human_gate(env, ticket_id):

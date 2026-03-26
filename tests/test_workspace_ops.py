@@ -22,8 +22,6 @@ from capsaicin.config import (
     TicketSelectionConfig,
     WorkspaceConfig,
 )
-from capsaicin.db import get_connection, run_migrations
-
 from capsaicin.app.commands.workspace_ops import (
     WorkspaceActionResult,
     WorkspaceStatusResult,
@@ -31,59 +29,12 @@ from capsaicin.app.commands.workspace_ops import (
     workspace_recover,
     workspace_status,
 )
-
-
-# ---------------------------------------------------------------------------
-# Helpers
-# ---------------------------------------------------------------------------
-
-
-def _init_git_repo(path):
-    path.mkdir(parents=True, exist_ok=True)
-    subprocess.run(["git", "init"], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "config", "user.email", "test@test.com"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    subprocess.run(
-        ["git", "config", "user.name", "Test"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-    (path / "readme.txt").write_text("init\n")
-    subprocess.run(["git", "add", "."], cwd=path, check=True, capture_output=True)
-    subprocess.run(
-        ["git", "commit", "-m", "init"],
-        cwd=path,
-        check=True,
-        capture_output=True,
-    )
-
-
-def _make_conn():
-    conn = get_connection(":memory:")
-    run_migrations(conn)
-    return conn
-
-
-def _insert_project(conn, project_id="p1", repo_path="/tmp"):
-    conn.execute(
-        "INSERT INTO projects (id, name, repo_path) VALUES (?, ?, ?)",
-        (project_id, "test", repo_path),
-    )
-    conn.commit()
-
-
-def _insert_ticket(conn, ticket_id="t1", project_id="p1"):
-    conn.execute(
-        "INSERT INTO tickets (id, project_id, title, description, status) "
-        "VALUES (?, ?, 'Test', 'desc', 'ready')",
-        (ticket_id, project_id),
-    )
-    conn.commit()
+from tests.workspace_helpers import (
+    init_git_repo as _init_git_repo,
+    insert_project as _insert_project,
+    insert_ticket as _insert_ticket,
+    make_workspace_conn as _make_conn,
+)
 
 
 def _make_config(repo_path="/tmp", workspace_enabled=False):
