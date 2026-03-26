@@ -328,5 +328,14 @@ order = "created_at"
 [paths]
 renders_dir = "renders"
 exports_dir = "exports"
+
+# Optional workspace isolation. Uncomment to run tickets in isolated git
+# worktrees instead of the shared repo checkout.
+#
+# [workspace]
+# enabled = true
+# branch_prefix = "capsaicin/"
+# auto_cleanup = true
+# worktree_root = "/custom/path/for/worktrees"
 """
     Path(path).write_text(content)

@@ -311,6 +311,7 @@ class TestCheckWorkspaceReadiness:
 
     def test_enabled_in_valid_clean_repo(self, tmp_path):
         repo = tmp_path / "repo"
+        wt_root = tmp_path / "worktrees"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
         subprocess.run(
@@ -333,12 +334,15 @@ class TestCheckWorkspaceReadiness:
             check=True,
             capture_output=True,
         )
-        result = check_workspace_readiness(repo, workspace_enabled=True)
+        result = check_workspace_readiness(
+            repo, workspace_enabled=True, worktree_root=str(wt_root)
+        )
         assert result.status == "pass"
         assert "prerequisites met" in result.message.lower()
 
     def test_enabled_with_dirty_tree_warns(self, tmp_path):
         repo = tmp_path / "repo"
+        wt_root = tmp_path / "worktrees"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
         subprocess.run(
@@ -362,7 +366,9 @@ class TestCheckWorkspaceReadiness:
             capture_output=True,
         )
         (repo / "f.txt").write_text("dirty")
-        result = check_workspace_readiness(repo, workspace_enabled=True)
+        result = check_workspace_readiness(
+            repo, workspace_enabled=True, worktree_root=str(wt_root)
+        )
         assert result.status == "warn"
         assert "dirty" in result.message.lower()
 
@@ -481,6 +487,7 @@ class TestCheckWorkspaceReadiness:
     def test_unwritable_git_metadata_fails(self, tmp_path):
         """If .git/refs is not writable, workspace readiness should fail."""
         repo = tmp_path / "repo"
+        wt_root = tmp_path / "worktrees"
         repo.mkdir()
         subprocess.run(["git", "init"], cwd=repo, check=True, capture_output=True)
         subprocess.run(
@@ -506,7 +513,9 @@ class TestCheckWorkspaceReadiness:
         refs_dir = repo / ".git" / "refs"
         refs_dir.chmod(0o555)
         try:
-            result = check_workspace_readiness(repo, workspace_enabled=True)
+            result = check_workspace_readiness(
+                repo, workspace_enabled=True, worktree_root=str(wt_root)
+            )
             assert result.status == "fail"
             assert "git metadata" in result.message.lower()
         finally:

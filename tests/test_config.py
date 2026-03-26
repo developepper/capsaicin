@@ -284,6 +284,15 @@ class TestWriteDefaultConfig:
         cfg = load_config(cfg_path)
         assert cfg.project.name == "line1\nline2"
 
+    def test_includes_commented_workspace_section(self, tmp_path):
+        cfg_path = tmp_path / "config.toml"
+        write_default_config(cfg_path, "test-proj", "/abs/repo")
+        text = cfg_path.read_text()
+
+        assert "# [workspace]" in text
+        assert '# branch_prefix = "capsaicin/"' in text
+        assert '# worktree_root = "/custom/path/for/worktrees"' in text
+
 
 class TestFourRoleConfig:
     def test_planner_and_planning_reviewer_parsed(self, tmp_path):

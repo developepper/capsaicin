@@ -56,6 +56,15 @@ order = "created_at"
 [paths]
 renders_dir = "renders"
 exports_dir = "exports"
+
+# Optional workspace isolation. Uncomment to run tickets in isolated git
+# worktrees instead of the shared repo checkout.
+#
+# [workspace]
+# enabled = true
+# branch_prefix = "capsaicin/"
+# auto_cleanup = true
+# worktree_root = "/custom/path/for/worktrees"
 ```
 
 Semantics:
@@ -78,7 +87,11 @@ Intended role split once Codex adapter support lands:
 Current implementation note:
 
 - the shipped default config still points both implementer and reviewer at
-  `claude` because Codex adapter support is not implemented yet
+  `claude`
+- the generated config includes a commented-out `[workspace]` section for
+  discoverability, but workspace isolation remains disabled until uncommented
+- planner/planning-reviewer remain optional explicit sections; when omitted
+  they fall back to implementer/reviewer config
 
 ## Project Resolution
 

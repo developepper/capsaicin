@@ -109,6 +109,12 @@ class TestInitProject:
         config_text = (project_dir / "config.toml").read_text()
         assert str(tmp_path.resolve()) in config_text
 
+    def test_config_includes_commented_workspace_section(self, tmp_path):
+        project_dir = init_project("test-proj", str(tmp_path))
+        config_text = (project_dir / "config.toml").read_text()
+        assert "# [workspace]" in config_text
+        assert '# enabled = true' in config_text
+
     def test_activity_log_has_init_event(self, tmp_path):
         project_dir = init_project("test-proj", str(tmp_path))
         log_text = (project_dir / "activity.log").read_text()

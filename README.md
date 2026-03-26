@@ -597,6 +597,15 @@ order = "created_at"
 [paths]
 renders_dir = "renders"
 exports_dir = "exports"
+
+# Optional workspace isolation. Uncomment to run tickets in isolated git
+# worktrees instead of the shared repo checkout.
+#
+# [workspace]
+# enabled = true
+# branch_prefix = "capsaicin/"
+# auto_cleanup = true
+# worktree_root = "/custom/path/for/worktrees"
 ```
 
 Important points:
@@ -612,6 +621,8 @@ Important points:
 - a common pairing is `Claude Code` implementer plus `Codex` reviewer
 - a common planning pairing is `Codex` planner plus `Claude Code` reviewer
 - reviewer runs are intended to be read-only
+- the generated config now includes a commented-out `[workspace]` section so
+  isolation is discoverable without being enabled by default
 
 ## Multi-Project Usage
 

@@ -31,7 +31,7 @@ capsaicin = "capsaicin.cli:cli"
 where = ["src"]
 
 [tool.setuptools.package-data]
-capsaicin = ["web/templates/**/*", "web/static/**/*"]
+capsaicin = ["web/templates/**/*", "web/static/**/*", "migrations/*.sql"]
 
 [tool.ruff]
 line-length = 88

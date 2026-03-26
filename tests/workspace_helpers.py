@@ -130,10 +130,12 @@ def enable_workspace(env) -> None:
     Sets ``worktree_root`` to a sibling of the test repo so that worktrees
     stay inside pytest's tmp_path and never pollute ``~/.capsaicin/``.
     """
+    import re
+
     wt_root = env["repo"].parent / "worktrees"
     config_path = env["project_dir"] / "config.toml"
     text = config_path.read_text()
-    if "[workspace]" not in text:
+    if re.search(r"(?m)^\[workspace\]\s*$", text) is None:
         text += (
             "\n[workspace]\nenabled = true\n"
             'branch_prefix = "capsaicin/"\nauto_cleanup = true\n'

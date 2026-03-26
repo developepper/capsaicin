@@ -93,6 +93,14 @@ class TestPackaging:
     def test_static_directory_accessible(self):
         assert (self._pkg_dir() / "static").is_dir()
 
+    def test_migrations_directory_accessible(self):
+        import capsaicin as pkg
+
+        pkg_dir = pathlib.Path(pkg.__file__).parent
+        migrations = pkg_dir / "migrations"
+        assert migrations.is_dir()
+        assert any(migrations.glob("*.sql"))
+
     def test_base_template_accessible(self):
         assert (self._pkg_dir() / "templates" / "base.html").is_file()
 
