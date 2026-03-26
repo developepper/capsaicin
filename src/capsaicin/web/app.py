@@ -39,6 +39,8 @@ from capsaicin.web.routes.actions import (
     action_set_ticket_override,
     action_shutdown,
     action_unblock,
+    action_workspace_cleanup,
+    action_workspace_recover,
 )
 from capsaicin.web.routes.dashboard import dashboard
 from capsaicin.web.routes.doctor import doctor_page
@@ -182,6 +184,19 @@ def create_app(
             action_delete_ticket_override,
             methods=["POST"],
             name="action_delete_ticket_override",
+        ),
+        # Workspace lifecycle routes
+        Route(
+            "/tickets/{ticket_id}/workspace/recover",
+            action_workspace_recover,
+            methods=["POST"],
+            name="action_workspace_recover",
+        ),
+        Route(
+            "/tickets/{ticket_id}/workspace/cleanup",
+            action_workspace_cleanup,
+            methods=["POST"],
+            name="action_workspace_cleanup",
         ),
         Route(
             "/actions/resume",

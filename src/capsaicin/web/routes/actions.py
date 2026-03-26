@@ -265,6 +265,63 @@ async def action_unblock(request: Request) -> RedirectResponse | HTMLResponse:
 
 
 # ---------------------------------------------------------------------------
+# Workspace lifecycle actions
+# ---------------------------------------------------------------------------
+
+
+async def action_workspace_recover(request: Request) -> RedirectResponse | HTMLResponse:
+    """POST /tickets/{ticket_id}/workspace/recover — recover a failed workspace."""
+    conn = request.state.conn
+    project_id = request.app.state.project_id
+    config = load_config(request.app.state.config_path)
+    ticket_id = request.path_params["ticket_id"]
+
+    from capsaicin.app.commands.workspace_ops import workspace_recover
+
+    try:
+        result = workspace_recover(
+            conn=conn,
+            project_id=project_id,
+            config=config,
+            ticket_id=ticket_id,
+        )
+    except (ValueError, CapsaicinError) as exc:
+        return _error_redirect(request, ticket_id, str(exc))
+
+    if result.action == "failed":
+        return _error_redirect(request, ticket_id, result.detail or "Recovery failed.")
+
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
+
+
+async def action_workspace_cleanup(request: Request) -> RedirectResponse | HTMLResponse:
+    """POST /tickets/{ticket_id}/workspace/cleanup — clean up a ticket workspace."""
+    conn = request.state.conn
+    config = load_config(request.app.state.config_path)
+    ticket_id = request.path_params["ticket_id"]
+
+    from capsaicin.app.commands.workspace_ops import workspace_cleanup
+
+    try:
+        result = workspace_cleanup(
+            conn=conn,
+            config=config,
+            ticket_id=ticket_id,
+        )
+    except (ValueError, CapsaicinError) as exc:
+        return _error_redirect(request, ticket_id, str(exc))
+
+    if result.action == "failed":
+        return _error_redirect(request, ticket_id, result.detail or "Cleanup failed.")
+
+    return RedirectResponse(
+        str(request.url_for("ticket_detail", ticket_id=ticket_id)), status_code=303
+    )
+
+
+# ---------------------------------------------------------------------------
 # Role override actions
 # ---------------------------------------------------------------------------
 

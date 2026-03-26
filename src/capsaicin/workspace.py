@@ -491,6 +491,179 @@ def resolve_or_block(
         return None
 
 
+def get_workspace_info(
+    conn: sqlite3.Connection,
+    *,
+    ticket_id: str | None = None,
+    epic_id: str | None = None,
+    workspace_id: str | None = None,
+) -> dict | None:
+    """Return workspace metadata for display/inspection.
+
+    Looks up by workspace_id directly, or finds the most recent
+    non-terminal workspace for a ticket/epic.  Returns ``None`` when
+    no matching workspace exists.
+    """
+    if workspace_id is not None:
+        return _load_workspace(conn, workspace_id)
+
+    if ticket_id is None and epic_id is None:
+        raise ValueError("Provide ticket_id, epic_id, or workspace_id")
+
+    # Find most recent workspace (any status) for the entity.
+    if ticket_id is not None:
+        row = conn.execute(
+            "SELECT * FROM workspaces "
+            "WHERE ticket_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (ticket_id,),
+        ).fetchone()
+    else:
+        row = conn.execute(
+            "SELECT * FROM workspaces "
+            "WHERE epic_id = ? "
+            "ORDER BY created_at DESC LIMIT 1",
+            (epic_id,),
+        ).fetchone()
+
+    return dict(row) if row else None
+
+
+def cleanup_workspace(
+    conn: sqlite3.Connection,
+    repo_path: str | Path,
+    workspace_id: str,
+    ws_config: WorkspaceConfig,
+) -> WorkspaceRecovery | None:
+    """Tear down an isolated workspace: remove worktree, optionally delete branch.
+
+    Transitions the workspace through ``tearing_down → cleaned``.
+    Returns ``None`` on success, or a ``WorkspaceRecovery`` with
+    ``cleanup_conflict`` if git operations fail.
+
+    Enforces the same safety checks as automated pipeline use:
+    the workspace must exist and not already be in a terminal state
+    (``cleaned``).
+    """
+    ws = _load_workspace(conn, workspace_id)
+    if ws is None:
+        raise KeyError(f"No workspace found for id={workspace_id!r}")
+
+    if ws["status"] == "cleaned":
+        return None  # Already cleaned — idempotent.
+
+    repo = Path(repo_path).resolve()
+    wt_path = ws["worktree_path"]
+    branch_name = ws["branch_name"]
+
+    # Transition to tearing_down.
+    _update_status(conn, workspace_id, "tearing_down")
+
+    # Remove the worktree if it still exists.
+    if Path(wt_path).is_dir():
+        # Safety check: refuse to force-remove a worktree with uncommitted
+        # changes — surface cleanup_conflict so the operator can decide.
+        if not _working_tree_is_clean(wt_path):
+            detail = (
+                f"Worktree {wt_path} has uncommitted changes. "
+                "Commit or discard changes before cleanup."
+            )
+            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+            return WorkspaceRecovery.for_reason(
+                workspace_id, "cleanup_conflict", detail
+            )
+
+        result = _git(["worktree", "remove", wt_path], repo)
+        if result.returncode != 0:
+            detail = (
+                f"git worktree remove failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}"
+            )
+            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+            return WorkspaceRecovery.for_reason(
+                workspace_id, "cleanup_conflict", detail
+            )
+
+    # Prune stale worktree references.
+    _git(["worktree", "prune"], repo)
+
+    # Delete the branch if auto_cleanup is enabled and branch exists.
+    if ws_config.auto_cleanup and _branch_exists(repo, branch_name):
+        result = _git(["branch", "-D", branch_name], repo)
+        if result.returncode != 0:
+            detail = (
+                f"git branch -D failed (exit {result.returncode}): "
+                f"{result.stderr.strip()}"
+            )
+            _update_status(conn, workspace_id, "failed", "cleanup_conflict", detail)
+            return WorkspaceRecovery.for_reason(
+                workspace_id, "cleanup_conflict", detail
+            )
+
+    _update_status(conn, workspace_id, "cleaned")
+    return None
+
+
+def recover_workspace(
+    conn: sqlite3.Connection,
+    repo_path: str | Path,
+    project_id: str,
+    ws_config: WorkspaceConfig,
+    *,
+    ticket_id: str | None = None,
+    epic_id: str | None = None,
+) -> WorkspaceResult:
+    """Attempt to recover a failed workspace.
+
+    Cleans up the failed workspace (if one exists) and creates a fresh
+    one.  Enforces the same safety checks as ``create_workspace``.
+    """
+    existing = _find_active_workspace(
+        conn, project_id, ticket_id=ticket_id, epic_id=epic_id
+    )
+
+    # If an active workspace exists, validate it first — a healthy
+    # workspace should be preserved, matching acquire_workspace().
+    if existing is not None:
+        validation = validate_workspace(conn, repo_path, existing["id"])
+        if isinstance(validation, WorkspaceReady):
+            return validation
+        # Validation failed — clean up before recreating.
+        recovery = cleanup_workspace(conn, repo_path, existing["id"], ws_config)
+        if recovery is not None:
+            return recovery
+    else:
+        # No active workspace — look for failed ones that need cleanup.
+        if ticket_id is not None:
+            row = conn.execute(
+                "SELECT * FROM workspaces "
+                "WHERE project_id = ? AND ticket_id = ? AND status = 'failed' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (project_id, ticket_id),
+            ).fetchone()
+        else:
+            row = conn.execute(
+                "SELECT * FROM workspaces "
+                "WHERE project_id = ? AND epic_id = ? AND status = 'failed' "
+                "ORDER BY created_at DESC LIMIT 1",
+                (project_id, epic_id),
+            ).fetchone()
+        failed = dict(row) if row else None
+        if failed is not None:
+            recovery = cleanup_workspace(conn, repo_path, failed["id"], ws_config)
+            if recovery is not None:
+                return recovery
+
+    return create_workspace(
+        conn,
+        repo_path,
+        project_id,
+        ws_config,
+        ticket_id=ticket_id,
+        epic_id=epic_id,
+    )
+
+
 def run_setup_commands(
     conn: sqlite3.Connection,
     workspace_id: str,

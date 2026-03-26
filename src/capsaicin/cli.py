@@ -801,6 +801,104 @@ def ui(port, no_open, repo_path, project_slug):
     )
 
 
+@cli.group()
+def workspace():
+    """Inspect and manage workspace isolation."""
+
+
+@workspace.command("status")
+@click.argument("ticket_id")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def workspace_status_cmd(ticket_id, repo_path, project_slug):
+    """Inspect workspace isolation state for a ticket."""
+    from capsaicin.app.commands.workspace_ops import workspace_status
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = workspace_status(
+                conn=app.conn,
+                config=app.config,
+                ticket_id=ticket_id,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(f"Ticket:    {result.ticket_id}")
+        click.echo(f"Isolation: {result.isolation_mode}")
+        if result.workspace_id:
+            click.echo(f"Workspace: {result.workspace_id}")
+            click.echo(f"Status:    {result.status}")
+        if result.branch_name:
+            click.echo(f"Branch:    {result.branch_name}")
+        if result.worktree_path:
+            click.echo(f"Worktree:  {result.worktree_path}")
+        if result.base_ref:
+            click.echo(f"Base ref:  {result.base_ref[:12]}")
+        if result.failure_reason:
+            click.echo(f"Failure:   {result.failure_reason}")
+        if result.failure_detail:
+            click.echo(f"Detail:    {result.failure_detail}")
+        if result.blocked_reason:
+            click.echo(f"Blocked:   {result.blocked_reason}")
+
+
+@workspace.command("recover")
+@click.argument("ticket_id")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def workspace_recover_cmd(ticket_id, repo_path, project_slug):
+    """Recover a failed workspace for a ticket."""
+    from capsaicin.app.commands.workspace_ops import workspace_recover
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = workspace_recover(
+                conn=app.conn,
+                project_id=app.project_id,
+                config=app.config,
+                ticket_id=ticket_id,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(result.detail)
+        if result.action == "failed":
+            raise SystemExit(1)
+
+
+@workspace.command("cleanup")
+@click.argument("ticket_id")
+@click.option("--repo", "repo_path", default=None, help="Path to the repository.")
+@click.option("--project", "project_slug", default=None, help="Project slug.")
+def workspace_cleanup_cmd(ticket_id, repo_path, project_slug):
+    """Clean up the workspace for a ticket."""
+    from capsaicin.app.commands.workspace_ops import workspace_cleanup
+
+    with _resolve_or_fail(repo_path, project_slug) as ctx:
+        app = _app_context(ctx)
+        app.refresh_config()
+
+        try:
+            result = workspace_cleanup(
+                conn=app.conn,
+                config=app.config,
+                ticket_id=ticket_id,
+            )
+        except (ValueError, CapsaicinError) as e:
+            raise click.ClickException(str(e))
+
+        click.echo(result.detail)
+        if result.action == "failed":
+            raise SystemExit(1)
+
+
 @cli.command()
 @click.option("--repo", "repo_path", default=None, help="Path to the repository.")
 @click.option("--project", "project_slug", default=None, help="Project slug.")
@@ -846,7 +944,16 @@ def doctor(repo_path, project_slug):
 
     from capsaicin.preflight import run_preflight
 
-    report = run_preflight(repo_path, adapter_command=adapter_command)
+    workspace_enabled = False
+    if capsaicin_root.is_dir():
+        try:
+            workspace_enabled = config.workspace.enabled  # type: ignore[possibly-undefined]
+        except Exception:
+            pass
+
+    report = run_preflight(
+        repo_path, adapter_command=adapter_command, workspace_enabled=workspace_enabled
+    )
 
     # Render checklist
     status_icons = {"pass": "OK", "warn": "WARN", "fail": "FAIL"}
