@@ -246,7 +246,9 @@ class TestValidateWorkspace:
         assert result.failure_reason == "missing_worktree"
         assert result.action == RecoveryAction.recreate
 
-    def test_branch_drift_returns_recovery(self, tmp_path):
+    def test_unrelated_commit_does_not_trigger_drift(self, tmp_path):
+        """An unrelated commit on the base branch should NOT invalidate
+        the workspace — merge-base is unchanged."""
         repo = tmp_path / "repo"
         _init_git_repo(repo)
         conn = _make_conn()
@@ -263,6 +265,35 @@ class TestValidateWorkspace:
         subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
         subprocess.run(
             ["git", "commit", "-m", "advance"],
+            cwd=repo,
+            check=True,
+            capture_output=True,
+        )
+
+        result = validate_workspace(conn, repo, created.workspace_id)
+        assert isinstance(result, WorkspaceReady)
+
+    def test_rebase_changes_merge_base_triggers_drift(self, tmp_path):
+        """A force-push / rebase that changes the merge-base DOES trigger
+        branch_drift."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        created = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(created, WorkspaceReady)
+
+        # Rewrite history on the base branch: amend the initial commit so
+        # that the merge-base between the base branch and the workspace
+        # branch changes (the old base_ref no longer exists in the DAG).
+        (repo / "rewritten.txt").write_text("rewritten\n")
+        subprocess.run(["git", "add", "."], cwd=repo, check=True, capture_output=True)
+        subprocess.run(
+            ["git", "commit", "--amend", "-m", "rewritten-init"],
             cwd=repo,
             check=True,
             capture_output=True,

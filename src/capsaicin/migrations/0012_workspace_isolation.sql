@@ -10,6 +10,7 @@ CREATE TABLE IF NOT EXISTS workspaces (
     worktree_path   TEXT NOT NULL,
     branch_name     TEXT NOT NULL,
     base_ref        TEXT NOT NULL,
+    base_branch     TEXT,
     status          TEXT NOT NULL DEFAULT 'pending'
                     CHECK (status IN (
                         'pending','setting_up','active',

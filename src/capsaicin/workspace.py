@@ -162,6 +162,24 @@ def _resolve_ref(repo_path: str | Path, ref: str = "HEAD") -> str:
     return result.stdout.strip()
 
 
+def _current_branch(repo_path: str | Path) -> str:
+    """Return the name of the currently checked-out branch."""
+    result = _git(["rev-parse", "--abbrev-ref", "HEAD"], repo_path)
+    if result.returncode != 0:
+        raise RuntimeError(
+            f"git rev-parse --abbrev-ref HEAD failed: {result.stderr.strip()}"
+        )
+    return result.stdout.strip()
+
+
+def _merge_base(repo_path: str | Path, ref_a: str, ref_b: str) -> str | None:
+    """Return the merge-base commit SHA for two refs, or None on failure."""
+    result = _git(["merge-base", ref_a, ref_b], repo_path)
+    if result.returncode != 0:
+        return None
+    return result.stdout.strip()
+
+
 def _branch_exists(repo_path: str | Path, branch: str) -> bool:
     result = _git(["rev-parse", "--verify", f"refs/heads/{branch}"], repo_path)
     return result.returncode == 0
@@ -192,14 +210,15 @@ def _insert_workspace(
     worktree_path: str,
     branch_name: str,
     base_ref: str,
+    base_branch: str | None = None,
     status: str = "pending",
 ) -> None:
     now = now_utc()
     conn.execute(
         "INSERT INTO workspaces "
         "(id, project_id, ticket_id, epic_id, worktree_path, branch_name, "
-        "base_ref, status, created_at, updated_at) "
-        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+        "base_ref, base_branch, status, created_at, updated_at) "
+        "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
         (
             workspace_id,
             project_id,
@@ -208,6 +227,7 @@ def _insert_workspace(
             worktree_path,
             branch_name,
             base_ref,
+            base_branch,
             status,
             now,
             now,
@@ -323,8 +343,9 @@ def create_workspace(
     wt_root = resolve_worktree_root(repo, ws_config)
     worktree_path = str(wt_root / slug)
 
-    # Resolve base ref before any mutation.
+    # Resolve base ref and branch name before any mutation.
     base_ref = _resolve_ref(repo)
+    base_branch = _current_branch(repo)
 
     # Persist the pending workspace row.
     _insert_workspace(
@@ -336,6 +357,7 @@ def create_workspace(
         worktree_path=worktree_path,
         branch_name=branch_name,
         base_ref=base_ref,
+        base_branch=base_branch,
     )
 
     # Everything after the insert is wrapped in a rollback guard so that
@@ -425,11 +447,20 @@ def validate_workspace(
         return WorkspaceRecovery.for_reason(workspace_id, "missing_worktree", detail)
 
     # Check branch hasn't drifted from recorded base_ref.
-    current_base = _resolve_ref(repo, "HEAD")
-    if current_base != ws["base_ref"]:
+    # Use merge-base when base_branch is recorded so that unrelated commits
+    # on the base branch do not invalidate the workspace.
+    base_branch_name = ws.get("base_branch")
+    if base_branch_name:
+        mb = _merge_base(repo, base_branch_name, ws["branch_name"])
+        drifted = mb is None or mb != ws["base_ref"]
+    else:
+        # Fallback for workspaces created before base_branch was stored.
+        current_base = _resolve_ref(repo, "HEAD")
+        drifted = current_base != ws["base_ref"]
+
+    if drifted:
         detail = (
-            f"Base branch has moved: recorded {ws['base_ref'][:12]}, "
-            f"current {current_base[:12]}."
+            f"Base branch has diverged from recorded base_ref {ws['base_ref'][:12]}."
         )
         _update_status(conn, workspace_id, "failed", "branch_drift", detail)
         conn.commit()
