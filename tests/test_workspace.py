@@ -498,6 +498,32 @@ class TestRunSetupCommands:
         with pytest.raises(KeyError, match="No workspace found"):
             run_setup_commands(conn, "nonexistent", ["echo hi"])
 
+    def test_shell_metacharacters_not_executed(self, tmp_path):
+        """Regression: shell metacharacters must be treated as literal args."""
+        repo = tmp_path / "repo"
+        _init_git_repo(repo)
+        conn = _make_conn()
+        _insert_project(conn)
+        _insert_ticket(conn)
+
+        ws = create_workspace(
+            conn, repo, "p1", _default_ws_config(tmp_path / "wt"), ticket_id="t1"
+        )
+        assert isinstance(ws, WorkspaceReady)
+
+        from pathlib import Path
+
+        marker = Path(ws.worktree_path) / "pwned.txt"
+
+        # The injected portion after ';' must NOT execute.
+        result = run_setup_commands(
+            conn, ws.workspace_id, ["echo safe ; touch pwned.txt"]
+        )
+
+        # shlex.split produces ["echo", "safe", ";", "touch", "pwned.txt"],
+        # which echo prints as literal args — the touch never runs.
+        assert not marker.exists(), "Shell injection executed the injected command"
+
     def test_setup_failure_stderr_captured(self, tmp_path):
         repo = tmp_path / "repo"
         _init_git_repo(repo)
@@ -511,7 +537,7 @@ class TestRunSetupCommands:
         assert isinstance(ws, WorkspaceReady)
 
         result = run_setup_commands(
-            conn, ws.workspace_id, ["echo error_msg >&2 && exit 1"]
+            conn, ws.workspace_id, ["bash -c 'echo error_msg >&2 && exit 1'"]
         )
         assert isinstance(result, SetupFailure)
         assert "error_msg" in result.stderr

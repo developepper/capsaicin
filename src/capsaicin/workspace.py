@@ -9,6 +9,7 @@ from __future__ import annotations
 
 import enum
 import hashlib
+import shlex
 import sqlite3
 import subprocess
 from dataclasses import dataclass
@@ -718,8 +719,8 @@ def run_setup_commands(
     for cmd in commands:
         try:
             result = subprocess.run(
-                cmd,
-                shell=True,
+                shlex.split(cmd),
+                shell=False,
                 cwd=wt_path,
                 capture_output=True,
                 text=True,
