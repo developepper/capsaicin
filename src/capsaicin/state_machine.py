@@ -38,6 +38,7 @@ ACTORS = frozenset({"system", "implementer", "reviewer", "human"})
 # Legal transitions: (from_status, to_status) -> set of allowed actors
 LEGAL_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
     ("ready", "implementing"): frozenset({"system"}),
+    ("ready", "blocked"): frozenset({"system"}),
     ("implementing", "in-review"): frozenset({"system"}),
     ("implementing", "human-gate"): frozenset({"system"}),
     ("implementing", "blocked"): frozenset({"system"}),
@@ -46,6 +47,7 @@ LEGAL_TRANSITIONS: dict[tuple[str, str], frozenset[str]] = {
     ("in-review", "blocked"): frozenset({"system"}),
     ("revise", "implementing"): frozenset({"system"}),
     ("revise", "human-gate"): frozenset({"system"}),
+    ("revise", "blocked"): frozenset({"system"}),
     ("human-gate", "pr-ready"): frozenset({"human"}),
     ("human-gate", "revise"): frozenset({"human"}),
     ("human-gate", "blocked"): frozenset({"human"}),

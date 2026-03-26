@@ -204,17 +204,11 @@ class TestWorkspaceFailureModes:
     """Workspace failures produce deterministic blocked outcomes."""
 
     def test_dirty_base_repo_raises_on_ready_ticket(self, project_env):
-        """Dirty base repo prevents workspace creation.
+        """Dirty base repo blocks ticket via resolve_or_block.
 
-        When a ticket is still in ``ready``, ``resolve_or_block`` tries
-        ``ready -> blocked`` which is not a legal state transition.  The
-        resulting ``IllegalTransitionError`` propagates — the caller (CLI
-        or web action) should catch it.  The ``implementing -> blocked``
-        path works because the ticket transitions to ``implementing``
-        before workspace resolution fails during *retry* scenarios.
+        When a ticket is still in ``ready``, ``resolve_or_block`` transitions
+        it to ``blocked`` so the operator can intervene.
         """
-        from capsaicin.state_machine import IllegalTransitionError
-
         env = project_env
         enable_workspace(env)
         # Intentionally do NOT commit_setup — repo is dirty due to config change.
@@ -224,15 +218,17 @@ class TestWorkspaceFailureModes:
         ticket = get_ticket(env["conn"], tid)
         adapter = WorkspaceDiffAdapter()
 
-        with pytest.raises(IllegalTransitionError):
-            run_implementation_pipeline(
-                conn=env["conn"],
-                project_id=env["project_id"],
-                ticket=ticket,
-                config=config,
-                adapter=adapter,
-                log_path=env["log_path"],
-            )
+        run_implementation_pipeline(
+            conn=env["conn"],
+            project_id=env["project_id"],
+            ticket=ticket,
+            config=config,
+            adapter=adapter,
+            log_path=env["log_path"],
+        )
+
+        updated = get_ticket(env["conn"], tid)
+        assert updated["status"] == "blocked"
 
     def test_stale_workspace_blocks_review(self, project_env):
         """Missing worktree before review blocks the ticket."""

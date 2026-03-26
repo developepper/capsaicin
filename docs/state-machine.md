@@ -79,6 +79,9 @@ Recommended transitions:
 
 - `ready -> implementing`
   trigger: system selects a ticket whose dependencies are satisfied
+- `ready -> blocked`
+  trigger: workspace resolution fails before the ticket enters implementing
+  (e.g. dirty base repo)
 - `implementing -> in-review`
   trigger: implementer run succeeds and a non-empty `run_diffs` record exists
 - `implementing -> human-gate`
@@ -99,6 +102,9 @@ Recommended transitions:
   trigger: reviewer run hits repeated `contract_violation` or `parse_error`
 - `revise -> implementing`
   trigger: system starts another implementation pass while under the cycle limit
+- `revise -> blocked`
+  trigger: workspace resolution fails before the ticket re-enters implementing
+  (e.g. missing worktree)
 - `revise -> human-gate`
   trigger: `ticket run` detects the cycle limit before starting another
   implementation pass
@@ -164,8 +170,10 @@ additional guard applies to execution entry points:
   drift, etc.), the ticket transitions to `blocked` with a `blocked_reason`
   prefixed by `workspace_` — for example, `workspace_dirty_base_repo` or
   `workspace_missing_worktree`.
-- `implementing -> blocked` and `in-review -> blocked` are the legal
-  transition paths for workspace failures during active pipeline execution.
+- `ready -> blocked`, `implementing -> blocked`, `in-review -> blocked`, and
+  `revise -> blocked` are the legal transition paths for workspace failures.
+  The `ready` and `revise` cases occur because workspace resolution runs
+  before the ticket transitions to `implementing`.
 
 Workspace lifecycle states are independent of ticket states:
 
