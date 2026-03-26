@@ -105,7 +105,9 @@ worktree_root = "/custom/path/for/worktrees"
   branches deleted automatically during teardown.
 - `worktree_root` (default `null`) — optional override for the directory that
   holds isolated worktrees. When unset, capsaicin uses
-  `~/.capsaicin/worktrees/<repo-hash>/`.
+  `~/.capsaicin/worktrees/<repo-hash>/`.  The hash is derived from the
+  resolved absolute repo path, so the same repository accessed via different
+  paths (e.g. a symlink) will use different worktree roots.
 
 When the `[workspace]` section is absent from `config.toml`, isolation is
 disabled and existing projects behave identically to before.

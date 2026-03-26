@@ -23,6 +23,10 @@ from starlette.testclient import TestClient
 
 from capsaicin.state_machine import transition_ticket
 from capsaicin.web.app import create_app
+from tests.workspace_helpers import (
+    commit_setup as _commit_setup,
+    enable_workspace as _enable_workspace,
+)
 from tests.conftest import add_ticket
 
 
@@ -938,12 +942,6 @@ class TestAddDependencyAction:
 # ---------------------------------------------------------------------------
 # Workspace recovery actions (AC-2)
 # ---------------------------------------------------------------------------
-
-
-from tests.workspace_helpers import (  # noqa: E402
-    commit_setup as _commit_setup,
-    enable_workspace as _enable_workspace,
-)
 
 
 class TestWorkspaceRecoverAction:

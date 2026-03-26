@@ -630,7 +630,7 @@ def _bg_resume(db_path, project_id, config, log_path) -> None:
             log_path=log_path,
         )
     except WorkspaceBlockedError as exc:
-        _log_workspace_error("resume-no-ticket", exc)
+        _log_workspace_error("(resume)", exc)
     except Exception:
         _log.exception("Background resume failed")
     finally:

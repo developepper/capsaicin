@@ -1,2 +1,3 @@
 {# Workspace status badge — expects `ws` (WorkspaceTicketSummary) in scope. #}
 <span class="workspace-status workspace-status-{{ ws.status or 'none' }}">{{ ws.isolation_mode }}{% if ws.status %} · {{ ws.status }}{% endif %}{% if ws.failure_reason %} ({{ ws.failure_reason }}){% endif %}</span>
+

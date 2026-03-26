@@ -305,13 +305,14 @@ def approve_ticket(
     rationale: str | None = None,
     force: bool = False,
     log_path: str | Path | None = None,
-    config: Config | None = None,
+    *,
+    config: Config,
 ) -> str:
     """Execute the approval pipeline for a ticket.
 
-    When *config* is provided and workspace isolation is enabled, the
-    workspace is validated before comparing diffs.  Divergence events are
-    persisted regardless of whether *force* overrides the check.
+    Validates the workspace (including isolation checks when enabled),
+    persists divergence events, and captures approval metadata for
+    downstream commit/PR workflows.
 
     Returns the final ticket status ('pr-ready').
 
@@ -323,15 +324,9 @@ def approve_ticket(
     gate_reason = ticket.get("gate_reason")
 
     # --- Workspace verification (AC-1 / AC-2) ---
-    if config is not None:
-        ws_row = _fetch_workspace_row(conn, ticket_id)
-        detail = _check_workspace_with_isolation(conn, config, ticket_id, ws_row)
-        effective_path, ws_id, ws_branch = _resolve_workspace_info(config, ws_row)
-    else:
-        detail = _check_workspace_detailed(conn, repo_path, ticket_id)
-        effective_path = str(repo_path)
-        ws_id = None
-        ws_branch = None
+    ws_row = _fetch_workspace_row(conn, ticket_id)
+    detail = _check_workspace_with_isolation(conn, config, ticket_id, ws_row)
+    effective_path, ws_id, ws_branch = _resolve_workspace_info(config, ws_row)
 
     if not detail.matches:
         recovery_action = "force_override" if force else "rejected"

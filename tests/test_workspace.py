@@ -688,7 +688,7 @@ class TestTransactionalCreate:
         assert row["status"] == "active"
 
     def test_no_committed_row_when_branch_check_interrupted(self, tmp_path):
-        """If create_workspace is interrupted during _branch_exists (after a
+        """If create_workspace is interrupted during branch_exists (after a
         failed git worktree add), the uncommitted insert is rolled back."""
         repo = tmp_path / "repo"
         init_git_repo(repo)
@@ -712,7 +712,7 @@ class TestTransactionalCreate:
         with (
             patch("capsaicin.workspace._git", side_effect=failing_git),
             patch(
-                "capsaicin.workspace._branch_exists",
+                "capsaicin.workspace.branch_exists",
                 side_effect=interrupting_branch_exists,
             ),
         ):

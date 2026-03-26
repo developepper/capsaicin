@@ -186,6 +186,7 @@ class TestApproveSuccess:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         assert final == "pr-ready"
@@ -202,6 +203,7 @@ class TestApproveSuccess:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         state = get_state(env["conn"], env["project_id"])
@@ -219,6 +221,7 @@ class TestApproveSuccess:
             env["config"].project.repo_path,
             rationale="Looks good",
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         rows = (
@@ -242,6 +245,7 @@ class TestApproveSuccess:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         transitions = (
@@ -268,6 +272,7 @@ class TestApproveSuccess:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -290,6 +295,7 @@ class TestRationaleRequired:
                 ticket,
                 env["config"].project.repo_path,
                 log_path=env["log_path"],
+                config=env["config"],
             )
 
     def test_cycle_limit_with_rationale_succeeds(self, project_env):
@@ -304,6 +310,7 @@ class TestRationaleRequired:
             env["config"].project.repo_path,
             rationale="Reviewed manually, acceptable",
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -319,6 +326,7 @@ class TestRationaleRequired:
                 ticket,
                 env["config"].project.repo_path,
                 log_path=env["log_path"],
+                config=env["config"],
             )
 
     def test_low_confidence_pass_requires_rationale(self, project_env):
@@ -333,6 +341,7 @@ class TestRationaleRequired:
                 ticket,
                 env["config"].project.repo_path,
                 log_path=env["log_path"],
+                config=env["config"],
             )
 
     def test_low_confidence_pass_with_rationale_succeeds(self, project_env):
@@ -347,6 +356,7 @@ class TestRationaleRequired:
             env["config"].project.repo_path,
             rationale="Verified manually",
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -372,6 +382,7 @@ class TestWorkspaceMismatch:
                 ticket,
                 env["config"].project.repo_path,
                 log_path=env["log_path"],
+                config=env["config"],
             )
 
     def test_force_overrides_drift(self, project_env):
@@ -389,6 +400,7 @@ class TestWorkspaceMismatch:
             env["config"].project.repo_path,
             force=True,
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -404,6 +416,7 @@ class TestWorkspaceMismatch:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -456,6 +469,7 @@ class TestWorkspaceMismatch:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
         assert final == "pr-ready"
 
@@ -735,6 +749,7 @@ class TestActivityLog:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         log_content = env["log_path"].read_text()
@@ -758,6 +773,7 @@ class TestApprovalSummary:
             ticket,
             env["config"].project.repo_path,
             log_path=env["log_path"],
+            config=env["config"],
         )
 
         summary = build_approval_summary(env["conn"], tid)

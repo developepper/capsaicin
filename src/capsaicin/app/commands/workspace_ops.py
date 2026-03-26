@@ -51,8 +51,8 @@ def workspace_status(
     """
     from capsaicin.workspace import (
         WorkspaceRecovery,
-        _branch_exists,
-        _worktree_list,
+        branch_exists,
+        worktree_list,
         get_workspace_info,
         validate_workspace,
     )
@@ -86,10 +86,10 @@ def workspace_status(
     repo_path = config.project.repo_path
     wt_path = ws.get("worktree_path")
     branch_name = ws.get("branch_name")
-    registered = _worktree_list(repo_path)
+    registered = worktree_list(repo_path)
     if wt_path and Path(wt_path).is_dir() and str(Path(wt_path)) in registered:
         mode = "worktree"
-    elif branch_name and _branch_exists(repo_path, branch_name):
+    elif branch_name and branch_exists(repo_path, branch_name):
         mode = "branch"
     else:
         mode = "none"
@@ -101,22 +101,21 @@ def workspace_status(
     failure_detail = ws.get("failure_detail")
     blocked_reason = ticket["blocked_reason"]
 
-    if ws["status"] not in ("cleaned", "failed"):
+    ws_status = ws["status"]
+    if ws_status not in ("cleaned", "failed"):
         validation = validate_workspace(conn, repo_path, ws["id"])
         if isinstance(validation, WorkspaceRecovery):
             failure_reason = validation.failure_reason
             failure_detail = validation.detail
+            ws_status = "failed"
             if not blocked_reason:
                 blocked_reason = f"workspace_{validation.failure_reason}"
-            # Re-read workspace row after validate_workspace may have
-            # updated it (e.g. status → failed).
-            ws = get_workspace_info(conn, ticket_id=ticket_id)
 
     return WorkspaceStatusResult(
         ticket_id=ticket_id,
         isolation_mode=mode,
         workspace_id=ws["id"],
-        status=ws["status"],
+        status=ws_status,
         branch_name=ws.get("branch_name"),
         worktree_path=ws.get("worktree_path"),
         base_ref=ws.get("base_ref"),

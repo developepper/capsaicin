@@ -180,12 +180,13 @@ def _merge_base(repo_path: str | Path, ref_a: str, ref_b: str) -> str | None:
     return result.stdout.strip()
 
 
-def _branch_exists(repo_path: str | Path, branch: str) -> bool:
+def branch_exists(repo_path: str | Path, branch: str) -> bool:
+    """Return True if *branch* exists as a local branch in the repo."""
     result = _git(["rev-parse", "--verify", f"refs/heads/{branch}"], repo_path)
     return result.returncode == 0
 
 
-def _worktree_list(repo_path: str | Path) -> list[str]:
+def worktree_list(repo_path: str | Path) -> list[str]:
     """Return worktree paths registered with git."""
     result = _git(["worktree", "list", "--porcelain"], repo_path)
     paths: list[str] = []
@@ -382,7 +383,7 @@ def create_workspace(
         if result.returncode != 0:
             stderr = result.stderr.strip()
             # Distinguish branch-drift (branch already exists) from other errors.
-            if _branch_exists(repo, branch_name):
+            if branch_exists(repo, branch_name):
                 reason = "branch_drift"
                 detail = f"Branch '{branch_name}' already exists and may have diverged."
             else:
@@ -439,7 +440,7 @@ def validate_workspace(
         return WorkspaceRecovery.for_reason(workspace_id, "missing_worktree", detail)
 
     # Check worktree is still registered with git.
-    registered = _worktree_list(repo)
+    registered = worktree_list(repo)
     if str(wt_path) not in registered:
         detail = f"Worktree at {wt_path} is not registered with git."
         _update_status(conn, workspace_id, "failed", "missing_worktree", detail)
@@ -681,7 +682,7 @@ def cleanup_workspace(
         _git(["worktree", "prune"], repo)
 
         # Delete the branch if auto_cleanup is enabled and branch exists.
-        if ws_config.auto_cleanup and _branch_exists(repo, branch_name):
+        if ws_config.auto_cleanup and branch_exists(repo, branch_name):
             result = _git(["branch", "-D", branch_name], repo)
             if result.returncode != 0:
                 detail = (

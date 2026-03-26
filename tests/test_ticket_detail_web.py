@@ -22,6 +22,10 @@ from capsaicin.app.queries.ticket_detail import (
 )
 from capsaicin.web.app import create_app
 from tests.conftest import add_ticket
+from tests.workspace_helpers import (
+    break_worktree as _break_worktree,
+    enable_workspace as _enable_workspace,
+)
 
 
 # ---------------------------------------------------------------------------
@@ -576,12 +580,6 @@ def _move_to_blocked(env, ticket_id):
         reason="test",
         blocked_reason="implementation_failure",
     )
-
-
-from tests.workspace_helpers import (  # noqa: E402
-    break_worktree as _break_worktree,
-    enable_workspace as _enable_workspace,
-)
 
 
 def _create_workspace(env, ticket_id):

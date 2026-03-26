@@ -16,6 +16,7 @@ from capsaicin.app.queries.dashboard import (
 )
 from capsaicin.web.app import create_app
 from tests.conftest import add_ticket
+from tests.workspace_helpers import enable_workspace as _enable_workspace
 
 
 # ---------------------------------------------------------------------------
@@ -340,9 +341,6 @@ class TestDashboardWorkspaceState:
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
-
-from tests.workspace_helpers import enable_workspace as _enable_workspace  # noqa: E402
 
 
 def _move_to_human_gate(env, ticket_id):
